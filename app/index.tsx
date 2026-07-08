@@ -26,6 +26,7 @@ export default function HomeScreen() {
   const click = useGameState((state) => state.click);
   const lastOfflineGain = useGameState((state) => state.lastOfflineGain);
   const bodyType = useGameState((state) => state.bodyType);
+  const equipment = useGameState((state) => state.equipment);
 
   const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
 
@@ -46,7 +47,7 @@ export default function HomeScreen() {
 
       {lastOfflineGain > 0 && <Text style={styles.offlineGainText}>離線期間獲得 {lastOfflineGain} 經驗值</Text>}
 
-      <HeroSprite pixelSize={5} bodyType={bodyType} onPress={() => setLastEvent(click())} />
+      <HeroSprite pixelSize={5} bodyType={bodyType} equipment={equipment} onPress={() => setLastEvent(click())} />
 
       <BodyTypeSelector />
 

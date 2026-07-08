@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -9,17 +9,20 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { EquipmentLoadout, getEquippedOverlays } from '../game/equipment';
 import { BodyType, buildHeroFrames, HERO_PALETTE } from '../game/sprites/heroSilhouette';
 import { PixelSprite } from './PixelSprite';
 
 interface HeroSpriteProps {
   bodyType?: BodyType;
+  equipment?: EquipmentLoadout;
   pixelSize?: number;
   onPress?: () => void;
 }
 
-export function HeroSprite({ bodyType = 'normal', pixelSize = 6, onPress }: HeroSpriteProps) {
+export function HeroSprite({ bodyType = 'normal', equipment, pixelSize = 6, onPress }: HeroSpriteProps) {
   const frames = useMemo(() => buildHeroFrames(bodyType), [bodyType]);
+  const overlays = useMemo(() => getEquippedOverlays(equipment ?? {}), [equipment]);
   const [blinking, setBlinking] = useState(false);
 
   useEffect(() => {
@@ -63,7 +66,22 @@ export function HeroSprite({ bodyType = 'normal', pixelSize = 6, onPress }: Hero
   return (
     <Pressable onPress={handlePress}>
       <Animated.View style={animatedStyle}>
-        <PixelSprite frame={blinking ? frames.blink : frames.open} palette={HERO_PALETTE} pixelSize={pixelSize} />
+        <View style={{ position: 'relative' }}>
+          <PixelSprite frame={blinking ? frames.blink : frames.open} palette={HERO_PALETTE} pixelSize={pixelSize} />
+          {overlays.map((overlay, index) => (
+            <View
+              key={index}
+              style={{
+                position: 'absolute',
+                left: overlay.rect.x * pixelSize,
+                top: overlay.rect.y * pixelSize,
+                width: overlay.rect.w * pixelSize,
+                height: overlay.rect.h * pixelSize,
+                backgroundColor: overlay.color,
+              }}
+            />
+          ))}
+        </View>
       </Animated.View>
     </Pressable>
   );
