@@ -47,3 +47,37 @@ export function calcCombatMultiplier(archetype: Archetype, tier: JobTier): numbe
 export function canPromoteToTier(tier: JobTier, level: number): boolean {
   return level >= TIER_UNLOCK_LEVELS[tier];
 }
+
+export type JobBranch = 'A' | 'B';
+
+// 每階同一分支數值完全一樣(都吃 calcCombatMultiplier),稱號純粹是風味選擇。
+export const JOB_TITLES: Record<Archetype, Record<JobBranch, Record<JobTier, string>>> = {
+  physicalMelee: {
+    A: { 1: '工讀生', 2: '搬運工', 3: '工地師傅', 4: '消防員', 5: '特種部隊' },
+    B: { 1: '校隊選手', 2: '拳擊館學員', 3: '拳擊教練', 4: '職業拳擊手', 5: '傳說拳王' },
+  },
+  physicalRanged: {
+    A: { 1: '外送員', 2: '計程車司機', 3: '警察', 4: '職業獵人', 5: '狙擊手' },
+    B: { 1: '腳踏車快遞', 2: '貨車司機', 3: '保鑣', 4: '特技替身演員', 5: '頂尖鏢客' },
+  },
+  physicalSupport: {
+    A: { 1: '超商店員', 2: '餐廳服務生', 3: '護理師', 4: '健身教練', 5: '急診室王牌護理長' },
+    B: { 1: '飯店櫃檯', 2: '空服員', 3: '居家照護員', 4: '物理治療師', 5: '奧運隨隊防護員' },
+  },
+  magicMelee: {
+    A: { 1: '中二國中生', 2: '阿志', 3: '道士/法師', 4: '命理師', 5: '得道仙人' },
+    B: { 1: '動漫社社員', 2: '八家將小將', 3: '乩童', 4: '風水師', 5: '一代宗師' },
+  },
+  magicRanged: {
+    A: { 1: '電競選手/實況主', 2: '軟體工程師', 3: '研究員/科學家', 4: '駭客', 5: 'AI 天才工程師' },
+    B: { 1: 'YouTuber', 2: '資料科學家', 3: '量子物理博士生', 4: '密碼學專家', 5: '諾貝爾獎得主' },
+  },
+  magicSupport: {
+    A: { 1: '藥師', 2: '醫生', 3: '心理諮商師', 4: '老中醫', 5: '神醫/華佗再世' },
+    B: { 1: '營養師', 2: '獸醫', 3: '芳療師', 4: '針灸師', 5: '都市傳說級神醫' },
+  },
+};
+
+export function getJobTitle(archetype: Archetype, branch: JobBranch, tier: JobTier): string {
+  return JOB_TITLES[archetype][branch][tier];
+}
