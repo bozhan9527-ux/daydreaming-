@@ -1,6 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { EquipmentSlot, getItemById, getItemsForSlot, isItemUnlocked } from '../game/equipment';
+import {
+  EquipmentBonusStat,
+  EquipmentSlot,
+  getEquipmentBonusTotals,
+  getItemById,
+  getItemsForSlot,
+  isItemUnlocked,
+} from '../game/equipment';
 import { useGameState } from '../hooks/useGameState';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
@@ -15,7 +22,17 @@ const SLOT_LABELS: Record<EquipmentSlot, string> = {
   mainhand: '主手武器',
 };
 
+const STAT_LABELS: Record<EquipmentBonusStat, string> = {
+  exp: '經驗',
+  coins: '金幣',
+  speed: '戰鬥速度',
+};
+
 const SLOTS: EquipmentSlot[] = ['back', 'bottom', 'top', 'belt', 'headwear', 'face', 'gloves', 'offhand', 'mainhand'];
+
+function formatBonus(stat: EquipmentBonusStat, value: number): string {
+  return `${STAT_LABELS[stat]} +${Math.round(value * 100)}%`;
+}
 
 export function EquipmentPanel() {
   const equipment = useGameState((state) => state.equipment);
@@ -35,8 +52,14 @@ export function EquipmentPanel() {
     }
   }
 
+  const totals = getEquipmentBonusTotals(equipment);
+
   return (
     <View style={styles.container}>
+      <Text style={styles.totalsText}>
+        總加成:{formatBonus('exp', totals.exp)} / {formatBonus('coins', totals.coins)} /{' '}
+        {formatBonus('speed', totals.speed)}
+      </Text>
       {SLOTS.map((slot) => {
         const currentId = equipment[slot];
         const currentItem = currentId !== undefined ? getItemById(currentId) : undefined;
@@ -48,7 +71,7 @@ export function EquipmentPanel() {
           <Pressable key={slot} style={styles.row} onPress={() => cycle(slot)}>
             <Text style={styles.slotLabel}>{SLOT_LABELS[slot]}</Text>
             <Text style={styles.itemLabel}>
-              {currentItem ? currentItem.name : '空'}
+              {currentItem ? `${currentItem.name} (${formatBonus(currentItem.bonus.stat, currentItem.bonus.value)})` : '空'}
               {nextLocked ? `(下一項 ${nextItem.price} 金幣)` : ''}
             </Text>
           </Pressable>
@@ -63,6 +86,12 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 280,
     gap: 4,
+  },
+  totalsText: {
+    color: '#c9a94f',
+    fontSize: 11,
+    textAlign: 'center',
+    marginBottom: 4,
   },
   row: {
     flexDirection: 'row',

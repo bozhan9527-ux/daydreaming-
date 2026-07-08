@@ -14,6 +14,7 @@ import {
   equipItem,
   EquipmentLoadout,
   Gender,
+  getEquipmentBonusTotals,
   getGenderUnlockItems,
   getItemById,
   isItemUnlocked,
@@ -54,6 +55,23 @@ function unlockedItemsForGender(gender: Gender): UnlockedItemIds {
 function currentJobMultiplier(job: JobSelection, level: number): number {
   const tier = getCurrentTier(level);
   return calcCombatMultiplier(job.archetype, tier);
+}
+
+interface RewardMultipliers {
+  expMultiplier: number;
+  coinMultiplier: number;
+  speedMultiplier: number;
+}
+
+// 職業倍率只影響經驗;裝備的 exp/coins/speed 加成疊加在職業倍率之上(寵物/坐騎之後會加進同一組)。
+function computeRewardMultipliers(job: JobSelection, level: number, equipment: EquipmentLoadout): RewardMultipliers {
+  const jobMultiplier = currentJobMultiplier(job, level);
+  const equipmentBonus = getEquipmentBonusTotals(equipment);
+  return {
+    expMultiplier: jobMultiplier * (1 + equipmentBonus.exp),
+    coinMultiplier: 1 + equipmentBonus.coins,
+    speedMultiplier: 1 + equipmentBonus.speed,
+  };
 }
 
 interface GameState {
@@ -142,13 +160,17 @@ export const useGameState = create<GameState>((set, get) => ({
     const save = await loadSave();
     const elapsedMs = Date.now() - save.lastActiveAt;
     const baseGain = calcOfflineExp(save.level.level, elapsedMs);
-    const jobMultiplier = currentJobMultiplier(save.job, save.level.level);
-    const gainedExp = Math.floor(baseGain * jobMultiplier);
+    const { expMultiplier, coinMultiplier, speedMultiplier } = computeRewardMultipliers(
+      save.job,
+      save.level.level,
+      save.equipment
+    );
+    const gainedExp = Math.floor(baseGain * expMultiplier);
     const level = accumulateExp(save.level, gainedExp);
 
     // 背景/關閉期間沒有畫面可以真的打怪,離線期間用平均戰鬥時長反推大概擊敗幾隻、賺多少金幣
-    // (風味數字,經驗值仍然是上面 calcOfflineExp 那套沒變的公式在算)。
-    const offlineBattle = estimateOfflineBattleResult(elapsedMs, jobMultiplier);
+    // (風味數字,經驗值仍然是上面 calcOfflineExp 那套沒變的公式在算),跟前景同一套裝備加成。
+    const offlineBattle = estimateOfflineBattleResult(elapsedMs, speedMultiplier, coinMultiplier);
     const coins = save.coins + offlineBattle.coins;
 
     set({
@@ -188,7 +210,8 @@ export const useGameState = create<GameState>((set, get) => ({
     if (!state.isLoaded) return;
 
     if (!state.currentEncounter || state.fightStartedAt === null) {
-      const encounter = generateEncounter(state.trigger);
+      const { speedMultiplier } = computeRewardMultipliers(state.job, state.level.level, state.equipment);
+      const encounter = generateEncounter(state.trigger, speedMultiplier);
       if (state.forceInstantNextFight) {
         encounter.fightDurationMs = 0;
       }
@@ -219,8 +242,8 @@ export const useGameState = create<GameState>((set, get) => ({
       return;
     }
 
-    const jobMultiplier = currentJobMultiplier(state.job, state.level.level);
-    const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, jobMultiplier);
+    const { expMultiplier, coinMultiplier } = computeRewardMultipliers(state.job, state.level.level, state.equipment);
+    const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, expMultiplier, coinMultiplier);
     const event = getRandomEvent(state.currentEncounter.rarity);
 
     // 主動技能:每打倒幾隻怪觸發一次(等級越高間隔越短),依目前職業的 subtype 決定效果——

@@ -9,36 +9,53 @@ export type EquipmentSlot =
   | 'offhand'
   | 'mainhand';
 
+export type EquipmentBonusStat = 'exp' | 'coins' | 'speed';
+
+export interface EquipmentBonus {
+  stat: EquipmentBonusStat;
+  value: number;
+}
+
 export interface EquipmentItem {
   id: string;
   slot: EquipmentSlot;
   name: string;
   color: string;
   price: number;
+  bonus: EquipmentBonus;
   twoHanded?: boolean;
 }
 
-// 每個插槽先放 2 個佔位項目,證明架構可行;實際素材/數量是後續內容任務。
-// 每插槽第一款(-01)是免費起始裝,第二款(-02)要花貨幣解鎖,解鎖後永久可用。
+// 每插槽固定一種加成類型(此插槽兩款只差數值),數值 = 百分比加成(0.02 = +2%):
+// 免費款(-01)給小加成,付費款(-02)給大加成,呼應現有定價邏輯。
+// back/bottom/face/mainhand = speed(縮短戰鬥時間);top/headwear/gloves = exp;belt/offhand = coins。
 export const EQUIPMENT_ITEMS: EquipmentItem[] = [
-  { id: 'back-01', slot: 'back', name: '素色披風', color: '#6b6678', price: 0 },
-  { id: 'back-02', slot: 'back', name: '厚重斗篷', color: '#4a4456', price: 60 },
-  { id: 'bottom-01', slot: 'bottom', name: '粗布長褲', color: '#5c5468', price: 0 },
-  { id: 'bottom-02', slot: 'bottom', name: '皮革護腿', color: '#3a3542', price: 60 },
-  { id: 'top-01', slot: 'top', name: '亞麻上衣', color: '#8b8698', price: 0 },
-  { id: 'top-02', slot: 'top', name: '皮甲背心', color: '#7a7488', price: 60 },
-  { id: 'belt-01', slot: 'belt', name: '麻繩腰帶', color: '#c9a94f', price: 0 },
-  { id: 'belt-02', slot: 'belt', name: '鉚釘皮帶', color: '#9c8a3f', price: 60 },
-  { id: 'headwear-01', slot: 'headwear', name: '布帽', color: '#8b8698', price: 0 },
-  { id: 'headwear-02', slot: 'headwear', name: '鐵盔', color: '#7a7488', price: 60 },
-  { id: 'face-01', slot: 'face', name: '眼罩', color: '#3a3542', price: 0 },
-  { id: 'face-02', slot: 'face', name: '護目鏡', color: '#6ab0e0', price: 60 },
-  { id: 'gloves-01', slot: 'gloves', name: '布手套', color: '#8b8698', price: 0 },
-  { id: 'gloves-02', slot: 'gloves', name: '皮革手套', color: '#6b6678', price: 60 },
-  { id: 'offhand-01', slot: 'offhand', name: '木盾', color: '#8b8698', price: 0 },
-  { id: 'offhand-02', slot: 'offhand', name: '厚重書冊', color: '#b389e0', price: 60 },
-  { id: 'mainhand-01', slot: 'mainhand', name: '短劍', color: '#d9c9b8', price: 0 },
-  { id: 'mainhand-02', slot: 'mainhand', name: '雙手大劍', color: '#d9c9b8', price: 60, twoHanded: true },
+  { id: 'back-01', slot: 'back', name: '素色披風', color: '#6b6678', price: 0, bonus: { stat: 'speed', value: 0.02 } },
+  { id: 'back-02', slot: 'back', name: '厚重斗篷', color: '#4a4456', price: 60, bonus: { stat: 'speed', value: 0.05 } },
+  { id: 'bottom-01', slot: 'bottom', name: '粗布長褲', color: '#5c5468', price: 0, bonus: { stat: 'speed', value: 0.02 } },
+  { id: 'bottom-02', slot: 'bottom', name: '皮革護腿', color: '#3a3542', price: 60, bonus: { stat: 'speed', value: 0.05 } },
+  { id: 'top-01', slot: 'top', name: '亞麻上衣', color: '#8b8698', price: 0, bonus: { stat: 'exp', value: 0.02 } },
+  { id: 'top-02', slot: 'top', name: '皮甲背心', color: '#7a7488', price: 60, bonus: { stat: 'exp', value: 0.05 } },
+  { id: 'belt-01', slot: 'belt', name: '麻繩腰帶', color: '#c9a94f', price: 0, bonus: { stat: 'coins', value: 0.02 } },
+  { id: 'belt-02', slot: 'belt', name: '鉚釘皮帶', color: '#9c8a3f', price: 60, bonus: { stat: 'coins', value: 0.05 } },
+  { id: 'headwear-01', slot: 'headwear', name: '布帽', color: '#8b8698', price: 0, bonus: { stat: 'exp', value: 0.02 } },
+  { id: 'headwear-02', slot: 'headwear', name: '鐵盔', color: '#7a7488', price: 60, bonus: { stat: 'exp', value: 0.05 } },
+  { id: 'face-01', slot: 'face', name: '眼罩', color: '#3a3542', price: 0, bonus: { stat: 'speed', value: 0.02 } },
+  { id: 'face-02', slot: 'face', name: '護目鏡', color: '#6ab0e0', price: 60, bonus: { stat: 'speed', value: 0.05 } },
+  { id: 'gloves-01', slot: 'gloves', name: '布手套', color: '#8b8698', price: 0, bonus: { stat: 'exp', value: 0.02 } },
+  { id: 'gloves-02', slot: 'gloves', name: '皮革手套', color: '#6b6678', price: 60, bonus: { stat: 'exp', value: 0.05 } },
+  { id: 'offhand-01', slot: 'offhand', name: '木盾', color: '#8b8698', price: 0, bonus: { stat: 'coins', value: 0.02 } },
+  { id: 'offhand-02', slot: 'offhand', name: '厚重書冊', color: '#b389e0', price: 60, bonus: { stat: 'coins', value: 0.05 } },
+  { id: 'mainhand-01', slot: 'mainhand', name: '短劍', color: '#d9c9b8', price: 0, bonus: { stat: 'speed', value: 0.02 } },
+  {
+    id: 'mainhand-02',
+    slot: 'mainhand',
+    name: '雙手大劍',
+    color: '#d9c9b8',
+    price: 60,
+    bonus: { stat: 'speed', value: 0.05 },
+    twoHanded: true,
+  },
 ];
 
 export type EquipmentLoadout = Partial<Record<EquipmentSlot, string>>;
@@ -171,4 +188,23 @@ export function getEquippedOverlays(loadout: EquipmentLoadout): EquipmentOverlay
     }
   }
   return overlays;
+}
+
+export interface EquipmentBonusTotals {
+  exp: number;
+  coins: number;
+  speed: number;
+}
+
+// 裝備加成總和(百分比),供 game/battle.ts 換算成擊殺獎勵/戰鬥時長的乘數;只算目前已裝備的項目。
+export function getEquipmentBonusTotals(loadout: EquipmentLoadout): EquipmentBonusTotals {
+  const totals: EquipmentBonusTotals = { exp: 0, coins: 0, speed: 0 };
+  for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
+    const itemId = loadout[slot];
+    if (!itemId) continue;
+    const item = getItemById(itemId);
+    if (!item) continue;
+    totals[item.bonus.stat] += item.bonus.value;
+  }
+  return totals;
 }
