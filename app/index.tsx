@@ -1,12 +1,67 @@
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { expToNext, MAX_LEVEL } from '../game/leveling';
+import { Rarity } from '../game/trigger';
+import { useGameState } from '../hooks/useGameState';
+
+const RARITY_LABEL: Record<Rarity, string> = {
+  common: '一般反應',
+  rare: '稀有畫面',
+  epic: '超稀有彩蛋',
+  legendary: '傳說事件',
+};
+
 export default function HomeScreen() {
+  const isLoaded = useGameState((state) => state.isLoaded);
+  const level = useGameState((state) => state.level);
+  const load = useGameState((state) => state.load);
+  const levelUp = useGameState((state) => state.levelUp);
+  const click = useGameState((state) => state.click);
+
+  const [lastRarity, setLastRarity] = useState<Rarity | null>(null);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (!isLoaded) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>載入中...</Text>
+      </View>
+    );
+  }
+
+  const isMaxLevel = level.level >= MAX_LEVEL;
+  const needed = isMaxLevel ? 0 : expToNext(level.level);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
-      <Pressable style={styles.hero}>
+
+      <Pressable style={styles.hero} onPress={() => setLastRarity(click())}>
         <Text style={styles.heroLabel}>戳戳看</Text>
       </Pressable>
+
+      {lastRarity !== null && <Text style={styles.resultText}>觸發:{RARITY_LABEL[lastRarity]}</Text>}
+
+      <View style={styles.statsBox}>
+        <Text style={styles.statsText}>Lv.{level.level}</Text>
+        <Text style={styles.statsText}>{isMaxLevel ? '已封頂' : `${level.bankedExp} / ${needed}`}</Text>
+      </View>
+
+      <View style={styles.levelUpRow}>
+        <Pressable style={styles.levelUpButton} onPress={() => levelUp(1)} disabled={isMaxLevel}>
+          <Text style={styles.levelUpLabel}>升 1 級</Text>
+        </Pressable>
+        <Pressable style={styles.levelUpButton} onPress={() => levelUp(5)} disabled={isMaxLevel}>
+          <Text style={styles.levelUpLabel}>升 5 級</Text>
+        </Pressable>
+        <Pressable style={styles.levelUpButton} onPress={() => levelUp(10)} disabled={isMaxLevel}>
+          <Text style={styles.levelUpLabel}>升 10 級</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -33,5 +88,30 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     color: '#8a8a95',
+  },
+  resultText: {
+    color: '#f2f2f2',
+    fontSize: 14,
+  },
+  statsBox: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  statsText: {
+    color: '#f2f2f2',
+    fontSize: 16,
+  },
+  levelUpRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  levelUpButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#2a2a35',
+  },
+  levelUpLabel: {
+    color: '#f2f2f2',
   },
 });
