@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { BodyTypeSelector } from '../components/BodyTypeSelector';
 import { EquipmentPanel } from '../components/EquipmentPanel';
 import { HeroSprite } from '../components/HeroSprite';
 import { JobSelector } from '../components/JobSelector';
@@ -22,6 +23,7 @@ export default function HomeScreen() {
   const levelUp = useGameState((state) => state.levelUp);
   const click = useGameState((state) => state.click);
   const lastOfflineGain = useGameState((state) => state.lastOfflineGain);
+  const bodyType = useGameState((state) => state.bodyType);
 
   const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
 
@@ -43,8 +45,10 @@ export default function HomeScreen() {
       {lastOfflineGain > 0 && <Text style={styles.offlineGainText}>離線期間獲得 {lastOfflineGain} 經驗值</Text>}
 
       <Pressable onPress={() => setLastEvent(click())}>
-        <HeroSprite pixelSize={5} />
+        <HeroSprite pixelSize={5} bodyType={bodyType} />
       </Pressable>
+
+      <BodyTypeSelector />
 
       {lastEvent !== null && (
         <View style={styles.resultBox}>

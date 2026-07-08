@@ -3,13 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Archetype, JobBranch } from '../game/combat';
 import { createEmptyLoadout, EquipmentLoadout } from '../game/equipment';
 import { createInitialLevelState, LevelState } from '../game/leveling';
+import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
+const DEFAULT_BODY_TYPE: BodyType = 'normal';
 
 export interface JobSelection {
   archetype: Archetype;
@@ -22,6 +24,7 @@ export interface SaveData {
   trigger: TriggerState;
   job: JobSelection;
   equipment: EquipmentLoadout;
+  bodyType: BodyType;
   lastActiveAt: number;
 }
 
@@ -32,6 +35,7 @@ export function createInitialSaveData(): SaveData {
     trigger: createInitialTriggerState(),
     job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
     equipment: createEmptyLoadout(),
+    bodyType: DEFAULT_BODY_TYPE,
     lastActiveAt: Date.now(),
   };
 }
@@ -58,6 +62,10 @@ function isEquipmentLoadout(value: unknown): value is EquipmentLoadout {
   return typeof value === 'object' && value !== null;
 }
 
+function isBodyType(value: unknown): value is BodyType {
+  return value === 'thin' || value === 'normal' || value === 'fat';
+}
+
 interface SaveDataV1 {
   version: 1;
   level: LevelState;
@@ -76,6 +84,15 @@ interface SaveDataV3 {
   level: LevelState;
   trigger: TriggerState;
   job: JobSelection;
+  lastActiveAt: number;
+}
+
+interface SaveDataV4 {
+  version: 4;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
   lastActiveAt: number;
 }
 
@@ -108,7 +125,7 @@ function isSaveDataV3(value: unknown): value is SaveDataV3 {
   );
 }
 
-function isSaveDataV4(value: unknown): value is SaveData {
+function isSaveDataV4(value: unknown): value is SaveDataV4 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -121,10 +138,35 @@ function isSaveDataV4(value: unknown): value is SaveData {
   );
 }
 
-// v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄。
-// 等級/經驗/保底/職業一律原樣保留。
+function isSaveDataV5(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 5 &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType)
+  );
+}
+
+// v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
+// v4 沒有 bodyType,補標準體型。等級/經驗/保底/職業/裝備一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV4(value)) return value;
+  if (isSaveDataV5(value)) return value;
+  if (isSaveDataV4(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: value.equipment,
+      bodyType: DEFAULT_BODY_TYPE,
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV3(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -132,6 +174,7 @@ function migrate(value: unknown): SaveData {
       trigger: value.trigger,
       job: value.job,
       equipment: createEmptyLoadout(),
+      bodyType: DEFAULT_BODY_TYPE,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -142,6 +185,7 @@ function migrate(value: unknown): SaveData {
       trigger: value.trigger,
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
       equipment: createEmptyLoadout(),
+      bodyType: DEFAULT_BODY_TYPE,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -152,6 +196,7 @@ function migrate(value: unknown): SaveData {
       trigger: createInitialTriggerState(),
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
       equipment: createEmptyLoadout(),
+      bodyType: DEFAULT_BODY_TYPE,
       lastActiveAt: value.lastActiveAt,
     };
   }
