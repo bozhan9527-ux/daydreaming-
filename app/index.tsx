@@ -5,6 +5,7 @@ import { BodyTypeSelector } from '../components/BodyTypeSelector';
 import { EquipmentPanel } from '../components/EquipmentPanel';
 import { HeroSprite } from '../components/HeroSprite';
 import { JobSelector } from '../components/JobSelector';
+import { SkillPanel } from '../components/SkillPanel';
 import { GameEvent } from '../game/events';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
@@ -65,6 +66,8 @@ export default function HomeScreen() {
       <JobSelector />
 
       <EquipmentPanel />
+
+      <SkillPanel />
 
       <View style={styles.levelUpRow}>
         <Pressable style={styles.levelUpButton} onPress={() => levelUp(1)} disabled={isMaxLevel}>
