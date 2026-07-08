@@ -8,8 +8,8 @@ export type Archetype =
 
 export type JobTier = 1 | 2 | 3 | 4 | 5;
 
-type Subtype = 'melee' | 'ranged' | 'support';
-type DamageType = 'physical' | 'magic';
+export type Subtype = 'melee' | 'ranged' | 'support';
+export type DamageType = 'physical' | 'magic';
 
 const ARCHETYPE_COMPOSITION: Record<Archetype, { subtype: Subtype; damageType: DamageType }> = {
   physicalMelee: { subtype: 'melee', damageType: 'physical' },
@@ -42,6 +42,11 @@ export const TIER_UNLOCK_LEVELS: Record<JobTier, number> = { 1: 1, 2: 120, 3: 25
 export function calcCombatMultiplier(archetype: Archetype, tier: JobTier): number {
   const { subtype, damageType } = ARCHETYPE_COMPOSITION[archetype];
   return BASE_MULTIPLIER[tier] + SUBTYPE_BONUS[subtype][tier] + DAMAGE_TYPE_BONUS[damageType][tier];
+}
+
+// 給戰鬥視覺層(攻擊特效)用來判斷要畫近戰/遠程/輔助,物理/魔法哪一種呈現,純讀取不影響數值。
+export function getArchetypeComposition(archetype: Archetype): { subtype: Subtype; damageType: DamageType } {
+  return ARCHETYPE_COMPOSITION[archetype];
 }
 
 export function canPromoteToTier(tier: JobTier, level: number): boolean {
