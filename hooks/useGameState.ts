@@ -27,11 +27,12 @@ import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, lev
 import {
   canUpgradeSkill,
   createInitialSkillLevels,
-  SkillId,
+  getBonusCoinsAmount,
+  getSkillEffectKind,
   SkillLevels,
+  skillTriggerInterval,
   skillUpgradeCoinCost,
   skillUpgradeCost,
-  totalSkillBonus,
   upgradeSkill as nextSkillLevel,
 } from '../game/skills';
 import { BodyType } from '../game/sprites/heroSilhouette';
@@ -74,6 +75,8 @@ interface GameState {
   fightElapsedMs: number;
   killCount: number;
   lastEvent: GameEvent | null;
+  skillKillsSinceTrigger: number;
+  forceInstantNextFight: boolean;
   load: () => Promise<void>;
   levelUp: (times: 1 | 5 | 10) => void;
   tickBattle: () => void;
@@ -83,7 +86,7 @@ interface GameState {
   unequip: (slot: EquipmentSlot) => void;
   purchaseItem: (itemId: string) => void;
   setBodyType: (bodyType: BodyType) => void;
-  upgradeSkill: (skillId: SkillId) => void;
+  upgradeSkill: (archetype: Archetype) => void;
   setGender: (gender: Gender) => void;
 }
 
@@ -99,7 +102,7 @@ function persist(
   unlockedItemIds: UnlockedItemIds
 ): void {
   writeSave({
-    version: 8,
+    version: 9,
     level,
     trigger,
     job,
@@ -132,14 +135,15 @@ export const useGameState = create<GameState>((set, get) => ({
   fightElapsedMs: 0,
   killCount: 0,
   lastEvent: null,
+  skillKillsSinceTrigger: 0,
+  forceInstantNextFight: false,
 
   load: async () => {
     const save = await loadSave();
     const elapsedMs = Date.now() - save.lastActiveAt;
     const baseGain = calcOfflineExp(save.level.level, elapsedMs);
     const jobMultiplier = currentJobMultiplier(save.job, save.level.level);
-    const skillMultiplier = 1 + totalSkillBonus(save.skills);
-    const gainedExp = Math.floor(baseGain * jobMultiplier * skillMultiplier);
+    const gainedExp = Math.floor(baseGain * jobMultiplier);
     const level = accumulateExp(save.level, gainedExp);
 
     // 背景/關閉期間沒有畫面可以真的打怪,離線期間用平均戰鬥時長反推大概擊敗幾隻、賺多少金幣
@@ -185,11 +189,15 @@ export const useGameState = create<GameState>((set, get) => ({
 
     if (!state.currentEncounter || state.fightStartedAt === null) {
       const encounter = generateEncounter(state.trigger);
+      if (state.forceInstantNextFight) {
+        encounter.fightDurationMs = 0;
+      }
       set({
         currentEncounter: encounter,
         trigger: encounter.triggerState,
         fightStartedAt: Date.now(),
         fightElapsedMs: 0,
+        forceInstantNextFight: false,
       });
       persist(
         state.level,
@@ -212,11 +220,34 @@ export const useGameState = create<GameState>((set, get) => ({
     }
 
     const jobMultiplier = currentJobMultiplier(state.job, state.level.level);
-    const skillMultiplier = 1 + totalSkillBonus(state.skills);
-    const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, jobMultiplier, skillMultiplier);
-    const nextLevel = accumulateExp(state.level, reward.exp);
-    const nextCoins = state.coins + reward.coins;
+    const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, jobMultiplier);
     const event = getRandomEvent(state.currentEncounter.rarity);
+
+    // 主動技能:每打倒幾隻怪觸發一次(等級越高間隔越短),依目前職業的 subtype 決定效果——
+    // 近戰=下一場戰鬥秒殺、遠程=這次擊殺獎勵翻倍、輔助=直接發一筆額外金幣。
+    const currentSkillLevel = state.skills[state.job.archetype];
+    const killsSinceTrigger = state.skillKillsSinceTrigger + 1;
+    const interval = skillTriggerInterval(currentSkillLevel);
+    const skillTriggered = killsSinceTrigger >= interval;
+    const nextKillsSinceTrigger = skillTriggered ? 0 : killsSinceTrigger;
+
+    let exp = reward.exp;
+    let coins = reward.coins;
+    let forceInstantNextFight = state.forceInstantNextFight;
+    if (skillTriggered) {
+      const effect = getSkillEffectKind(state.job.archetype);
+      if (effect === 'doubleReward') {
+        exp *= 2;
+        coins *= 2;
+      } else if (effect === 'bonusCoins') {
+        coins += getBonusCoinsAmount();
+      } else if (effect === 'instantFinish') {
+        forceInstantNextFight = true;
+      }
+    }
+
+    const nextLevel = accumulateExp(state.level, exp);
+    const nextCoins = state.coins + coins;
 
     set({
       level: nextLevel,
@@ -226,6 +257,8 @@ export const useGameState = create<GameState>((set, get) => ({
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,
+      skillKillsSinceTrigger: nextKillsSinceTrigger,
+      forceInstantNextFight,
     });
     persist(
       nextLevel,
@@ -299,16 +332,16 @@ export const useGameState = create<GameState>((set, get) => ({
     persist(level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds);
   },
 
-  upgradeSkill: (skillId) => {
+  upgradeSkill: (archetype) => {
     const { level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds } = get();
-    const currentSkillLevel = skills[skillId];
+    const currentSkillLevel = skills[archetype];
     if (!canUpgradeSkill(currentSkillLevel, level.bankedExp, coins)) return;
 
     const expCost = skillUpgradeCost(currentSkillLevel);
     const coinCost = skillUpgradeCoinCost(currentSkillLevel);
     const nextLevel: LevelState = { level: level.level, bankedExp: level.bankedExp - expCost };
     const nextCoins = coins - coinCost;
-    const nextSkills: SkillLevels = { ...skills, [skillId]: nextSkillLevel(currentSkillLevel) };
+    const nextSkills: SkillLevels = { ...skills, [archetype]: nextSkillLevel(currentSkillLevel) };
 
     set({ level: nextLevel, skills: nextSkills, coins: nextCoins });
     persist(nextLevel, trigger, job, equipment, bodyType, nextSkills, gender, nextCoins, unlockedItemIds);

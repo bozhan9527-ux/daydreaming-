@@ -17,7 +17,7 @@ import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -99,6 +99,12 @@ function isSkillLevels(value: unknown): value is SkillLevels {
   return SKILL_IDS.every((id) => typeof record[id] === 'number');
 }
 
+// v8 以前的 skills 是完全不同的形狀(5 個通用技能 id,不是 6 職業 id),
+// 只做寬鬆的物件檢查,實際值在遷移時一律丟棄改用 createInitialSkillLevels()。
+function isLegacySkillLevels(value: unknown): boolean {
+  return typeof value === 'object' && value !== null;
+}
+
 function isGender(value: unknown): value is Gender {
   return value === 'male' || value === 'female';
 }
@@ -154,7 +160,7 @@ interface SaveDataV6 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skills: SkillLevels;
+  skills: Record<string, number>;
   lastActiveAt: number;
 }
 
@@ -225,7 +231,7 @@ function isSaveDataV6(value: unknown): value is SaveDataV6 {
     isJobSelection(record.job) &&
     isEquipmentLoadout(record.equipment) &&
     isBodyType(record.bodyType) &&
-    isSkillLevels(record.skills)
+    isLegacySkillLevels(record.skills)
   );
 }
 
@@ -236,7 +242,7 @@ interface SaveDataV7 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skills: SkillLevels;
+  skills: Record<string, number>;
   gender: Gender;
   lastActiveAt: number;
 }
@@ -252,16 +258,48 @@ function isSaveDataV7(value: unknown): value is SaveDataV7 {
     isJobSelection(record.job) &&
     isEquipmentLoadout(record.equipment) &&
     isBodyType(record.bodyType) &&
-    isSkillLevels(record.skills) &&
+    isLegacySkillLevels(record.skills) &&
     isGender(record.gender)
   );
 }
 
-function isSaveDataV8(value: unknown): value is SaveData {
+interface SaveDataV8 {
+  version: 8;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skills: Record<string, number>;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  lastActiveAt: number;
+}
+
+function isSaveDataV8(value: unknown): value is SaveDataV8 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
     record.version === 8 &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isLegacySkillLevels(record.skills) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds)
+  );
+}
+
+function isSaveDataV9(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 9 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -277,10 +315,26 @@ function isSaveDataV8(value: unknown): value is SaveData {
 
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
-// v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目。
-// 等級/經驗/保底/職業/裝備/體型/技能/性別一律原樣保留。
+// v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
+// v8 的 skills 是舊版 5 通用技能形狀,跟新版 6 職業主動技能對不上,一律重置成 createInitialSkillLevels()。
+// 等級/經驗/保底/職業/裝備/體型/性別一律原樣保留,只有 skills 在 v8->v9 這關重置。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV8(value)) return value;
+  if (isSaveDataV9(value)) return value;
+  if (isSaveDataV8(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: value.equipment,
+      bodyType: value.bodyType,
+      skills: createInitialSkillLevels(),
+      gender: value.gender,
+      coins: value.coins,
+      unlockedItemIds: value.unlockedItemIds,
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV7(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -289,7 +343,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: value.skills,
+      skills: createInitialSkillLevels(),
       gender: value.gender,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(value.gender),
@@ -304,7 +358,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: value.skills,
+      skills: createInitialSkillLevels(),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
