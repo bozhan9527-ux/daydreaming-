@@ -14,29 +14,31 @@ export interface EquipmentItem {
   slot: EquipmentSlot;
   name: string;
   color: string;
+  price: number;
   twoHanded?: boolean;
 }
 
 // 每個插槽先放 2 個佔位項目,證明架構可行;實際素材/數量是後續內容任務。
+// 每插槽第一款(-01)是免費起始裝,第二款(-02)要花貨幣解鎖,解鎖後永久可用。
 export const EQUIPMENT_ITEMS: EquipmentItem[] = [
-  { id: 'back-01', slot: 'back', name: '素色披風', color: '#6b6678' },
-  { id: 'back-02', slot: 'back', name: '厚重斗篷', color: '#4a4456' },
-  { id: 'bottom-01', slot: 'bottom', name: '粗布長褲', color: '#5c5468' },
-  { id: 'bottom-02', slot: 'bottom', name: '皮革護腿', color: '#3a3542' },
-  { id: 'top-01', slot: 'top', name: '亞麻上衣', color: '#8b8698' },
-  { id: 'top-02', slot: 'top', name: '皮甲背心', color: '#7a7488' },
-  { id: 'belt-01', slot: 'belt', name: '麻繩腰帶', color: '#c9a94f' },
-  { id: 'belt-02', slot: 'belt', name: '鉚釘皮帶', color: '#9c8a3f' },
-  { id: 'headwear-01', slot: 'headwear', name: '布帽', color: '#8b8698' },
-  { id: 'headwear-02', slot: 'headwear', name: '鐵盔', color: '#7a7488' },
-  { id: 'face-01', slot: 'face', name: '眼罩', color: '#3a3542' },
-  { id: 'face-02', slot: 'face', name: '護目鏡', color: '#6ab0e0' },
-  { id: 'gloves-01', slot: 'gloves', name: '布手套', color: '#8b8698' },
-  { id: 'gloves-02', slot: 'gloves', name: '皮革手套', color: '#6b6678' },
-  { id: 'offhand-01', slot: 'offhand', name: '木盾', color: '#8b8698' },
-  { id: 'offhand-02', slot: 'offhand', name: '厚重書冊', color: '#b389e0' },
-  { id: 'mainhand-01', slot: 'mainhand', name: '短劍', color: '#d9c9b8' },
-  { id: 'mainhand-02', slot: 'mainhand', name: '雙手大劍', color: '#d9c9b8', twoHanded: true },
+  { id: 'back-01', slot: 'back', name: '素色披風', color: '#6b6678', price: 0 },
+  { id: 'back-02', slot: 'back', name: '厚重斗篷', color: '#4a4456', price: 60 },
+  { id: 'bottom-01', slot: 'bottom', name: '粗布長褲', color: '#5c5468', price: 0 },
+  { id: 'bottom-02', slot: 'bottom', name: '皮革護腿', color: '#3a3542', price: 60 },
+  { id: 'top-01', slot: 'top', name: '亞麻上衣', color: '#8b8698', price: 0 },
+  { id: 'top-02', slot: 'top', name: '皮甲背心', color: '#7a7488', price: 60 },
+  { id: 'belt-01', slot: 'belt', name: '麻繩腰帶', color: '#c9a94f', price: 0 },
+  { id: 'belt-02', slot: 'belt', name: '鉚釘皮帶', color: '#9c8a3f', price: 60 },
+  { id: 'headwear-01', slot: 'headwear', name: '布帽', color: '#8b8698', price: 0 },
+  { id: 'headwear-02', slot: 'headwear', name: '鐵盔', color: '#7a7488', price: 60 },
+  { id: 'face-01', slot: 'face', name: '眼罩', color: '#3a3542', price: 0 },
+  { id: 'face-02', slot: 'face', name: '護目鏡', color: '#6ab0e0', price: 60 },
+  { id: 'gloves-01', slot: 'gloves', name: '布手套', color: '#8b8698', price: 0 },
+  { id: 'gloves-02', slot: 'gloves', name: '皮革手套', color: '#6b6678', price: 60 },
+  { id: 'offhand-01', slot: 'offhand', name: '木盾', color: '#8b8698', price: 0 },
+  { id: 'offhand-02', slot: 'offhand', name: '厚重書冊', color: '#b389e0', price: 60 },
+  { id: 'mainhand-01', slot: 'mainhand', name: '短劍', color: '#d9c9b8', price: 0 },
+  { id: 'mainhand-02', slot: 'mainhand', name: '雙手大劍', color: '#d9c9b8', price: 60, twoHanded: true },
 ];
 
 export type EquipmentLoadout = Partial<Record<EquipmentSlot, string>>;
@@ -78,6 +80,24 @@ export function unequipSlot(loadout: EquipmentLoadout, slot: EquipmentSlot): Equ
   return next;
 }
 
+// 解鎖狀態:price 為 0 的起始裝一律視為已解鎖,不需要出現在清單裡。
+export type UnlockedItemIds = string[];
+
+export function createEmptyUnlockedItems(): UnlockedItemIds {
+  return [];
+}
+
+export function isItemUnlocked(unlocked: UnlockedItemIds, itemId: string): boolean {
+  const item = getItemById(itemId);
+  if (!item) return false;
+  return item.price === 0 || unlocked.includes(itemId);
+}
+
+export function unlockItem(unlocked: UnlockedItemIds, itemId: string): UnlockedItemIds {
+  if (unlocked.includes(itemId)) return unlocked;
+  return [...unlocked, itemId];
+}
+
 // 性別不做獨立身體變體,改用預設裝備組合(頭飾/下身/上身)區分外觀,對應 CLAUDE.md 規格。
 export type Gender = 'male' | 'female';
 
@@ -89,6 +109,11 @@ export const GENDER_DEFAULT_LOADOUT: Record<Gender, Partial<Record<EquipmentSlot
 // 切換性別只覆蓋頭飾/上身/下身三格,武器、副手、腰帶等其餘裝備維持玩家原有選擇。
 export function applyGenderDefault(loadout: EquipmentLoadout, gender: Gender): EquipmentLoadout {
   return { ...loadout, ...GENDER_DEFAULT_LOADOUT[gender] };
+}
+
+// 換性別是角色設定,不是商店消費;對應性別的頭飾/上身/下身即使原本要收費也強制免費解鎖。
+export function getGenderUnlockItems(gender: Gender): string[] {
+  return Object.values(GENDER_DEFAULT_LOADOUT[gender]);
 }
 
 // 座標系對應 game/sprites/heroSilhouette.ts 的原生 20 欄 x 24 列網格,

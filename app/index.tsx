@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const lastOfflineGain = useGameState((state) => state.lastOfflineGain);
   const bodyType = useGameState((state) => state.bodyType);
   const equipment = useGameState((state) => state.equipment);
+  const coins = useGameState((state) => state.coins);
 
   const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
 
@@ -65,6 +66,7 @@ export default function HomeScreen() {
       <View style={styles.statsBox}>
         <Text style={styles.statsText}>Lv.{level.level}</Text>
         <Text style={styles.statsText}>{isMaxLevel ? '已封頂' : `${level.bankedExp} / ${needed}`}</Text>
+        <Text style={styles.statsText}>金幣 {coins}</Text>
       </View>
 
       <JobSelector />

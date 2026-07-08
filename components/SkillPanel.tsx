@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { canUpgradeSkill, SkillId, skillUpgradeCost, SKILL_IDS } from '../game/skills';
+import { canUpgradeSkill, SkillId, skillUpgradeCoinCost, skillUpgradeCost, SKILL_IDS } from '../game/skills';
 import { useGameState } from '../hooks/useGameState';
 
 const SKILL_LABELS: Record<SkillId, string> = {
@@ -14,6 +14,7 @@ const SKILL_LABELS: Record<SkillId, string> = {
 export function SkillPanel() {
   const skills = useGameState((state) => state.skills);
   const bankedExp = useGameState((state) => state.level.bankedExp);
+  const coins = useGameState((state) => state.coins);
   const upgradeSkill = useGameState((state) => state.upgradeSkill);
 
   return (
@@ -21,7 +22,8 @@ export function SkillPanel() {
       {SKILL_IDS.map((id) => {
         const skillLevel = skills[id];
         const cost = skillUpgradeCost(skillLevel);
-        const canUpgrade = canUpgradeSkill(skillLevel, bankedExp);
+        const coinCost = skillUpgradeCoinCost(skillLevel);
+        const canUpgrade = canUpgradeSkill(skillLevel, bankedExp, coins);
         return (
           <Pressable
             key={id}
@@ -32,7 +34,9 @@ export function SkillPanel() {
             <Text style={styles.label}>
               {SKILL_LABELS[id]} Lv.{skillLevel}
             </Text>
-            <Text style={styles.cost}>{cost}</Text>
+            <Text style={styles.cost}>
+              {cost} 經驗 / {coinCost} 金幣
+            </Text>
           </Pressable>
         );
       })}

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { EquipmentSlot, getItemById, getItemsForSlot } from '../game/equipment';
+import { EquipmentSlot, getItemById, getItemsForSlot, isItemUnlocked } from '../game/equipment';
 import { useGameState } from '../hooks/useGameState';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
@@ -19,8 +19,9 @@ const SLOTS: EquipmentSlot[] = ['back', 'bottom', 'top', 'belt', 'headwear', 'fa
 
 export function EquipmentPanel() {
   const equipment = useGameState((state) => state.equipment);
-  const equip = useGameState((state) => state.equip);
+  const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
   const unequip = useGameState((state) => state.unequip);
+  const purchaseItem = useGameState((state) => state.purchaseItem);
 
   function cycle(slot: EquipmentSlot) {
     const items = getItemsForSlot(slot);
@@ -30,7 +31,7 @@ export function EquipmentPanel() {
     if (nextIndex >= items.length) {
       unequip(slot);
     } else {
-      equip(items[nextIndex].id);
+      purchaseItem(items[nextIndex].id);
     }
   }
 
@@ -39,10 +40,17 @@ export function EquipmentPanel() {
       {SLOTS.map((slot) => {
         const currentId = equipment[slot];
         const currentItem = currentId !== undefined ? getItemById(currentId) : undefined;
+        const items = getItemsForSlot(slot);
+        const currentIndex = items.findIndex((item) => item.id === currentId);
+        const nextItem = items[currentIndex + 1];
+        const nextLocked = nextItem !== undefined && !isItemUnlocked(unlockedItemIds, nextItem.id);
         return (
           <Pressable key={slot} style={styles.row} onPress={() => cycle(slot)}>
             <Text style={styles.slotLabel}>{SLOT_LABELS[slot]}</Text>
-            <Text style={styles.itemLabel}>{currentItem ? currentItem.name : '空'}</Text>
+            <Text style={styles.itemLabel}>
+              {currentItem ? currentItem.name : '空'}
+              {nextLocked ? `(下一項 ${nextItem.price} 金幣)` : ''}
+            </Text>
           </Pressable>
         );
       })}

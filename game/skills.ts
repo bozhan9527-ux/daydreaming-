@@ -16,8 +16,19 @@ export function skillUpgradeCost(skillLevel: number): number {
   return Math.floor(expToNext(skillLevel) / 5);
 }
 
-export function canUpgradeSkill(skillLevel: number, bankedExp: number): boolean {
-  return skillLevel < MAX_LEVEL && bankedExp >= skillUpgradeCost(skillLevel);
+// 額外疊加的貨幣花費,跟經驗花費是兩包獨立資源,兩者都要夠才能升級。
+const SKILL_COIN_COST_PER_LEVEL = 2;
+
+export function skillUpgradeCoinCost(skillLevel: number): number {
+  return skillLevel * SKILL_COIN_COST_PER_LEVEL;
+}
+
+export function canUpgradeSkill(skillLevel: number, bankedExp: number, coins: number): boolean {
+  return (
+    skillLevel < MAX_LEVEL &&
+    bankedExp >= skillUpgradeCost(skillLevel) &&
+    coins >= skillUpgradeCoinCost(skillLevel)
+  );
 }
 
 export function upgradeSkill(skillLevel: number): number {

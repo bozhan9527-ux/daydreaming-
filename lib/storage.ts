@@ -1,19 +1,36 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Archetype, JobBranch } from '../game/combat';
-import { applyGenderDefault, createEmptyLoadout, EquipmentLoadout, Gender } from '../game/equipment';
+import {
+  applyGenderDefault,
+  createEmptyLoadout,
+  createEmptyUnlockedItems,
+  EquipmentLoadout,
+  Gender,
+  getGenderUnlockItems,
+  UnlockedItemIds,
+  unlockItem,
+} from '../game/equipment';
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { createInitialSkillLevels, SkillLevels, SKILL_IDS } from '../game/skills';
 import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
 const DEFAULT_GENDER: Gender = 'female';
+const DEFAULT_COINS = 0;
+
+function unlockedItemsForGender(gender: Gender): UnlockedItemIds {
+  return getGenderUnlockItems(gender).reduce(
+    (unlocked, itemId) => unlockItem(unlocked, itemId),
+    createEmptyUnlockedItems()
+  );
+}
 
 export interface JobSelection {
   archetype: Archetype;
@@ -29,6 +46,8 @@ export interface SaveData {
   bodyType: BodyType;
   skills: SkillLevels;
   gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
   lastActiveAt: number;
 }
 
@@ -42,6 +61,8 @@ export function createInitialSaveData(): SaveData {
     bodyType: DEFAULT_BODY_TYPE,
     skills: createInitialSkillLevels(),
     gender: DEFAULT_GENDER,
+    coins: DEFAULT_COINS,
+    unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
     lastActiveAt: Date.now(),
   };
 }
@@ -80,6 +101,10 @@ function isSkillLevels(value: unknown): value is SkillLevels {
 
 function isGender(value: unknown): value is Gender {
   return value === 'male' || value === 'female';
+}
+
+function isUnlockedItemIds(value: unknown): value is UnlockedItemIds {
+  return Array.isArray(value) && value.every((id) => typeof id === 'string');
 }
 
 interface SaveDataV1 {
@@ -204,7 +229,19 @@ function isSaveDataV6(value: unknown): value is SaveDataV6 {
   );
 }
 
-function isSaveDataV7(value: unknown): value is SaveData {
+interface SaveDataV7 {
+  version: 7;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skills: SkillLevels;
+  gender: Gender;
+  lastActiveAt: number;
+}
+
+function isSaveDataV7(value: unknown): value is SaveDataV7 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -220,11 +257,45 @@ function isSaveDataV7(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV8(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 8 &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillLevels(record.skills) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds)
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
-// v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別。
-// 等級/經驗/保底/職業/裝備/體型/技能一律原樣保留。
+// v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
+// v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目。
+// 等級/經驗/保底/職業/裝備/體型/技能/性別一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV7(value)) return value;
+  if (isSaveDataV8(value)) return value;
+  if (isSaveDataV7(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: value.equipment,
+      bodyType: value.bodyType,
+      skills: value.skills,
+      gender: value.gender,
+      coins: DEFAULT_COINS,
+      unlockedItemIds: unlockedItemsForGender(value.gender),
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV6(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -235,6 +306,8 @@ function migrate(value: unknown): SaveData {
       bodyType: value.bodyType,
       skills: value.skills,
       gender: DEFAULT_GENDER,
+      coins: DEFAULT_COINS,
+      unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -248,6 +321,8 @@ function migrate(value: unknown): SaveData {
       bodyType: value.bodyType,
       skills: createInitialSkillLevels(),
       gender: DEFAULT_GENDER,
+      coins: DEFAULT_COINS,
+      unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -261,6 +336,8 @@ function migrate(value: unknown): SaveData {
       bodyType: DEFAULT_BODY_TYPE,
       skills: createInitialSkillLevels(),
       gender: DEFAULT_GENDER,
+      coins: DEFAULT_COINS,
+      unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -274,6 +351,8 @@ function migrate(value: unknown): SaveData {
       bodyType: DEFAULT_BODY_TYPE,
       skills: createInitialSkillLevels(),
       gender: DEFAULT_GENDER,
+      coins: DEFAULT_COINS,
+      unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -287,6 +366,8 @@ function migrate(value: unknown): SaveData {
       bodyType: DEFAULT_BODY_TYPE,
       skills: createInitialSkillLevels(),
       gender: DEFAULT_GENDER,
+      coins: DEFAULT_COINS,
+      unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -300,6 +381,8 @@ function migrate(value: unknown): SaveData {
       bodyType: DEFAULT_BODY_TYPE,
       skills: createInitialSkillLevels(),
       gender: DEFAULT_GENDER,
+      coins: DEFAULT_COINS,
+      unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       lastActiveAt: value.lastActiveAt,
     };
   }
