@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BodyTypeSelector } from '../components/BodyTypeSelector';
 import { EquipmentPanel } from '../components/EquipmentPanel';
 import { EventIcon } from '../components/EventIcon';
+import { GenderSelector } from '../components/GenderSelector';
 import { HeroSprite } from '../components/HeroSprite';
 import { JobSelector } from '../components/JobSelector';
 import { SkillPanel } from '../components/SkillPanel';
@@ -48,6 +49,8 @@ export default function HomeScreen() {
       {lastOfflineGain > 0 && <Text style={styles.offlineGainText}>離線期間獲得 {lastOfflineGain} 經驗值</Text>}
 
       <HeroSprite pixelSize={5} bodyType={bodyType} equipment={equipment} onPress={() => setLastEvent(click())} />
+
+      <GenderSelector />
 
       <BodyTypeSelector />
 

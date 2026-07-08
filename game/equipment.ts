@@ -78,6 +78,19 @@ export function unequipSlot(loadout: EquipmentLoadout, slot: EquipmentSlot): Equ
   return next;
 }
 
+// 性別不做獨立身體變體,改用預設裝備組合(頭飾/下身/上身)區分外觀,對應 CLAUDE.md 規格。
+export type Gender = 'male' | 'female';
+
+export const GENDER_DEFAULT_LOADOUT: Record<Gender, Partial<Record<EquipmentSlot, string>>> = {
+  male: { headwear: 'headwear-02', top: 'top-02', bottom: 'bottom-02' },
+  female: { headwear: 'headwear-01', top: 'top-01', bottom: 'bottom-01' },
+};
+
+// 切換性別只覆蓋頭飾/上身/下身三格,武器、副手、腰帶等其餘裝備維持玩家原有選擇。
+export function applyGenderDefault(loadout: EquipmentLoadout, gender: Gender): EquipmentLoadout {
+  return { ...loadout, ...GENDER_DEFAULT_LOADOUT[gender] };
+}
+
 // 座標系對應 game/sprites/heroSilhouette.ts 的原生 20 欄 x 24 列網格,
 // 僅以「normal」體型的輪廓比例校準;thin/fat 選擇時疊圖會有些微不貼合,
 // 屬於這個架構驗證階段可接受的簡化,尚未做到依體型即時縮放錨點。
