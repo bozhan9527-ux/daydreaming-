@@ -2,8 +2,10 @@ import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
+import { getCompanionById } from '../game/companions';
 import { getArchetypeComposition } from '../game/combat';
 import { getAttackEffect } from '../game/sprites/attackEffects';
+import { getCompanionFrame } from '../game/sprites/companions';
 import { getMonsterFrame } from '../game/sprites/monsters';
 import { useGameState } from '../hooks/useGameState';
 import { HeroSprite } from './HeroSprite';
@@ -46,6 +48,7 @@ export function BattleScene() {
   const bodyType = useGameState((state) => state.bodyType);
   const equipment = useGameState((state) => state.equipment);
   const job = useGameState((state) => state.job);
+  const companions = useGameState((state) => state.companions);
   const currentEncounter = useGameState((state) => state.currentEncounter);
   const fightStartedAt = useGameState((state) => state.fightStartedAt);
   const fightElapsedMs = useGameState((state) => state.fightElapsedMs);
@@ -56,13 +59,28 @@ export function BattleScene() {
 
   const progress = currentEncounter ? Math.min(1, fightElapsedMs / currentEncounter.fightDurationMs) : 0;
 
+  const mount = companions.equippedMountId ? getCompanionById(companions.equippedMountId) : undefined;
+  const pet = companions.equippedPetId ? getCompanionById(companions.equippedPetId) : undefined;
+
   return (
     <View style={styles.scene}>
       <GroundScroll />
 
+      {mount && (
+        <View style={styles.mountSlot}>
+          <PixelSprite {...getCompanionFrame('mount', mount.rarity)} pixelSize={3} />
+        </View>
+      )}
+
       <View style={styles.heroSlot}>
         <HeroSprite pixelSize={HERO_PIXEL_SIZE} bodyType={bodyType} equipment={equipment} onPress={boostCurrentFight} />
       </View>
+
+      {pet && (
+        <View style={styles.petSlot}>
+          <PixelSprite {...getCompanionFrame('pet', pet.rarity)} pixelSize={3} />
+        </View>
+      )}
 
       {currentEncounter && subtype === 'support' && (
         <View style={styles.supportEffectSlot}>
@@ -127,6 +145,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 12,
     bottom: 20,
+  },
+  mountSlot: {
+    position: 'absolute',
+    left: 6,
+    bottom: 12,
+  },
+  petSlot: {
+    position: 'absolute',
+    left: 2,
+    bottom: 60,
   },
   monsterSlot: {
     position: 'absolute',

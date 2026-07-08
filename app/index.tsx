@@ -7,6 +7,7 @@ import { EventIcon } from '../components/EventIcon';
 import { GenderSelector } from '../components/GenderSelector';
 import { PANEL_TABS } from '../components/panelTabs';
 import { TabBar } from '../components/TabBar';
+import { getCompanionById } from '../game/companions';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
 import { useBattleLoop } from '../hooks/useBattleLoop';
@@ -29,6 +30,7 @@ export default function HomeScreen() {
   const coins = useGameState((state) => state.coins);
   const killCount = useGameState((state) => state.killCount);
   const lastEvent = useGameState((state) => state.lastEvent);
+  const lastCompanionDropId = useGameState((state) => state.lastCompanionDropId);
 
   const [activeTabId, setActiveTabId] = useState(PANEL_TABS[0].id);
 
@@ -58,6 +60,12 @@ export default function HomeScreen() {
       <BattleScene />
 
       <Text style={styles.killCountText}>已擊敗 {killCount} 隻怪</Text>
+
+      {lastCompanionDropId && (
+        <Text style={styles.companionDropText}>
+          意外獲得了新夥伴:{getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備
+        </Text>
+      )}
 
       <GenderSelector />
 
@@ -131,6 +139,12 @@ const styles = StyleSheet.create({
   killCountText: {
     color: '#8a8a95',
     fontSize: 12,
+  },
+  companionDropText: {
+    color: '#e8c25a',
+    fontSize: 12,
+    textAlign: 'center',
+    maxWidth: 280,
   },
   resultBox: {
     maxWidth: 280,

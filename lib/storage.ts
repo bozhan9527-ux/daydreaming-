@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Archetype, JobBranch } from '../game/combat';
+import { CompanionState, createEmptyCompanionState } from '../game/companions';
 import {
   applyGenderDefault,
   createEmptyLoadout,
@@ -17,7 +18,7 @@ import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -48,6 +49,7 @@ export interface SaveData {
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
   lastActiveAt: number;
 }
 
@@ -63,6 +65,7 @@ export function createInitialSaveData(): SaveData {
     gender: DEFAULT_GENDER,
     coins: DEFAULT_COINS,
     unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
+    companions: createEmptyCompanionState(),
     lastActiveAt: Date.now(),
   };
 }
@@ -111,6 +114,17 @@ function isGender(value: unknown): value is Gender {
 
 function isUnlockedItemIds(value: unknown): value is UnlockedItemIds {
   return Array.isArray(value) && value.every((id) => typeof id === 'string');
+}
+
+function isCompanionState(value: unknown): value is CompanionState {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    Array.isArray(record.unlockedIds) &&
+    record.unlockedIds.every((id) => typeof id === 'string') &&
+    (record.equippedPetId === null || typeof record.equippedPetId === 'string') &&
+    (record.equippedMountId === null || typeof record.equippedMountId === 'string')
+  );
 }
 
 interface SaveDataV1 {
@@ -295,7 +309,21 @@ function isSaveDataV8(value: unknown): value is SaveDataV8 {
   );
 }
 
-function isSaveDataV9(value: unknown): value is SaveData {
+interface SaveDataV9 {
+  version: 9;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skills: SkillLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  lastActiveAt: number;
+}
+
+function isSaveDataV9(value: unknown): value is SaveDataV9 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -313,13 +341,49 @@ function isSaveDataV9(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV10(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 10 &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillLevels(record.skills) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions)
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
-// v8 的 skills 是舊版 5 通用技能形狀,跟新版 6 職業主動技能對不上,一律重置成 createInitialSkillLevels()。
-// 等級/經驗/保底/職業/裝備/體型/性別一律原樣保留,只有 skills 在 v8->v9 這關重置。
+// v8 的 skills 是舊版 5 通用技能形狀,跟新版 6 職業主動技能對不上,一律重置成 createInitialSkillLevels();
+// v9 沒有 companions,補空的審物/坐騎狀態(沒解鎖、沒裝備)。
+// 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV9(value)) return value;
+  if (isSaveDataV10(value)) return value;
+  if (isSaveDataV9(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: value.equipment,
+      bodyType: value.bodyType,
+      skills: value.skills,
+      gender: value.gender,
+      coins: value.coins,
+      unlockedItemIds: value.unlockedItemIds,
+      companions: createEmptyCompanionState(),
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV8(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -332,6 +396,7 @@ function migrate(value: unknown): SaveData {
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
+      companions: createEmptyCompanionState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -347,6 +412,7 @@ function migrate(value: unknown): SaveData {
       gender: value.gender,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(value.gender),
+      companions: createEmptyCompanionState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -362,6 +428,7 @@ function migrate(value: unknown): SaveData {
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
+      companions: createEmptyCompanionState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -377,6 +444,7 @@ function migrate(value: unknown): SaveData {
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
+      companions: createEmptyCompanionState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -392,6 +460,7 @@ function migrate(value: unknown): SaveData {
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
+      companions: createEmptyCompanionState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -407,6 +476,7 @@ function migrate(value: unknown): SaveData {
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
+      companions: createEmptyCompanionState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -422,6 +492,7 @@ function migrate(value: unknown): SaveData {
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
+      companions: createEmptyCompanionState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -437,6 +508,7 @@ function migrate(value: unknown): SaveData {
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
+      companions: createEmptyCompanionState(),
       lastActiveAt: value.lastActiveAt,
     };
   }

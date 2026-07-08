@@ -1,11 +1,18 @@
 import { create } from 'zustand';
 
+import { calcKillReward, Encounter, estimateOfflineBattleResult, generateEncounter } from '../game/battle';
 import {
-  calcKillReward,
-  Encounter,
-  estimateOfflineBattleResult,
-  generateEncounter,
-} from '../game/battle';
+  CompanionKind,
+  CompanionState,
+  createEmptyCompanionState,
+  equipCompanion,
+  getCompanionBonusTotals,
+  getCompanionById,
+  isCompanionUnlocked,
+  rollCompanionDrop,
+  unequipCompanion,
+  unlockCompanion,
+} from '../game/companions';
 import { Archetype, calcCombatMultiplier, getCurrentTier, JobBranch } from '../game/combat';
 import {
   applyGenderDefault,
@@ -41,6 +48,8 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { JobSelection, loadSave, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 
+const SAVE_SCHEMA_VERSION = 10;
+
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
 const DEFAULT_GENDER: Gender = 'female';
@@ -63,14 +72,20 @@ interface RewardMultipliers {
   speedMultiplier: number;
 }
 
-// 職業倍率只影響經驗;裝備的 exp/coins/speed 加成疊加在職業倍率之上(寵物/坐騎之後會加進同一組)。
-function computeRewardMultipliers(job: JobSelection, level: number, equipment: EquipmentLoadout): RewardMultipliers {
+// 職業倍率只影響經驗;裝備跟寵物/坐騎的 exp/coins/speed 加成疊加在職業倍率之上。
+function computeRewardMultipliers(
+  job: JobSelection,
+  level: number,
+  equipment: EquipmentLoadout,
+  companions: CompanionState
+): RewardMultipliers {
   const jobMultiplier = currentJobMultiplier(job, level);
   const equipmentBonus = getEquipmentBonusTotals(equipment);
+  const companionBonus = getCompanionBonusTotals(companions);
   return {
-    expMultiplier: jobMultiplier * (1 + equipmentBonus.exp),
-    coinMultiplier: 1 + equipmentBonus.coins,
-    speedMultiplier: 1 + equipmentBonus.speed,
+    expMultiplier: jobMultiplier * (1 + equipmentBonus.exp + companionBonus.exp),
+    coinMultiplier: 1 + equipmentBonus.coins + companionBonus.coins,
+    speedMultiplier: 1 + equipmentBonus.speed + companionBonus.speed,
   };
 }
 
@@ -85,6 +100,7 @@ interface GameState {
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
   lastOfflineGain: number;
   lastOfflineKills: number;
   lastOfflineCoins: number;
@@ -93,6 +109,7 @@ interface GameState {
   fightElapsedMs: number;
   killCount: number;
   lastEvent: GameEvent | null;
+  lastCompanionDropId: string | null;
   skillKillsSinceTrigger: number;
   forceInstantNextFight: boolean;
   load: () => Promise<void>;
@@ -106,30 +123,37 @@ interface GameState {
   setBodyType: (bodyType: BodyType) => void;
   upgradeSkill: (archetype: Archetype) => void;
   setGender: (gender: Gender) => void;
+  purchaseCompanion: (id: string) => void;
+  unequipCompanionSlot: (kind: CompanionKind) => void;
 }
 
-function persist(
-  level: LevelState,
-  trigger: TriggerState,
-  job: JobSelection,
-  equipment: EquipmentLoadout,
-  bodyType: BodyType,
-  skills: SkillLevels,
-  gender: Gender,
-  coins: number,
-  unlockedItemIds: UnlockedItemIds
-): void {
+type PersistableState = Pick<
+  GameState,
+  | 'level'
+  | 'trigger'
+  | 'job'
+  | 'equipment'
+  | 'bodyType'
+  | 'skills'
+  | 'gender'
+  | 'coins'
+  | 'unlockedItemIds'
+  | 'companions'
+>;
+
+function persist(state: PersistableState): void {
   writeSave({
-    version: 9,
-    level,
-    trigger,
-    job,
-    equipment,
-    bodyType,
-    skills,
-    gender,
-    coins,
-    unlockedItemIds,
+    version: SAVE_SCHEMA_VERSION,
+    level: state.level,
+    trigger: state.trigger,
+    job: state.job,
+    equipment: state.equipment,
+    bodyType: state.bodyType,
+    skills: state.skills,
+    gender: state.gender,
+    coins: state.coins,
+    unlockedItemIds: state.unlockedItemIds,
+    companions: state.companions,
     lastActiveAt: Date.now(),
   });
 }
@@ -145,6 +169,7 @@ export const useGameState = create<GameState>((set, get) => ({
   gender: DEFAULT_GENDER,
   coins: 0,
   unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
+  companions: createEmptyCompanionState(),
   lastOfflineGain: 0,
   lastOfflineKills: 0,
   lastOfflineCoins: 0,
@@ -153,6 +178,7 @@ export const useGameState = create<GameState>((set, get) => ({
   fightElapsedMs: 0,
   killCount: 0,
   lastEvent: null,
+  lastCompanionDropId: null,
   skillKillsSinceTrigger: 0,
   forceInstantNextFight: false,
 
@@ -163,13 +189,14 @@ export const useGameState = create<GameState>((set, get) => ({
     const { expMultiplier, coinMultiplier, speedMultiplier } = computeRewardMultipliers(
       save.job,
       save.level.level,
-      save.equipment
+      save.equipment,
+      save.companions
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
     const level = accumulateExp(save.level, gainedExp);
 
     // 背景/關閉期間沒有畫面可以真的打怪,離線期間用平均戰鬥時長反推大概擊敗幾隻、賺多少金幣
-    // (風味數字,經驗值仍然是上面 calcOfflineExp 那套沒變的公式在算),跟前景同一套裝備加成。
+    // (風味數字,經驗值仍然是上面 calcOfflineExp 那套沒變的公式在算),跟前景同一套裝備/寵物加成。
     const offlineBattle = estimateOfflineBattleResult(elapsedMs, speedMultiplier, coinMultiplier);
     const coins = save.coins + offlineBattle.coins;
 
@@ -183,6 +210,7 @@ export const useGameState = create<GameState>((set, get) => ({
       gender: save.gender,
       coins,
       unlockedItemIds: save.unlockedItemIds,
+      companions: save.companions,
       isLoaded: true,
       lastOfflineGain: gainedExp,
       lastOfflineKills: offlineBattle.kills,
@@ -191,15 +219,15 @@ export const useGameState = create<GameState>((set, get) => ({
       fightStartedAt: null,
       fightElapsedMs: 0,
     });
-    persist(level, save.trigger, save.job, save.equipment, save.bodyType, save.skills, save.gender, coins, save.unlockedItemIds);
+    persist(get());
   },
 
   levelUp: (times) => {
-    const { level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds } = get();
+    const { level } = get();
     const result = applyLevelUp(level, times);
 
     set({ level: result.state });
-    persist(result.state, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds);
+    persist(get());
     if (result.state.level > level.level) playLevelUp();
   },
 
@@ -210,7 +238,7 @@ export const useGameState = create<GameState>((set, get) => ({
     if (!state.isLoaded) return;
 
     if (!state.currentEncounter || state.fightStartedAt === null) {
-      const { speedMultiplier } = computeRewardMultipliers(state.job, state.level.level, state.equipment);
+      const { speedMultiplier } = computeRewardMultipliers(state.job, state.level.level, state.equipment, state.companions);
       const encounter = generateEncounter(state.trigger, speedMultiplier);
       if (state.forceInstantNextFight) {
         encounter.fightDurationMs = 0;
@@ -222,17 +250,7 @@ export const useGameState = create<GameState>((set, get) => ({
         fightElapsedMs: 0,
         forceInstantNextFight: false,
       });
-      persist(
-        state.level,
-        encounter.triggerState,
-        state.job,
-        state.equipment,
-        state.bodyType,
-        state.skills,
-        state.gender,
-        state.coins,
-        state.unlockedItemIds
-      );
+      persist(get());
       return;
     }
 
@@ -242,7 +260,12 @@ export const useGameState = create<GameState>((set, get) => ({
       return;
     }
 
-    const { expMultiplier, coinMultiplier } = computeRewardMultipliers(state.job, state.level.level, state.equipment);
+    const { expMultiplier, coinMultiplier } = computeRewardMultipliers(
+      state.job,
+      state.level.level,
+      state.equipment,
+      state.companions
+    );
     const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, expMultiplier, coinMultiplier);
     const event = getRandomEvent(state.currentEncounter.rarity);
 
@@ -269,31 +292,32 @@ export const useGameState = create<GameState>((set, get) => ({
       }
     }
 
+    // 寵物/坐騎額外掉落:跟主要稀有度事件的保底機制完全獨立判定,多數時候不會掉落。
+    const companionDrop = rollCompanionDrop();
+    let nextCompanions = state.companions;
+    let lastCompanionDropId: string | null = null;
+    if (companionDrop && !isCompanionUnlocked(nextCompanions, companionDrop.id)) {
+      nextCompanions = unlockCompanion(nextCompanions, companionDrop.id);
+      lastCompanionDropId = companionDrop.id;
+    }
+
     const nextLevel = accumulateExp(state.level, exp);
     const nextCoins = state.coins + coins;
 
     set({
       level: nextLevel,
       coins: nextCoins,
+      companions: nextCompanions,
       killCount: state.killCount + 1,
       lastEvent: event,
+      lastCompanionDropId,
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,
       skillKillsSinceTrigger: nextKillsSinceTrigger,
       forceInstantNextFight,
     });
-    persist(
-      nextLevel,
-      state.trigger,
-      state.job,
-      state.equipment,
-      state.bodyType,
-      state.skills,
-      state.gender,
-      nextCoins,
-      state.unlockedItemIds
-    );
+    persist(get());
     playEvent(state.currentEncounter.rarity);
   },
 
@@ -306,79 +330,98 @@ export const useGameState = create<GameState>((set, get) => ({
   },
 
   setJob: (archetype, branch) => {
-    const { level, trigger, equipment, bodyType, skills, gender, coins, unlockedItemIds } = get();
-    const job: JobSelection = { archetype, branch };
-    set({ job });
-    persist(level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds);
+    set({ job: { archetype, branch } });
+    persist(get());
   },
 
   equip: (itemId) => {
-    const { level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds } = get();
+    const { equipment, unlockedItemIds } = get();
     if (!isItemUnlocked(unlockedItemIds, itemId)) return;
-    const next = equipItem(equipment, itemId);
-    set({ equipment: next });
-    persist(level, trigger, job, next, bodyType, skills, gender, coins, unlockedItemIds);
+    set({ equipment: equipItem(equipment, itemId) });
+    persist(get());
   },
 
   unequip: (slot) => {
-    const { level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds } = get();
-    const next = unequipSlot(equipment, slot);
-    set({ equipment: next });
-    persist(level, trigger, job, next, bodyType, skills, gender, coins, unlockedItemIds);
+    const { equipment } = get();
+    set({ equipment: unequipSlot(equipment, slot) });
+    persist(get());
   },
 
   // 未解鎖的裝備第一次點擊會先扣貨幣解鎖並直接穿上;貨幣不夠就靜默不做事(跟技能升級一致)。
   purchaseItem: (itemId) => {
-    const { level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds } = get();
+    const { equipment, coins, unlockedItemIds } = get();
     const item = getItemById(itemId);
     if (!item) return;
 
     if (isItemUnlocked(unlockedItemIds, itemId)) {
-      const next = equipItem(equipment, itemId);
-      set({ equipment: next });
-      persist(level, trigger, job, next, bodyType, skills, gender, coins, unlockedItemIds);
+      set({ equipment: equipItem(equipment, itemId) });
+      persist(get());
       return;
     }
 
     if (coins < item.price) return;
 
-    const nextCoins = coins - item.price;
-    const nextUnlocked = unlockItem(unlockedItemIds, itemId);
-    const nextEquipment = equipItem(equipment, itemId);
-    set({ coins: nextCoins, unlockedItemIds: nextUnlocked, equipment: nextEquipment });
-    persist(level, trigger, job, nextEquipment, bodyType, skills, gender, nextCoins, nextUnlocked);
+    set({
+      coins: coins - item.price,
+      unlockedItemIds: unlockItem(unlockedItemIds, itemId),
+      equipment: equipItem(equipment, itemId),
+    });
+    persist(get());
   },
 
   setBodyType: (bodyType) => {
-    const { level, trigger, job, equipment, skills, gender, coins, unlockedItemIds } = get();
     set({ bodyType });
-    persist(level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds);
+    persist(get());
   },
 
   upgradeSkill: (archetype) => {
-    const { level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds } = get();
+    const { level, skills, coins } = get();
     const currentSkillLevel = skills[archetype];
     if (!canUpgradeSkill(currentSkillLevel, level.bankedExp, coins)) return;
 
     const expCost = skillUpgradeCost(currentSkillLevel);
     const coinCost = skillUpgradeCoinCost(currentSkillLevel);
     const nextLevel: LevelState = { level: level.level, bankedExp: level.bankedExp - expCost };
-    const nextCoins = coins - coinCost;
     const nextSkills: SkillLevels = { ...skills, [archetype]: nextSkillLevel(currentSkillLevel) };
 
-    set({ level: nextLevel, skills: nextSkills, coins: nextCoins });
-    persist(nextLevel, trigger, job, equipment, bodyType, nextSkills, gender, nextCoins, unlockedItemIds);
+    set({ level: nextLevel, skills: nextSkills, coins: coins - coinCost });
+    persist(get());
     playSkillUpgrade();
   },
 
   setGender: (gender) => {
-    const { level, trigger, job, equipment, bodyType, skills, coins, unlockedItemIds } = get();
+    const { equipment, unlockedItemIds } = get();
     const nextEquipment = applyGenderDefault(equipment, gender);
     const nextUnlocked = getGenderUnlockItems(gender).reduce(
       (unlocked, itemId) => unlockItem(unlocked, itemId),
       unlockedItemIds
     );
     set({ gender, equipment: nextEquipment, unlockedItemIds: nextUnlocked });
-    persist(level, trigger, job, nextEquipment, bodyType, skills, gender, coins, nextUnlocked);
+    persist(get());
+  },
+
+  // 未解鎖的審物/坐騎第一次點擊先扣貨幣解鎖並直接裝備;貨幣不夠就靜默不做事。
+  purchaseCompanion: (id) => {
+    const { companions, coins } = get();
+    const companion = getCompanionById(id);
+    if (!companion) return;
+
+    if (isCompanionUnlocked(companions, id)) {
+      set({ companions: equipCompanion(companions, id) });
+      persist(get());
+      return;
+    }
+
+    if (coins < companion.price) return;
+
+    const unlocked = unlockCompanion(companions, id);
+    set({ coins: coins - companion.price, companions: equipCompanion(unlocked, id) });
+    persist(get());
+  },
+
+  unequipCompanionSlot: (kind) => {
+    const { companions } = get();
+    set({ companions: unequipCompanion(companions, kind) });
+    persist(get());
   },
 }));
