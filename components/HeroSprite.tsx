@@ -11,6 +11,7 @@ import Animated, {
 
 import { EquipmentLoadout, getEquippedOverlays } from '../game/equipment';
 import { BodyType, buildHeroFrames, HERO_PALETTE } from '../game/sprites/heroSilhouette';
+import { playClick } from '../lib/sounds';
 import { PixelSprite } from './PixelSprite';
 
 interface HeroSpriteProps {
@@ -56,6 +57,7 @@ export function HeroSprite({ bodyType = 'normal', equipment, pixelSize = 6, onPr
       withTiming(0.85, { duration: 80, easing: Easing.out(Easing.quad) }),
       withTiming(1, { duration: 150, easing: Easing.out(Easing.quad) })
     );
+    playClick();
     onPress?.();
   }
 

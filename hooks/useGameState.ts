@@ -24,6 +24,7 @@ import {
 import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialTriggerState, rollTrigger, TriggerState } from '../game/trigger';
 import { JobSelection, loadSave, writeSave } from '../lib/storage';
+import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
@@ -103,6 +104,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     set({ level: result.state });
     persist(result.state, trigger, job, equipment, bodyType, skills, gender);
+    if (result.state.level > level.level) playLevelUp();
   },
 
   click: () => {
@@ -112,6 +114,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     set({ trigger: roll.state });
     persist(level, roll.state, job, equipment, bodyType, skills, gender);
+    playEvent(roll.rarity);
     return event;
   },
 
@@ -153,6 +156,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     set({ level: nextLevel, skills: nextSkills });
     persist(nextLevel, trigger, job, equipment, bodyType, nextSkills, gender);
+    playSkillUpgrade();
   },
 
   setGender: (gender) => {
