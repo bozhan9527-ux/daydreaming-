@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { GameEvent } from '../game/events';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
 import { useGameState } from '../hooks/useGameState';
@@ -19,7 +20,7 @@ export default function HomeScreen() {
   const levelUp = useGameState((state) => state.levelUp);
   const click = useGameState((state) => state.click);
 
-  const [lastRarity, setLastRarity] = useState<Rarity | null>(null);
+  const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
 
   useEffect(() => {
     load();
@@ -40,11 +41,16 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
 
-      <Pressable style={styles.hero} onPress={() => setLastRarity(click())}>
+      <Pressable style={styles.hero} onPress={() => setLastEvent(click())}>
         <Text style={styles.heroLabel}>戳戳看</Text>
       </Pressable>
 
-      {lastRarity !== null && <Text style={styles.resultText}>觸發:{RARITY_LABEL[lastRarity]}</Text>}
+      {lastEvent !== null && (
+        <View style={styles.resultBox}>
+          <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
+          <Text style={styles.resultText}>{lastEvent.payload}</Text>
+        </View>
+      )}
 
       <View style={styles.statsBox}>
         <Text style={styles.statsText}>Lv.{level.level}</Text>
@@ -89,9 +95,19 @@ const styles = StyleSheet.create({
   heroLabel: {
     color: '#8a8a95',
   },
+  resultBox: {
+    maxWidth: 280,
+    alignItems: 'center',
+    gap: 4,
+  },
+  resultRarity: {
+    color: '#8a8a95',
+    fontSize: 12,
+  },
   resultText: {
     color: '#f2f2f2',
     fontSize: 14,
+    textAlign: 'center',
   },
   statsBox: {
     alignItems: 'center',

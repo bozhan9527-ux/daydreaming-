@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 
+import { getRandomEvent, GameEvent } from '../game/events';
 import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
-import { createInitialTriggerState, Rarity, rollTrigger, TriggerState } from '../game/trigger';
+import { createInitialTriggerState, rollTrigger, TriggerState } from '../game/trigger';
 import { loadSave, writeSave } from '../lib/storage';
 
 interface GameState {
@@ -10,7 +11,7 @@ interface GameState {
   trigger: TriggerState;
   load: () => Promise<void>;
   levelUp: (times: 1 | 5 | 10) => void;
-  click: () => Rarity;
+  click: () => GameEvent;
 }
 
 function persist(level: LevelState, trigger: TriggerState): void {
@@ -43,9 +44,10 @@ export const useGameState = create<GameState>((set, get) => ({
   click: () => {
     const { level, trigger } = get();
     const roll = rollTrigger(trigger);
+    const event = getRandomEvent(roll.rarity);
 
     set({ trigger: roll.state });
     persist(level, roll.state);
-    return roll.rarity;
+    return event;
   },
 }));
