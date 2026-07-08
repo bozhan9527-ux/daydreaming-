@@ -45,9 +45,7 @@ export default function HomeScreen() {
 
       {lastOfflineGain > 0 && <Text style={styles.offlineGainText}>離線期間獲得 {lastOfflineGain} 經驗值</Text>}
 
-      <Pressable onPress={() => setLastEvent(click())}>
-        <HeroSprite pixelSize={5} bodyType={bodyType} />
-      </Pressable>
+      <HeroSprite pixelSize={5} bodyType={bodyType} onPress={() => setLastEvent(click())} />
 
       <BodyTypeSelector />
 

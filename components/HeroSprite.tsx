@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import { Pressable } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { BodyType, buildHeroFrames, HERO_PALETTE } from '../game/sprites/heroSilhouette';
 import { PixelSprite } from './PixelSprite';
@@ -7,9 +15,10 @@ import { PixelSprite } from './PixelSprite';
 interface HeroSpriteProps {
   bodyType?: BodyType;
   pixelSize?: number;
+  onPress?: () => void;
 }
 
-export function HeroSprite({ bodyType = 'normal', pixelSize = 6 }: HeroSpriteProps) {
+export function HeroSprite({ bodyType = 'normal', pixelSize = 6, onPress }: HeroSpriteProps) {
   const frames = useMemo(() => buildHeroFrames(bodyType), [bodyType]);
   const [blinking, setBlinking] = useState(false);
 
@@ -37,13 +46,25 @@ export function HeroSprite({ bodyType = 'normal', pixelSize = 6 }: HeroSpritePro
     );
   }, [bobOffset]);
 
+  const pressScale = useSharedValue(1);
+
+  function handlePress() {
+    pressScale.value = withSequence(
+      withTiming(0.85, { duration: 80, easing: Easing.out(Easing.quad) }),
+      withTiming(1, { duration: 150, easing: Easing.out(Easing.quad) })
+    );
+    onPress?.();
+  }
+
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: bobOffset.value }],
+    transform: [{ translateY: bobOffset.value }, { scale: pressScale.value }],
   }));
 
   return (
-    <Animated.View style={animatedStyle}>
-      <PixelSprite frame={blinking ? frames.blink : frames.open} palette={HERO_PALETTE} pixelSize={pixelSize} />
-    </Animated.View>
+    <Pressable onPress={handlePress}>
+      <Animated.View style={animatedStyle}>
+        <PixelSprite frame={blinking ? frames.blink : frames.open} palette={HERO_PALETTE} pixelSize={pixelSize} />
+      </Animated.View>
+    </Pressable>
   );
 }
