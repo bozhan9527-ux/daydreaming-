@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { BattleScene } from '../components/BattleScene';
 import { BodyTypeSelector } from '../components/BodyTypeSelector';
 import { EventIcon } from '../components/EventIcon';
 import { GenderSelector } from '../components/GenderSelector';
-import { HeroSprite } from '../components/HeroSprite';
 import { PANEL_TABS } from '../components/panelTabs';
 import { TabBar } from '../components/TabBar';
-import { GameEvent } from '../game/events';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
+import { useBattleLoop } from '../hooks/useBattleLoop';
 import { useGameState } from '../hooks/useGameState';
 
 const RARITY_LABEL: Record<Rarity, string> = {
@@ -23,14 +23,16 @@ export default function HomeScreen() {
   const isLoaded = useGameState((state) => state.isLoaded);
   const level = useGameState((state) => state.level);
   const levelUp = useGameState((state) => state.levelUp);
-  const click = useGameState((state) => state.click);
   const lastOfflineGain = useGameState((state) => state.lastOfflineGain);
-  const bodyType = useGameState((state) => state.bodyType);
-  const equipment = useGameState((state) => state.equipment);
+  const lastOfflineKills = useGameState((state) => state.lastOfflineKills);
+  const lastOfflineCoins = useGameState((state) => state.lastOfflineCoins);
   const coins = useGameState((state) => state.coins);
+  const killCount = useGameState((state) => state.killCount);
+  const lastEvent = useGameState((state) => state.lastEvent);
 
-  const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
   const [activeTabId, setActiveTabId] = useState(PANEL_TABS[0].id);
+
+  useBattleLoop();
 
   if (!isLoaded) {
     return (
@@ -47,9 +49,15 @@ export default function HomeScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
 
-      {lastOfflineGain > 0 && <Text style={styles.offlineGainText}>離線期間獲得 {lastOfflineGain} 經驗值</Text>}
+      {lastOfflineKills > 0 && (
+        <Text style={styles.offlineGainText}>
+          離線期間擊敗了 {lastOfflineKills} 隻怪,獲得 {lastOfflineGain} 經驗 {lastOfflineCoins} 金幣
+        </Text>
+      )}
 
-      <HeroSprite pixelSize={5} bodyType={bodyType} equipment={equipment} onPress={() => setLastEvent(click())} />
+      <BattleScene />
+
+      <Text style={styles.killCountText}>已擊敗 {killCount} 隻怪</Text>
 
       <GenderSelector />
 
@@ -117,6 +125,12 @@ const styles = StyleSheet.create({
   offlineGainText: {
     color: '#c9a94f',
     fontSize: 13,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  killCountText: {
+    color: '#8a8a95',
+    fontSize: 12,
   },
   resultBox: {
     maxWidth: 280,

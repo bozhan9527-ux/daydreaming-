@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 
+import {
+  calcKillReward,
+  Encounter,
+  estimateOfflineBattleResult,
+  generateEncounter,
+} from '../game/battle';
 import { Archetype, calcCombatMultiplier, getCurrentTier, JobBranch } from '../game/combat';
-import { coinsForRarity } from '../game/currency';
 import {
   applyGenderDefault,
   createEmptyLoadout,
@@ -30,7 +35,7 @@ import {
   upgradeSkill as nextSkillLevel,
 } from '../game/skills';
 import { BodyType } from '../game/sprites/heroSilhouette';
-import { createInitialTriggerState, rollTrigger, TriggerState } from '../game/trigger';
+import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { JobSelection, loadSave, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 
@@ -45,6 +50,11 @@ function unlockedItemsForGender(gender: Gender): UnlockedItemIds {
   );
 }
 
+function currentJobMultiplier(job: JobSelection, level: number): number {
+  const tier = getCurrentTier(level);
+  return calcCombatMultiplier(job.archetype, tier);
+}
+
 interface GameState {
   isLoaded: boolean;
   level: LevelState;
@@ -57,9 +67,17 @@ interface GameState {
   coins: number;
   unlockedItemIds: UnlockedItemIds;
   lastOfflineGain: number;
+  lastOfflineKills: number;
+  lastOfflineCoins: number;
+  currentEncounter: Encounter | null;
+  fightStartedAt: number | null;
+  fightElapsedMs: number;
+  killCount: number;
+  lastEvent: GameEvent | null;
   load: () => Promise<void>;
   levelUp: (times: 1 | 5 | 10) => void;
-  click: () => GameEvent;
+  tickBattle: () => void;
+  boostCurrentFight: () => void;
   setJob: (archetype: Archetype, branch: JobBranch) => void;
   equip: (itemId: string) => void;
   unequip: (slot: EquipmentSlot) => void;
@@ -107,16 +125,27 @@ export const useGameState = create<GameState>((set, get) => ({
   coins: 0,
   unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
   lastOfflineGain: 0,
+  lastOfflineKills: 0,
+  lastOfflineCoins: 0,
+  currentEncounter: null,
+  fightStartedAt: null,
+  fightElapsedMs: 0,
+  killCount: 0,
+  lastEvent: null,
 
   load: async () => {
     const save = await loadSave();
     const elapsedMs = Date.now() - save.lastActiveAt;
     const baseGain = calcOfflineExp(save.level.level, elapsedMs);
-    const tier = getCurrentTier(save.level.level);
-    const jobMultiplier = calcCombatMultiplier(save.job.archetype, tier);
+    const jobMultiplier = currentJobMultiplier(save.job, save.level.level);
     const skillMultiplier = 1 + totalSkillBonus(save.skills);
     const gainedExp = Math.floor(baseGain * jobMultiplier * skillMultiplier);
     const level = accumulateExp(save.level, gainedExp);
+
+    // 背景/關閉期間沒有畫面可以真的打怪,離線期間用平均戰鬥時長反推大概擊敗幾隻、賺多少金幣
+    // (風味數字,經驗值仍然是上面 calcOfflineExp 那套沒變的公式在算)。
+    const offlineBattle = estimateOfflineBattleResult(elapsedMs, jobMultiplier);
+    const coins = save.coins + offlineBattle.coins;
 
     set({
       level,
@@ -126,22 +155,17 @@ export const useGameState = create<GameState>((set, get) => ({
       bodyType: save.bodyType,
       skills: save.skills,
       gender: save.gender,
-      coins: save.coins,
+      coins,
       unlockedItemIds: save.unlockedItemIds,
       isLoaded: true,
       lastOfflineGain: gainedExp,
+      lastOfflineKills: offlineBattle.kills,
+      lastOfflineCoins: offlineBattle.coins,
+      currentEncounter: null,
+      fightStartedAt: null,
+      fightElapsedMs: 0,
     });
-    persist(
-      level,
-      save.trigger,
-      save.job,
-      save.equipment,
-      save.bodyType,
-      save.skills,
-      save.gender,
-      save.coins,
-      save.unlockedItemIds
-    );
+    persist(level, save.trigger, save.job, save.equipment, save.bodyType, save.skills, save.gender, coins, save.unlockedItemIds);
   },
 
   levelUp: (times) => {
@@ -153,16 +177,76 @@ export const useGameState = create<GameState>((set, get) => ({
     if (result.state.level > level.level) playLevelUp();
   },
 
-  click: () => {
-    const { level, trigger, job, equipment, bodyType, skills, gender, coins, unlockedItemIds } = get();
-    const roll = rollTrigger(trigger);
-    const event = getRandomEvent(roll.rarity);
-    const nextCoins = coins + coinsForRarity(roll.rarity);
+  // 前景時每隔一小段時間呼叫一次(見 hooks/useBattleLoop.ts):沒有怪就生成一隻,
+  // 有怪就檢查時間到了沒,到了就發獎勵、換下一隻。
+  tickBattle: () => {
+    const state = get();
+    if (!state.isLoaded) return;
 
-    set({ trigger: roll.state, coins: nextCoins });
-    persist(level, roll.state, job, equipment, bodyType, skills, gender, nextCoins, unlockedItemIds);
-    playEvent(roll.rarity);
-    return event;
+    if (!state.currentEncounter || state.fightStartedAt === null) {
+      const encounter = generateEncounter(state.trigger);
+      set({
+        currentEncounter: encounter,
+        trigger: encounter.triggerState,
+        fightStartedAt: Date.now(),
+        fightElapsedMs: 0,
+      });
+      persist(
+        state.level,
+        encounter.triggerState,
+        state.job,
+        state.equipment,
+        state.bodyType,
+        state.skills,
+        state.gender,
+        state.coins,
+        state.unlockedItemIds
+      );
+      return;
+    }
+
+    const elapsed = Date.now() - state.fightStartedAt;
+    if (elapsed < state.currentEncounter.fightDurationMs) {
+      set({ fightElapsedMs: elapsed });
+      return;
+    }
+
+    const jobMultiplier = currentJobMultiplier(state.job, state.level.level);
+    const skillMultiplier = 1 + totalSkillBonus(state.skills);
+    const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, jobMultiplier, skillMultiplier);
+    const nextLevel = accumulateExp(state.level, reward.exp);
+    const nextCoins = state.coins + reward.coins;
+    const event = getRandomEvent(state.currentEncounter.rarity);
+
+    set({
+      level: nextLevel,
+      coins: nextCoins,
+      killCount: state.killCount + 1,
+      lastEvent: event,
+      currentEncounter: null,
+      fightStartedAt: null,
+      fightElapsedMs: 0,
+    });
+    persist(
+      nextLevel,
+      state.trigger,
+      state.job,
+      state.equipment,
+      state.bodyType,
+      state.skills,
+      state.gender,
+      nextCoins,
+      state.unlockedItemIds
+    );
+    playEvent(state.currentEncounter.rarity);
+  },
+
+  // 點擊勇者可以搶快一點打完當前這隻怪(縮短剩餘時間),不是回到舊版的點擊觸發機制。
+  boostCurrentFight: () => {
+    const { currentEncounter, fightStartedAt } = get();
+    if (!currentEncounter || fightStartedAt === null) return;
+    const BOOST_MS = 400;
+    set({ fightStartedAt: fightStartedAt - BOOST_MS });
   },
 
   setJob: (archetype, branch) => {
