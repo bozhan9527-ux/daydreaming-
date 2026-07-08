@@ -1,55 +1,71 @@
 import { create } from 'zustand';
 
+import { Archetype, calcCombatMultiplier, getCurrentTier, JobBranch } from '../game/combat';
 import { getRandomEvent, GameEvent } from '../game/events';
 import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
 import { createInitialTriggerState, rollTrigger, TriggerState } from '../game/trigger';
-import { loadSave, writeSave } from '../lib/storage';
+import { JobSelection, loadSave, writeSave } from '../lib/storage';
+
+const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 
 interface GameState {
   isLoaded: boolean;
   level: LevelState;
   trigger: TriggerState;
+  job: JobSelection;
   lastOfflineGain: number;
   load: () => Promise<void>;
   levelUp: (times: 1 | 5 | 10) => void;
   click: () => GameEvent;
+  setJob: (archetype: Archetype, branch: JobBranch) => void;
 }
 
-function persist(level: LevelState, trigger: TriggerState): void {
-  writeSave({ version: 2, level, trigger, lastActiveAt: Date.now() });
+function persist(level: LevelState, trigger: TriggerState, job: JobSelection): void {
+  writeSave({ version: 3, level, trigger, job, lastActiveAt: Date.now() });
 }
 
 export const useGameState = create<GameState>((set, get) => ({
   isLoaded: false,
   level: createInitialLevelState(),
   trigger: createInitialTriggerState(),
+  job: DEFAULT_JOB,
   lastOfflineGain: 0,
 
   load: async () => {
     const save = await loadSave();
     const elapsedMs = Date.now() - save.lastActiveAt;
-    const gainedExp = calcOfflineExp(save.level.level, elapsedMs);
+    const baseGain = calcOfflineExp(save.level.level, elapsedMs);
+    const tier = getCurrentTier(save.level.level);
+    const multiplier = calcCombatMultiplier(save.job.archetype, tier);
+    const gainedExp = Math.floor(baseGain * multiplier);
     const level = accumulateExp(save.level, gainedExp);
 
-    set({ level, trigger: save.trigger, isLoaded: true, lastOfflineGain: gainedExp });
-    persist(level, save.trigger);
+    set({ level, trigger: save.trigger, job: save.job, isLoaded: true, lastOfflineGain: gainedExp });
+    persist(level, save.trigger, save.job);
   },
 
   levelUp: (times) => {
-    const { level, trigger } = get();
+    const { level, trigger, job } = get();
     const result = applyLevelUp(level, times);
 
     set({ level: result.state });
-    persist(result.state, trigger);
+    persist(result.state, trigger, job);
   },
 
   click: () => {
-    const { level, trigger } = get();
+    const { level, trigger, job } = get();
     const roll = rollTrigger(trigger);
     const event = getRandomEvent(roll.rarity);
 
     set({ trigger: roll.state });
-    persist(level, roll.state);
+    persist(level, roll.state, job);
     return event;
+  },
+
+  setJob: (archetype, branch) => {
+    const { level, trigger } = get();
+    const job: JobSelection = { archetype, branch };
+    set({ job });
+    persist(level, trigger, job);
   },
 }));

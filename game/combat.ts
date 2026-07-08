@@ -48,6 +48,15 @@ export function canPromoteToTier(tier: JobTier, level: number): boolean {
   return level >= TIER_UNLOCK_LEVELS[tier];
 }
 
+// 轉職階數完全由等級決定,不需要另外存檔或手動升階。
+export function getCurrentTier(level: number): JobTier {
+  let currentTier: JobTier = 1;
+  for (const tier of [1, 2, 3, 4, 5] as JobTier[]) {
+    if (level >= TIER_UNLOCK_LEVELS[tier]) currentTier = tier;
+  }
+  return currentTier;
+}
+
 export type JobBranch = 'A' | 'B';
 
 // 每階同一分支數值完全一樣(都吃 calcCombatMultiplier),稱號純粹是風味選擇。

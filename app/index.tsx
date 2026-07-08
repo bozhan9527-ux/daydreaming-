@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HeroSprite } from '../components/HeroSprite';
+import { JobSelector } from '../components/JobSelector';
 import { GameEvent } from '../game/events';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
@@ -55,6 +56,8 @@ export default function HomeScreen() {
         <Text style={styles.statsText}>Lv.{level.level}</Text>
         <Text style={styles.statsText}>{isMaxLevel ? '已封頂' : `${level.bankedExp} / ${needed}`}</Text>
       </View>
+
+      <JobSelector />
 
       <View style={styles.levelUpRow}>
         <Pressable style={styles.levelUpButton} onPress={() => levelUp(1)} disabled={isMaxLevel}>
