@@ -6,15 +6,19 @@ const EXP_PER_MIN_LEVEL_FACTOR = 0.05;
 
 // exp_to_next 分 5 段,成長率依序遞減,轉折平滑不斷檔:
 // Lv1-119(陡,衝前期爽感,~3.5 週到 Lv120) / Lv120-249 / Lv250-359 / Lv360-449 / Lv450-499(最平緩)。
-// 全程節奏皆遠低於「20 等/週」上限,Lv500 封頂約需 1.8 年。
+// Lv120 之後的 4 段經過調整,是因為規劃中技能系統會共用這包經驗池:
+// 5 個技能、每個技能花費是對應等級 exp_to_next 的 1/5,5 個一起剛好等於練等本身的花費,
+// 「練等+5技能全部封頂」的總花費會變成單純練等的 2 倍。這裡把 Lv120 後的曲線壓低,
+// 讓單純練等封頂降到 ~0.9 年,兩者相加(全部封頂)回到原本設計的 ~1.8 年;
+// Lv120 前的早期節奏(~3.5 週到 Lv120)維持不變。全程節奏仍遠低於「20 等/週」上限。
 const BASE_EXP_TO_NEXT = 100;
 
 const EXP_TIERS: { startLevel: number; growth: number }[] = [
   { startLevel: 1, growth: 1.0615672364184165 },
-  { startLevel: 120, growth: 1.006 },
-  { startLevel: 250, growth: 1.0055 },
-  { startLevel: 360, growth: 1.005 },
-  { startLevel: 450, growth: 1.0045 },
+  { startLevel: 120, growth: 1.0020178739248546 },
+  { startLevel: 250, growth: 1.00184971776445 },
+  { startLevel: 360, growth: 1.0016815616040453 },
+  { startLevel: 450, growth: 1.001513405443641 },
 ];
 
 interface ResolvedExpTier {
