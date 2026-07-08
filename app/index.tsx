@@ -18,6 +18,7 @@ export default function HomeScreen() {
   const level = useGameState((state) => state.level);
   const levelUp = useGameState((state) => state.levelUp);
   const click = useGameState((state) => state.click);
+  const lastOfflineGain = useGameState((state) => state.lastOfflineGain);
 
   const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
 
@@ -35,6 +36,8 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
+
+      {lastOfflineGain > 0 && <Text style={styles.offlineGainText}>離線期間獲得 {lastOfflineGain} 經驗值</Text>}
 
       <Pressable style={styles.hero} onPress={() => setLastEvent(click())}>
         <Text style={styles.heroLabel}>戳戳看</Text>
@@ -89,6 +92,10 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     color: '#8a8a95',
+  },
+  offlineGainText: {
+    color: '#c9a94f',
+    fontSize: 13,
   },
   resultBox: {
     maxWidth: 280,

@@ -9,6 +9,7 @@ interface GameState {
   isLoaded: boolean;
   level: LevelState;
   trigger: TriggerState;
+  lastOfflineGain: number;
   load: () => Promise<void>;
   levelUp: (times: 1 | 5 | 10) => void;
   click: () => GameEvent;
@@ -22,6 +23,7 @@ export const useGameState = create<GameState>((set, get) => ({
   isLoaded: false,
   level: createInitialLevelState(),
   trigger: createInitialTriggerState(),
+  lastOfflineGain: 0,
 
   load: async () => {
     const save = await loadSave();
@@ -29,7 +31,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const gainedExp = calcOfflineExp(save.level.level, elapsedMs);
     const level = accumulateExp(save.level, gainedExp);
 
-    set({ level, trigger: save.trigger, isLoaded: true });
+    set({ level, trigger: save.trigger, isLoaded: true, lastOfflineGain: gainedExp });
     persist(level, save.trigger);
   },
 
