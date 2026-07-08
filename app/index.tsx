@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BodyTypeSelector } from '../components/BodyTypeSelector';
 import { EquipmentPanel } from '../components/EquipmentPanel';
+import { EventIcon } from '../components/EventIcon';
 import { HeroSprite } from '../components/HeroSprite';
 import { JobSelector } from '../components/JobSelector';
 import { SkillPanel } from '../components/SkillPanel';
@@ -51,6 +52,7 @@ export default function HomeScreen() {
 
       {lastEvent !== null && (
         <View style={styles.resultBox}>
+          <EventIcon rarity={lastEvent.rarity} />
           <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
           <Text style={styles.resultText}>{lastEvent.payload}</Text>
         </View>
