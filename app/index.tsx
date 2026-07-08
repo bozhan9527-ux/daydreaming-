@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { GameEvent } from '../game/events';
@@ -16,15 +16,10 @@ const RARITY_LABEL: Record<Rarity, string> = {
 export default function HomeScreen() {
   const isLoaded = useGameState((state) => state.isLoaded);
   const level = useGameState((state) => state.level);
-  const load = useGameState((state) => state.load);
   const levelUp = useGameState((state) => state.levelUp);
   const click = useGameState((state) => state.click);
 
   const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   if (!isLoaded) {
     return (
