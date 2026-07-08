@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BodyTypeSelector } from '../components/BodyTypeSelector';
-import { EquipmentPanel } from '../components/EquipmentPanel';
 import { EventIcon } from '../components/EventIcon';
 import { GenderSelector } from '../components/GenderSelector';
 import { HeroSprite } from '../components/HeroSprite';
-import { JobSelector } from '../components/JobSelector';
-import { SkillPanel } from '../components/SkillPanel';
+import { PANEL_TABS } from '../components/panelTabs';
+import { TabBar } from '../components/TabBar';
 import { GameEvent } from '../game/events';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
@@ -31,6 +30,7 @@ export default function HomeScreen() {
   const coins = useGameState((state) => state.coins);
 
   const [lastEvent, setLastEvent] = useState<GameEvent | null>(null);
+  const [activeTabId, setActiveTabId] = useState(PANEL_TABS[0].id);
 
   if (!isLoaded) {
     return (
@@ -69,11 +69,13 @@ export default function HomeScreen() {
         <Text style={styles.statsText}>金幣 {coins}</Text>
       </View>
 
-      <JobSelector />
+      <TabBar tabs={PANEL_TABS} activeId={activeTabId} onSelect={setActiveTabId} />
 
-      <EquipmentPanel />
-
-      <SkillPanel />
+      {PANEL_TABS.map((tab) => {
+        if (tab.id !== activeTabId) return null;
+        const Panel = tab.Component;
+        return <Panel key={tab.id} />;
+      })}
 
       <View style={styles.levelUpRow}>
         <Pressable style={styles.levelUpButton} onPress={() => levelUp(1)} disabled={isMaxLevel}>

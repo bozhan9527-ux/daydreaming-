@@ -1,0 +1,65 @@
+// 分頁導覽用的小圖示,跟 game/sprites/eventIcons.ts 同一套「純程式產生像素格」原則。
+// 新增分頁時只要在這裡多加一個 icon frame + 對應的 TabIconId,不用動 UI 元件本身。
+export type TabIconId = 'job' | 'equipment' | 'skill';
+
+const ICON_COLOR = '#f2f2f2';
+
+const JOB_ICON_FRAME = [
+  '..........X.',
+  '.........XX.',
+  '........XX..',
+  '.......XX...',
+  '......XX....',
+  '.....XX.....',
+  '....XX......',
+  '...XXXXX....',
+  '....XX......',
+  '....XX......',
+  '....XX......',
+  '............',
+];
+
+const EQUIPMENT_ICON_FRAME = [
+  '...XXXXXX...',
+  '..X.XXXX.X..',
+  '.X..XXXX..X.',
+  'X...XXXX...X',
+  'X...XXXX...X',
+  'X...XXXX...X',
+  '.X..XXXX..X.',
+  '..X.XXXX.X..',
+  '...XXXXXX...',
+  '............',
+  '............',
+  '............',
+];
+
+const SKILL_ICON_FRAME = [
+  '............',
+  '......XXX...',
+  '.....XXX....',
+  '....XXX.....',
+  '..XXXXXXXX..',
+  '.......XX...',
+  '......XX....',
+  '.....XX.....',
+  '....XX......',
+  '............',
+  '............',
+  '............',
+];
+
+const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
+  job: JOB_ICON_FRAME,
+  equipment: EQUIPMENT_ICON_FRAME,
+  skill: SKILL_ICON_FRAME,
+};
+
+export interface TabIconData {
+  frame: string[];
+  palette: Record<string, string>;
+}
+
+export function getTabIcon(id: TabIconId): TabIconData {
+  return { frame: TAB_ICON_FRAMES[id], palette: { X: ICON_COLOR } };
+}

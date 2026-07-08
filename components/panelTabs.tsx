@@ -1,0 +1,21 @@
+import { ComponentType } from 'react';
+
+import { TabIconId } from '../game/sprites/tabIcons';
+import { EquipmentPanel } from './EquipmentPanel';
+import { JobSelector } from './JobSelector';
+import { SkillPanel } from './SkillPanel';
+
+export interface PanelTab {
+  id: string;
+  label: string;
+  icon: TabIconId;
+  Component: ComponentType;
+}
+
+// 之後要加新系統(例如商店)的分頁,只要在這裡多加一筆、在 game/sprites/tabIcons.ts 補一個 icon frame,
+// TabBar 跟 app/index.tsx 都不用改。
+export const PANEL_TABS: PanelTab[] = [
+  { id: 'job', label: '職業', icon: 'job', Component: JobSelector },
+  { id: 'equipment', label: '裝備', icon: 'equipment', Component: EquipmentPanel },
+  { id: 'skill', label: '技能', icon: 'skill', Component: SkillPanel },
+];
