@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { HeroSprite } from '../components/HeroSprite';
 import { GameEvent } from '../game/events';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
@@ -39,8 +40,8 @@ export default function HomeScreen() {
 
       {lastOfflineGain > 0 && <Text style={styles.offlineGainText}>離線期間獲得 {lastOfflineGain} 經驗值</Text>}
 
-      <Pressable style={styles.hero} onPress={() => setLastEvent(click())}>
-        <Text style={styles.heroLabel}>戳戳看</Text>
+      <Pressable onPress={() => setLastEvent(click())}>
+        <HeroSprite pixelSize={5} />
       </Pressable>
 
       {lastEvent !== null && (
@@ -81,17 +82,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     color: '#f2f2f2',
-  },
-  hero: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: '#2a2a35',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroLabel: {
-    color: '#8a8a95',
   },
   offlineGainText: {
     color: '#c9a94f',
