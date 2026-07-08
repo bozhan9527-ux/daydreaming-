@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Archetype, JobBranch } from '../game/combat';
+import { createEmptyLoadout, EquipmentLoadout } from '../game/equipment';
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -20,6 +21,7 @@ export interface SaveData {
   level: LevelState;
   trigger: TriggerState;
   job: JobSelection;
+  equipment: EquipmentLoadout;
   lastActiveAt: number;
 }
 
@@ -29,6 +31,7 @@ export function createInitialSaveData(): SaveData {
     level: createInitialLevelState(),
     trigger: createInitialTriggerState(),
     job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
+    equipment: createEmptyLoadout(),
     lastActiveAt: Date.now(),
   };
 }
@@ -51,6 +54,10 @@ function isJobSelection(value: unknown): value is JobSelection {
   return typeof record.archetype === 'string' && (record.branch === 'A' || record.branch === 'B');
 }
 
+function isEquipmentLoadout(value: unknown): value is EquipmentLoadout {
+  return typeof value === 'object' && value !== null;
+}
+
 interface SaveDataV1 {
   version: 1;
   level: LevelState;
@@ -61,6 +68,14 @@ interface SaveDataV2 {
   version: 2;
   level: LevelState;
   trigger: TriggerState;
+  lastActiveAt: number;
+}
+
+interface SaveDataV3 {
+  version: 3;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
   lastActiveAt: number;
 }
 
@@ -81,7 +96,7 @@ function isSaveDataV2(value: unknown): value is SaveDataV2 {
   );
 }
 
-function isSaveDataV3(value: unknown): value is SaveData {
+function isSaveDataV3(value: unknown): value is SaveDataV3 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -93,16 +108,40 @@ function isSaveDataV3(value: unknown): value is SaveData {
   );
 }
 
-// v1 存檔沒有 trigger 欄位,補上初始保底狀態;v2 存檔沒有 job 欄位,補上預設職業走向。
-// 等級/經驗/保底狀態一律原樣保留。
+function isSaveDataV4(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 4 &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment)
+  );
+}
+
+// v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄。
+// 等級/經驗/保底/職業一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV3(value)) return value;
+  if (isSaveDataV4(value)) return value;
+  if (isSaveDataV3(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: createEmptyLoadout(),
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV2(value)) {
     return {
       version: SCHEMA_VERSION,
       level: value.level,
       trigger: value.trigger,
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
+      equipment: createEmptyLoadout(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -112,6 +151,7 @@ function migrate(value: unknown): SaveData {
       level: value.level,
       trigger: createInitialTriggerState(),
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
+      equipment: createEmptyLoadout(),
       lastActiveAt: value.lastActiveAt,
     };
   }

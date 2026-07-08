@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { EquipmentPanel } from '../components/EquipmentPanel';
 import { HeroSprite } from '../components/HeroSprite';
 import { JobSelector } from '../components/JobSelector';
 import { GameEvent } from '../game/events';
@@ -26,7 +27,7 @@ export default function HomeScreen() {
 
   if (!isLoaded) {
     return (
-      <View style={styles.container}>
+      <View style={styles.loadingContainer}>
         <Text style={styles.title}>載入中...</Text>
       </View>
     );
@@ -36,7 +37,7 @@ export default function HomeScreen() {
   const needed = isMaxLevel ? 0 : expToNext(level.level);
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
 
       {lastOfflineGain > 0 && <Text style={styles.offlineGainText}>離線期間獲得 {lastOfflineGain} 經驗值</Text>}
@@ -59,6 +60,8 @@ export default function HomeScreen() {
 
       <JobSelector />
 
+      <EquipmentPanel />
+
       <View style={styles.levelUpRow}>
         <Pressable style={styles.levelUpButton} onPress={() => levelUp(1)} disabled={isMaxLevel}>
           <Text style={styles.levelUpLabel}>升 1 級</Text>
@@ -70,17 +73,27 @@ export default function HomeScreen() {
           <Text style={styles.levelUpLabel}>升 10 級</Text>
         </Pressable>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
+    flex: 1,
+    backgroundColor: '#0f0f14',
+  },
+  loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0f0f14',
+  },
+  container: {
+    alignItems: 'center',
+    backgroundColor: '#0f0f14',
     gap: 24,
+    paddingVertical: 48,
+    paddingHorizontal: 16,
   },
   title: {
     fontSize: 20,
