@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { BattleScene } from '../components/BattleScene';
 import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
+import { MainVisual } from '../components/MainVisual';
 import { PANEL_TABS } from '../components/panelTabs';
 import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
@@ -67,21 +68,23 @@ export default function HomeScreen() {
         </Text>
       )}
 
-      <BattleScene />
+      <MainVisual>
+        <BattleScene />
 
-      <SkillTracker />
+        <SkillTracker />
 
-      <Text style={styles.killCountText}>已擊敗 {killCount} 隻怪</Text>
+        <Text style={styles.killCountText}>已擊敗 {killCount} 隻怪</Text>
 
-      {lastCompanionDropId && (
-        <Text style={styles.companionDropText}>
-          意外獲得了新夥伴:{getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備
-        </Text>
-      )}
+        {lastCompanionDropId && (
+          <Text style={styles.companionDropText}>
+            意外獲得了新夥伴:{getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備
+          </Text>
+        )}
 
-      <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} />
+        <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} />
 
-      <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
+        <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
+      </MainVisual>
 
       <Modal
         visible={openTab !== null}
@@ -148,14 +151,22 @@ const styles = StyleSheet.create({
     maxWidth: 280,
   },
   killCountText: {
-    color: '#8a8a95',
+    color: '#f2f2f2',
     fontSize: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
   companionDropText: {
     color: '#e8c25a',
     fontSize: 12,
     textAlign: 'center',
     maxWidth: 280,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
   resultBox: {
     maxWidth: 280,

@@ -5,18 +5,17 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTim
 import { getCompanionById } from '../game/companions';
 import { getArchetypeComposition } from '../game/combat';
 import { getAttackEffect } from '../game/sprites/attackEffects';
-import { getStageBackground } from '../game/sprites/backgrounds';
 import { getCompanionFrame } from '../game/sprites/companions';
 import { getMonsterFrame } from '../game/sprites/monsters';
 import { useGameState } from '../hooks/useGameState';
 import { HeroSprite } from './HeroSprite';
 import { PixelSprite } from './PixelSprite';
 
-// 場景畫布尺寸固定不變:不管背景/角色/特效怎麼換,SCENE_HEIGHT 都是同一個數字,
-// 版面不會因為內容增減而跳動。
+// 場景畫布尺寸固定不變:不管角色/特效怎麼換,SCENE_HEIGHT 都是同一個數字,版面不會因為
+// 內容增減而跳動。背景圖(含關卡/小關文字)改由外層 MainVisual 統一繪製並往下延伸到按鈕區,
+// 這裡維持透明,只負責角色/怪物/特效的定位。
 const SCENE_HEIGHT = 130;
 const SCENE_MAX_WIDTH = 320;
-const BACKGROUND_PIXEL_SIZE = 8;
 const HERO_PIXEL_SIZE = 4;
 const MONSTER_PIXEL_SIZE = 4;
 const GROUND_PATTERN_WIDTH = 40;
@@ -58,11 +57,9 @@ export function BattleScene() {
   const fightStartedAt = useGameState((state) => state.fightStartedAt);
   const fightElapsedMs = useGameState((state) => state.fightElapsedMs);
   const boostCurrentFight = useGameState((state) => state.boostCurrentFight);
-  const stageProgress = useGameState((state) => state.stageProgress);
 
   const { subtype } = getArchetypeComposition(job.archetype);
   const effect = getAttackEffect(job.archetype);
-  const background = getStageBackground(job.archetype, stageProgress.stage);
 
   const progress = currentEncounter ? Math.min(1, fightElapsedMs / currentEncounter.fightDurationMs) : 0;
 
@@ -71,14 +68,9 @@ export function BattleScene() {
 
   return (
     <View style={styles.scene}>
-      <View style={styles.backgroundLayer}>
-        <PixelSprite frame={background.frame} palette={background.palette} pixelSize={BACKGROUND_PIXEL_SIZE} />
-      </View>
-
-      <Text style={styles.stageLabel}>
-        第 {stageProgress.stage} 關 - 第 {stageProgress.subStage} 小關
-        {currentEncounter?.isFinalBoss ? ' ⚠ 大魔王來襲' : currentEncounter?.isBoss ? ' ⚠ 魔王來襲' : ''}
-      </Text>
+      {(currentEncounter?.isBoss || currentEncounter?.isFinalBoss) && (
+        <Text style={styles.bossLabel}>{currentEncounter.isFinalBoss ? '⚠ 大魔王來襲' : '⚠ 魔王來襲'}</Text>
+      )}
 
       <GroundScroll />
 
@@ -138,23 +130,16 @@ const styles = StyleSheet.create({
     height: SCENE_HEIGHT,
     overflow: 'hidden',
     justifyContent: 'center',
-    backgroundColor: '#0f0f14',
   },
-  backgroundLayer: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    right: 0,
-    bottom: 0,
-  },
-  stageLabel: {
+  bossLabel: {
     position: 'absolute',
     left: 0,
     right: 0,
     top: 4,
     textAlign: 'center',
-    color: '#f2f2f2',
-    fontSize: 10,
+    color: '#e05050',
+    fontSize: 11,
+    fontWeight: '600',
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
   groundTrack: {

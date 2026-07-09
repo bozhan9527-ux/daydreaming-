@@ -75,10 +75,12 @@ export interface BackgroundFrameData {
 }
 
 // stage 1..5,數字越大場景裡的造型元素越密集,呼應關卡遞進;元素數量 = stage。
-export function getStageBackground(archetype: Archetype, stage: number): BackgroundFrameData {
+// totalHeight 預設等於原本的戰鬥場景高度(HEIGHT);傳更大的值(給「主視覺延伸區」用)時,
+// 超出原本地面之後的部分一律延續 skyBottom 色階往下鋪,不會重複畫地面,不然會看起來像整塊土台。
+export function getStageBackground(archetype: Archetype, stage: number, totalHeight: number = HEIGHT): BackgroundFrameData {
   const theme = ARCHETYPE_THEMES[archetype];
-  const grid: string[][] = Array.from({ length: HEIGHT }, (_, y) => {
-    const rowChar = y < SKY_TOP_ROWS ? 'T' : y < HEIGHT - GROUND_ROWS ? 'B' : 'G';
+  const grid: string[][] = Array.from({ length: totalHeight }, (_, y) => {
+    const rowChar = y < SKY_TOP_ROWS ? 'T' : y < HEIGHT - GROUND_ROWS ? 'B' : y < HEIGHT ? 'G' : 'B';
     return new Array(WIDTH).fill(rowChar);
   });
 
@@ -90,11 +92,17 @@ export function getStageBackground(archetype: Archetype, stage: number): Backgro
     for (const { dx, dy } of offsets) {
       const x = baseX + dx;
       const y = MOTIF_BASE_ROW + dy;
-      if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT) grid[y][x] = 'M';
+      if (x >= 0 && x < WIDTH && y >= 0 && y < totalHeight) grid[y][x] = 'M';
     }
   }
 
   const frame = grid.map((row) => row.join(''));
   const palette: Record<string, string> = { T: theme.skyTop, B: theme.skyBottom, G: theme.ground, M: theme.motif };
   return { frame, palette };
+}
+
+// 主視覺延伸區用:圖片本身之外(超出 totalHeight 的殘留高度)要靠外層 View 的純色
+// backgroundColor 接住,顏色跟圖片最底部的 skyBottom 一致才不會看到明顯接縫。
+export function getStageBackdropColor(archetype: Archetype): string {
+  return ARCHETYPE_THEMES[archetype].skyBottom;
 }
