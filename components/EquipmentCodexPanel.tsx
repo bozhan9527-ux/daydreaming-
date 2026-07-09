@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   EquipmentBonusStat,
@@ -33,7 +33,10 @@ const STAT_LABELS: Record<EquipmentBonusStat, string> = {
   speed: '戰鬥速度',
 };
 
-const SLOTS: EquipmentSlot[] = ['back', 'bottom', 'top', 'belt', 'headwear', 'face', 'gloves', 'offhand', 'mainhand'];
+// 角色紙娃娃兩側各一欄圖示按鈕(參考玩家提供的截圖:武器對放最上面,其餘裝備往下排),
+// 不再用下方一排可橫向捲動的槽位標籤。
+const LEFT_COLUMN: EquipmentSlot[] = ['offhand', 'headwear', 'top', 'belt', 'bottom'];
+const RIGHT_COLUMN: EquipmentSlot[] = ['mainhand', 'face', 'back', 'gloves'];
 
 const EMPTY_ICON_COLOR = '#4a4456';
 
@@ -73,32 +76,34 @@ export function EquipmentCodexPanel() {
     }
   }
 
+  function renderSlotButton(slot: EquipmentSlot) {
+    const equipped = equipment[slot];
+    const equippedItem = equipped !== undefined ? getItemById(equipped) : undefined;
+    const icon = equippedItem ? getItemIcon(equippedItem) : getEquipmentSlotIcon(slot);
+    const iconColor = equippedItem ? equippedItem.color : EMPTY_ICON_COLOR;
+    const active = slot === selectedSlot;
+    return (
+      <Pressable
+        key={slot}
+        style={[styles.slotButton, equippedItem && styles.slotButtonFilled, active && styles.slotButtonActive]}
+        onPress={() => setSelectedSlot(slot)}
+      >
+        <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: iconColor }} pixelSize={2} />
+      </Pressable>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>裝備圖鑑</Text>
-      <View style={styles.paperdollWrap}>
-        <HeroSprite bodyType={bodyType} equipment={equipment} pixelSize={6} showEmptySlotHints />
+      <View style={styles.paperdollRow}>
+        <View style={styles.slotColumn}>{LEFT_COLUMN.map(renderSlotButton)}</View>
+        <View style={styles.heroWrap}>
+          <HeroSprite bodyType={bodyType} equipment={equipment} pixelSize={6} />
+        </View>
+        <View style={styles.slotColumn}>{RIGHT_COLUMN.map(renderSlotButton)}</View>
       </View>
-      <Text style={styles.hint}>虛線框 = 該位置尚未裝備,點選下方槽位瀏覽可裝備款式</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.slotRow}>
-        {SLOTS.map((slot) => {
-          const equipped = equipment[slot];
-          const equippedItem = equipped !== undefined ? getItemById(equipped) : undefined;
-          const icon = equippedItem ? getItemIcon(equippedItem) : getEquipmentSlotIcon(slot);
-          const iconColor = equippedItem ? equippedItem.color : EMPTY_ICON_COLOR;
-          const active = slot === selectedSlot;
-          return (
-            <Pressable
-              key={slot}
-              style={[styles.slotPill, active && styles.slotPillActive]}
-              onPress={() => setSelectedSlot(slot)}
-            >
-              <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: iconColor }} pixelSize={2} />
-              <Text style={[styles.slotPillLabel, active && styles.slotPillLabelActive]}>{SLOT_LABELS[slot]}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <Text style={styles.hint}>目前選擇:{SLOT_LABELS[selectedSlot]}</Text>
       <View style={styles.itemList}>
         {currentItem && (
           <Pressable style={styles.itemRow} onPress={() => unequip(selectedSlot)}>
@@ -148,37 +153,40 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  paperdollWrap: {
+  paperdollRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
     paddingVertical: 8,
+  },
+  heroWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotColumn: {
+    gap: 6,
+  },
+  slotButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#3a3a45',
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotButtonFilled: {
+    borderColor: '#6ab0e0',
+  },
+  slotButtonActive: {
+    backgroundColor: '#4a4456',
   },
   hint: {
     color: '#8a8a95',
     fontSize: 10,
     textAlign: 'center',
-  },
-  slotRow: {
-    gap: 6,
-    paddingVertical: 4,
-  },
-  slotPill: {
-    alignItems: 'center',
-    gap: 2,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: '#2a2a35',
-  },
-  slotPillActive: {
-    backgroundColor: '#4a4456',
-  },
-  slotPillLabel: {
-    color: '#8a8a95',
-    fontSize: 9,
-  },
-  slotPillLabelActive: {
-    color: '#f2f2f2',
   },
   itemList: {
     gap: 3,
