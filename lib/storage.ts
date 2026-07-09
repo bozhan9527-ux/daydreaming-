@@ -20,10 +20,11 @@ import {
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { createInitialSkillLevels, SkillLevels, SKILL_IDS } from '../game/skills';
 import { BodyType } from '../game/sprites/heroSilhouette';
+import { createInitialStageProgress, StageProgress } from '../game/stages';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -59,6 +60,7 @@ export interface SaveData {
   itemInstances: ItemInstances;
   enhanceStones: number;
   gemCounts: GemCounts;
+  stageProgress: StageProgress;
   lastActiveAt: number;
 }
 
@@ -79,6 +81,7 @@ export function createInitialSaveData(): SaveData {
     itemInstances: createEmptyItemInstances(),
     enhanceStones: 0,
     gemCounts: createEmptyGemCounts(),
+    stageProgress: createInitialStageProgress(),
     lastActiveAt: Date.now(),
   };
 }
@@ -508,7 +511,26 @@ function isGemCounts(value: unknown): value is GemCounts {
   return typeof record.expGem === 'number' && typeof record.coinGem === 'number' && typeof record.speedGem === 'number';
 }
 
-function isSaveDataV13(value: unknown): value is SaveData {
+interface SaveDataV13 {
+  version: 13;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skills: SkillLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  lastActiveAt: number;
+}
+
+function isSaveDataV13(value: unknown): value is SaveDataV13 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -531,6 +553,36 @@ function isSaveDataV13(value: unknown): value is SaveData {
   );
 }
 
+function isStageProgress(value: unknown): value is StageProgress {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.stage === 'number' && typeof record.subStage === 'number' && typeof record.killsInSubStage === 'number';
+}
+
+function isSaveDataV14(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 14 &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillLevels(record.skills) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    isStageProgress(record.stageProgress)
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
@@ -539,10 +591,32 @@ function isSaveDataV13(value: unknown): value is SaveData {
 // v10 沒有 secondaryJob,補 null(尚未解鎖雙職兼修前這本來就是唯一合法值);
 // v11 沒有 itemInstances,補空物件(舊裝備要等玩家重新裝備一次才會補上隨機/隱藏素質);
 // v12 的 itemInstances 沒有 enhanceLevel/socketedGems,補強化 0 級 + 依裝備規則清空插槽,
-// 另外補 enhanceStones=0、gemCounts=0(強化/鑲嵌系統還沒出生)。
+// 另外補 enhanceStones=0、gemCounts=0(強化/鑲嵌系統還沒出生);
+// v13 沒有 stageProgress,補第 1 關第 1 小關(關卡系統還沒出生前這本來就是唯一合法起始值)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV13(value)) return value;
+  if (isSaveDataV14(value)) return value;
+  if (isSaveDataV13(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: value.equipment,
+      bodyType: value.bodyType,
+      skills: value.skills,
+      gender: value.gender,
+      coins: value.coins,
+      unlockedItemIds: value.unlockedItemIds,
+      companions: value.companions,
+      secondaryJob: value.secondaryJob,
+      itemInstances: value.itemInstances,
+      enhanceStones: value.enhanceStones,
+      gemCounts: value.gemCounts,
+      stageProgress: createInitialStageProgress(),
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV12(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -560,6 +634,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: upgradeItemInstancesToV13(value.itemInstances),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -580,6 +655,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -600,6 +676,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -620,6 +697,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -640,6 +718,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -660,6 +739,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -680,6 +760,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -700,6 +781,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -720,6 +802,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -740,6 +823,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -760,6 +844,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -780,6 +865,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      stageProgress: createInitialStageProgress(),
       lastActiveAt: value.lastActiveAt,
     };
   }

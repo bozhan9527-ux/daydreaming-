@@ -65,11 +65,19 @@ import {
   upgradeSkill as nextSkillLevel,
 } from '../game/skills';
 import { BodyType } from '../game/sprites/heroSilhouette';
+import {
+  advanceStageProgress,
+  createInitialStageProgress,
+  getStageDifficultyMultiplier,
+  isBossSubStage,
+  isFinalBossStage,
+  StageProgress,
+} from '../game/stages';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { JobSelection, loadSave, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 
-const SAVE_SCHEMA_VERSION = 13;
+const SAVE_SCHEMA_VERSION = 14;
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
@@ -145,6 +153,7 @@ interface GameState {
   itemInstances: ItemInstances;
   enhanceStones: number;
   gemCounts: GemCounts;
+  stageProgress: StageProgress;
   lastEnhanceOutcome: string | null;
   lastOfflineGain: number;
   lastOfflineKills: number;
@@ -199,6 +208,7 @@ type PersistableState = Pick<
   | 'itemInstances'
   | 'enhanceStones'
   | 'gemCounts'
+  | 'stageProgress'
 >;
 
 function persist(state: PersistableState): void {
@@ -218,6 +228,7 @@ function persist(state: PersistableState): void {
     itemInstances: state.itemInstances,
     enhanceStones: state.enhanceStones,
     gemCounts: state.gemCounts,
+    stageProgress: state.stageProgress,
     lastActiveAt: Date.now(),
   });
 }
@@ -238,6 +249,7 @@ export const useGameState = create<GameState>((set, get) => ({
   itemInstances: createEmptyItemInstances(),
   enhanceStones: 0,
   gemCounts: createEmptyGemCounts(),
+  stageProgress: createInitialStageProgress(),
   lastEnhanceOutcome: null,
   lastOfflineGain: 0,
   lastOfflineKills: 0,
@@ -295,6 +307,7 @@ export const useGameState = create<GameState>((set, get) => ({
       itemInstances,
       enhanceStones: save.enhanceStones,
       gemCounts: save.gemCounts,
+      stageProgress: save.stageProgress,
       isLoaded: true,
       lastOfflineGain: gainedExp,
       lastOfflineKills: offlineBattle.kills,
@@ -330,7 +343,10 @@ export const useGameState = create<GameState>((set, get) => ({
         state.secondaryJob,
         state.itemInstances
       );
-      const encounter = generateEncounter(state.trigger, speedMultiplier);
+      const isBoss = isBossSubStage(state.stageProgress.subStage);
+      const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
+      const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress);
+      const encounter = generateEncounter(state.trigger, speedMultiplier, Math.random, isBoss, isFinalBoss, difficultyMultiplier);
       if (state.forceInstantNextFight) {
         encounter.fightDurationMs = 0;
       }
@@ -359,8 +375,12 @@ export const useGameState = create<GameState>((set, get) => ({
       state.secondaryJob,
       state.itemInstances
     );
-    const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, expMultiplier, coinMultiplier);
+    // 關卡難度倍率:跟這隻怪生成當下用的是同一份 stageProgress(這次擊殺才會讓它晉級,
+    // 所以算獎勵的當下它還沒變),疊加在等級/裝備既有的獎勵倍率之上,是完全獨立的另一條軸線。
+    const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress);
+    const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, expMultiplier, coinMultiplier, difficultyMultiplier);
     const event = getRandomEvent(state.currentEncounter.rarity);
+    const nextStageProgress = advanceStageProgress(state.stageProgress);
 
     // 主動技能:每打倒幾隻怪觸發一次(等級越高間隔越短),依目前職業的 subtype 決定效果——
     // 近戰=下一場戰鬥秒殺、遠程=這次擊殺獎勵翻倍、輔助=直接發一筆額外金幣。
@@ -440,6 +460,7 @@ export const useGameState = create<GameState>((set, get) => ({
       companions: nextCompanions,
       enhanceStones: nextEnhanceStones,
       gemCounts: nextGemCounts,
+      stageProgress: nextStageProgress,
       killCount: state.killCount + 1,
       lastEvent: event,
       lastCompanionDropId,

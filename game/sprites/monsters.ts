@@ -217,12 +217,103 @@ export interface MonsterFrameData {
   palette: Record<string, string>;
 }
 
+// 魔王/大魔王不沿用上面「半寬序列」產生器(那套只做得出對稱的圓潤/獸型輪廓),
+// 改用跟 equipmentIcons.ts/skillIcons.ts 同一套「座標點列表 → 固定尺寸網格」手法,
+// 才能刻出「寬肩+雙角+斗篷」這種非對稱細節、且保證每列寬度一致不會拼歪。
+interface Mark {
+  x: number;
+  y: number;
+  c: string;
+}
+
+function buildMarkFrame(size: number, marks: Mark[]): string[] {
+  const grid: string[][] = Array.from({ length: size }, () => new Array(size).fill('.'));
+  for (const { x, y, c } of marks) {
+    if (x >= 0 && x < size && y >= 0 && y < size) grid[y][x] = c;
+  }
+  return grid.map((row) => row.join(''));
+}
+
+function rect(x0: number, y0: number, x1: number, y1: number, c: string): Mark[] {
+  const marks: Mark[] = [];
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) marks.push({ x, y, c });
+  }
+  return marks;
+}
+
+const BOSS_CANVAS = 20;
+
+// 魔王:雙角、寬肩斗篷、紅色發光雙眼,體型比一般怪物(最大 20 寬的幼龍)更壯碩醒目。
+const BOSS_MARKS: Mark[] = [
+  ...rect(5, 0, 6, 1, 'K'),
+  ...rect(13, 0, 14, 1, 'K'),
+  ...rect(6, 2, 13, 6, 'H'),
+  { x: 8, y: 4, c: 'R' },
+  { x: 11, y: 4, c: 'R' },
+  ...rect(7, 7, 12, 7, 'K'),
+  ...rect(2, 8, 17, 10, 'C'),
+  ...rect(6, 8, 13, 10, 'B'),
+  ...rect(6, 10, 13, 15, 'B'),
+  ...rect(6, 16, 8, 19, 'B'),
+  ...rect(11, 16, 13, 19, 'B'),
+  ...rect(6, 18, 8, 19, 'K'),
+  ...rect(11, 18, 13, 19, 'K'),
+];
+
+const BOSS_PALETTE: Record<string, string> = {
+  K: '#2a1a1a',
+  H: '#7a4a4a',
+  R: '#e05050',
+  C: '#4a2a3a',
+  B: '#6b3a4a',
+};
+
+const FINAL_BOSS_CANVAS = 24;
+
+// 大魔王:在魔王的基礎上加金冠、雙翼,配色改金黑對比,體型再放大一圈,一眼看得出是整組循環的最終王。
+const FINAL_BOSS_MARKS: Mark[] = [
+  ...rect(10, 0, 13, 1, 'Y'),
+  { x: 9, y: 1, c: 'Y' },
+  { x: 14, y: 1, c: 'Y' },
+  ...rect(8, 2, 15, 6, 'H'),
+  { x: 10, y: 4, c: 'R' },
+  { x: 13, y: 4, c: 'R' },
+  ...rect(9, 7, 14, 7, 'K'),
+  ...rect(0, 8, 6, 12, 'W'),
+  ...rect(17, 8, 23, 12, 'W'),
+  ...rect(6, 8, 17, 12, 'C'),
+  ...rect(9, 8, 14, 12, 'B'),
+  ...rect(8, 12, 15, 18, 'B'),
+  ...rect(8, 19, 11, 23, 'B'),
+  ...rect(12, 19, 15, 23, 'B'),
+  ...rect(8, 22, 11, 23, 'K'),
+  ...rect(12, 22, 15, 23, 'K'),
+];
+
+const FINAL_BOSS_PALETTE: Record<string, string> = {
+  K: '#1a1410',
+  H: '#3a3020',
+  R: '#f2d675',
+  C: '#2a2015',
+  B: '#4a3a1a',
+  W: '#2a2015',
+  Y: '#c9a94f',
+};
+
+const CUSTOM_MONSTER_FRAMES: Record<string, MonsterFrameData> = {
+  stage_boss: { frame: buildMarkFrame(BOSS_CANVAS, BOSS_MARKS), palette: BOSS_PALETTE },
+  final_boss: { frame: buildMarkFrame(FINAL_BOSS_CANVAS, FINAL_BOSS_MARKS), palette: FINAL_BOSS_PALETTE },
+};
+
 export function getMonsterFrame(id: string): MonsterFrameData {
+  const custom = CUSTOM_MONSTER_FRAMES[id];
+  if (custom) return custom;
   const spec = MONSTER_VISUALS[id];
   if (!spec) throw new Error(`No monster visual defined for id: ${id}`);
   return buildMonsterFrame(spec);
 }
 
 export function hasMonsterVisual(id: string): boolean {
-  return id in MONSTER_VISUALS;
+  return id in MONSTER_VISUALS || id in CUSTOM_MONSTER_FRAMES;
 }

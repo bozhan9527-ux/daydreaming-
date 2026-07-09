@@ -21,6 +21,11 @@ export function getMonstersByRarity(rarity: Rarity): MonsterSpec[] {
   return MONSTERS.filter((monster) => monster.rarity === rarity);
 }
 
+// 關卡系統(game/stages.ts)第 10 小關強制生成的魔王/大魔王,獨立於一般稀有度亂數池之外,
+// rarity 標 legendary 只是借用它最高檔的戰鬥時長基準去換算獎勵,不代表跟一般傳說怪同一個抽獎池。
+export const BOSS_MONSTER: MonsterSpec = { id: 'stage_boss', name: '關卡魔王', rarity: 'legendary' };
+export const FINAL_BOSS_MONSTER: MonsterSpec = { id: 'final_boss', name: '大魔王', rarity: 'legendary' };
+
 export function pickMonster(rarity: Rarity, rng: () => number = Math.random): MonsterSpec {
   const pool = getMonstersByRarity(rarity);
   const index = Math.min(Math.floor(rng() * pool.length), pool.length - 1);

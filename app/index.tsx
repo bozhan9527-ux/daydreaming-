@@ -53,6 +53,14 @@ export default function HomeScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
 
+      {lastEvent !== null && (
+        <View style={styles.resultBox}>
+          <EventIcon rarity={lastEvent.rarity} />
+          <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
+          <Text style={styles.resultText}>{lastEvent.payload}</Text>
+        </View>
+      )}
+
       {lastOfflineKills > 0 && (
         <Text style={styles.offlineGainText}>
           離線期間擊敗了 {lastOfflineKills} 隻怪,獲得 {lastOfflineGain} 經驗 {lastOfflineCoins} 金幣
@@ -69,14 +77,6 @@ export default function HomeScreen() {
         <Text style={styles.companionDropText}>
           意外獲得了新夥伴:{getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備
         </Text>
-      )}
-
-      {lastEvent !== null && (
-        <View style={styles.resultBox}>
-          <EventIcon rarity={lastEvent.rarity} />
-          <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
-          <Text style={styles.resultText}>{lastEvent.payload}</Text>
-        </View>
       )}
 
       <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} />

@@ -1,17 +1,22 @@
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { getCompanionById } from '../game/companions';
 import { getArchetypeComposition } from '../game/combat';
 import { getAttackEffect } from '../game/sprites/attackEffects';
+import { getStageBackground } from '../game/sprites/backgrounds';
 import { getCompanionFrame } from '../game/sprites/companions';
 import { getMonsterFrame } from '../game/sprites/monsters';
 import { useGameState } from '../hooks/useGameState';
 import { HeroSprite } from './HeroSprite';
 import { PixelSprite } from './PixelSprite';
 
+// 場景畫布尺寸固定不變:不管背景/角色/特效怎麼換,SCENE_HEIGHT 都是同一個數字,
+// 版面不會因為內容增減而跳動。
 const SCENE_HEIGHT = 130;
+const SCENE_MAX_WIDTH = 320;
+const BACKGROUND_PIXEL_SIZE = 8;
 const HERO_PIXEL_SIZE = 4;
 const MONSTER_PIXEL_SIZE = 4;
 const GROUND_PATTERN_WIDTH = 40;
@@ -53,9 +58,11 @@ export function BattleScene() {
   const fightStartedAt = useGameState((state) => state.fightStartedAt);
   const fightElapsedMs = useGameState((state) => state.fightElapsedMs);
   const boostCurrentFight = useGameState((state) => state.boostCurrentFight);
+  const stageProgress = useGameState((state) => state.stageProgress);
 
   const { subtype } = getArchetypeComposition(job.archetype);
   const effect = getAttackEffect(job.archetype);
+  const background = getStageBackground(job.archetype, stageProgress.stage);
 
   const progress = currentEncounter ? Math.min(1, fightElapsedMs / currentEncounter.fightDurationMs) : 0;
 
@@ -64,6 +71,15 @@ export function BattleScene() {
 
   return (
     <View style={styles.scene}>
+      <View style={styles.backgroundLayer}>
+        <PixelSprite frame={background.frame} palette={background.palette} pixelSize={BACKGROUND_PIXEL_SIZE} />
+      </View>
+
+      <Text style={styles.stageLabel}>
+        第 {stageProgress.stage} 關 - 第 {stageProgress.subStage} 小關
+        {currentEncounter?.isFinalBoss ? ' ⚠ 大魔王來襲' : currentEncounter?.isBoss ? ' ⚠ 魔王來襲' : ''}
+      </Text>
+
       <GroundScroll />
 
       {mount && (
@@ -118,10 +134,28 @@ export function BattleScene() {
 const styles = StyleSheet.create({
   scene: {
     width: '100%',
-    maxWidth: 320,
+    maxWidth: SCENE_MAX_WIDTH,
     height: SCENE_HEIGHT,
     overflow: 'hidden',
     justifyContent: 'center',
+    backgroundColor: '#0f0f14',
+  },
+  backgroundLayer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+  },
+  stageLabel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 4,
+    textAlign: 'center',
+    color: '#f2f2f2',
+    fontSize: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
   groundTrack: {
     position: 'absolute',
@@ -141,20 +175,26 @@ const styles = StyleSheet.create({
     marginRight: 1,
     backgroundColor: '#3a3542',
   },
+  // 角色置中:讓插槽橫跨整個場景寬度、用 alignItems 置中子元素,不管場景實際寬度多少都精準置中,
+  // 不用猜測角色圖的像素寬度去手動算 left 位移。
   heroSlot: {
     position: 'absolute',
-    left: 12,
+    left: 0,
+    right: 0,
     bottom: 20,
+    alignItems: 'center',
   },
   mountSlot: {
     position: 'absolute',
-    left: 6,
+    left: '50%',
     bottom: 12,
+    transform: [{ translateX: -64 }],
   },
   petSlot: {
     position: 'absolute',
-    left: 2,
+    left: '50%',
     bottom: 60,
+    transform: [{ translateX: -72 }],
   },
   monsterSlot: {
     position: 'absolute',
