@@ -13,7 +13,6 @@ import {
   JobBranch,
   Subtype,
 } from '../game/combat';
-import { getSkillEffectDescription, SKILL_DESCRIPTIONS, SKILL_LABELS } from '../game/skills';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
@@ -40,7 +39,6 @@ interface JobDetailCardProps {
   isSecondary: boolean;
   branch: JobBranch;
   tier: ReturnType<typeof getCurrentTier>;
-  skillLevel: number;
   dualClassUnlocked: boolean;
   onSetPrimary: () => void;
   onSetBranch: (branch: JobBranch) => void;
@@ -53,7 +51,6 @@ function JobDetailCard({
   isSecondary,
   branch,
   tier,
-  skillLevel,
   dualClassUnlocked,
   onSetPrimary,
   onSetBranch,
@@ -70,9 +67,6 @@ function JobDetailCard({
         </View>
         <View style={styles.detailHeaderText}>
           <Text style={styles.detailName}>{ARCHETYPE_LABELS[archetype]}</Text>
-          <Text style={styles.detailSkillName}>
-            {SKILL_LABELS[archetype]} Lv.{skillLevel}
-          </Text>
         </View>
         {isPrimary && (
           <View style={styles.detailTag}>
@@ -86,9 +80,10 @@ function JobDetailCard({
         )}
       </View>
 
-      <Text style={styles.detailDesc}>{SKILL_DESCRIPTIONS[archetype]}</Text>
-      <Text style={styles.detailBonus}>{getSkillEffectDescription(archetype, skillLevel)}</Text>
       <Text style={styles.detailCombatBonus}>職業戰鬥加成:+{combatBonusPct}%</Text>
+      <Text style={styles.detailDesc}>
+        每個職業各有 2 個被動 + 4 個主動技能;設為主職後,到「技能」分頁查看與升級(技能書只顯示目前主職的技能)。
+      </Text>
 
       {isPrimary && (
         <View style={styles.branchRow}>
@@ -126,7 +121,6 @@ export function JobSelector() {
   const job = useGameState((state) => state.job);
   const level = useGameState((state) => state.level);
   const secondaryJob = useGameState((state) => state.secondaryJob);
-  const skills = useGameState((state) => state.skills);
   const setJob = useGameState((state) => state.setJob);
   const setSecondaryJob = useGameState((state) => state.setSecondaryJob);
 
@@ -173,7 +167,6 @@ export function JobSelector() {
         isSecondary={isViewingSecondary}
         branch={job.branch}
         tier={tier}
-        skillLevel={skills[viewingArchetype]}
         dualClassUnlocked={dualClassUnlocked}
         onSetPrimary={() => setJob(viewingArchetype, job.branch)}
         onSetBranch={(b) => setJob(job.archetype, b)}

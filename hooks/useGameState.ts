@@ -55,17 +55,23 @@ import { rollCoinWindfall } from '../game/currency';
 import { getRandomEvent, GameEvent } from '../game/events';
 import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
 import {
-  canUpgradeSkill,
-  createInitialSkillLevels,
+  activeSkillTriggerIntervalSeconds,
+  ACTIVE_SLOT_IDS,
+  ActiveSkillSlotId,
+  canUpgradeSkillSlot,
+  createInitialSkillTreeLevels,
+  getActiveEffectKind,
   getBonusCoinsAmount,
-  getSkillEffectKind,
-  secondarySkillTriggerIntervalSeconds,
-  SkillLevels,
-  skillTriggerIntervalSeconds,
-  skillUpgradeCoinCost,
-  skillUpgradeCost,
-  upgradeSkill as nextSkillLevel,
-} from '../game/skills';
+  getExpBoostAmount,
+  getPassiveBonusValue,
+  secondaryActiveSkillTriggerIntervalSeconds,
+  skillSlotLevelCap,
+  skillSlotUpgradeCoinCost,
+  skillSlotUpgradeCost,
+  SkillSlotId,
+  SkillTreeLevels,
+  upgradeSkillSlot as nextSkillSlotLevel,
+} from '../game/skillTree';
 import { BodyType } from '../game/sprites/heroSilhouette';
 import {
   advanceStageProgress,
@@ -79,7 +85,7 @@ import { bumpPityFromClick, createInitialTriggerState, TriggerState } from '../g
 import { JobSelection, loadSave, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 
-const SAVE_SCHEMA_VERSION = 14;
+const SAVE_SCHEMA_VERSION = 15;
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
@@ -106,21 +112,32 @@ interface RewardMultipliers {
   speedMultiplier: number;
 }
 
-// 職業倍率只影響經驗;裝備(含強化+鑲嵌寶石)跟寵物/坐騎的 exp/coins/speed 加成疊加在職業倍率之上。
+// 職業倍率只影響經驗;裝備(含強化+鑲嵌寶石)、寵物/坐騎、被動技能的 exp/coins/speed 加成
+// 疊加在職業倍率之上。被動技能只吃主職那份(呼應「技能書頁內只顯示本身職業的技能」的定位)。
+function computePassiveSkillBonus(job: JobSelection, skillTree: SkillTreeLevels): { exp: number; coins: number } {
+  const slots = skillTree[job.archetype];
+  return {
+    exp: getPassiveBonusValue(slots.passive1),
+    coins: getPassiveBonusValue(slots.passive2),
+  };
+}
+
 function computeRewardMultipliers(
   job: JobSelection,
   level: number,
   equipment: EquipmentLoadout,
   companions: CompanionState,
   secondaryJob: Archetype | null,
-  itemInstances: ItemInstances
+  itemInstances: ItemInstances,
+  skillTree: SkillTreeLevels
 ): RewardMultipliers {
   const jobMultiplier = currentJobMultiplier(job, level, secondaryJob);
   const equipmentBonus = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const companionBonus = getCompanionBonusTotals(companions);
+  const passiveBonus = computePassiveSkillBonus(job, skillTree);
   return {
-    expMultiplier: jobMultiplier * (1 + equipmentBonus.exp + companionBonus.exp),
-    coinMultiplier: 1 + equipmentBonus.coins + companionBonus.coins,
+    expMultiplier: jobMultiplier * (1 + equipmentBonus.exp + companionBonus.exp + passiveBonus.exp),
+    coinMultiplier: 1 + equipmentBonus.coins + companionBonus.coins + passiveBonus.coins,
     speedMultiplier: 1 + equipmentBonus.speed + companionBonus.speed,
   };
 }
@@ -146,7 +163,7 @@ interface GameState {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skills: SkillLevels;
+  skillTree: SkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -169,9 +186,9 @@ interface GameState {
   lastCompanionDropId: string | null;
   lastEquipmentDropId: string | null;
   lastCoinWindfall: number | null;
-  // 技能倒數計時器起始時間戳(不存檔,重開只是倒數重新開始算),取代舊版的擊殺次數計數——
-  // 用 Date.now() - skillTimerStartedAt 對比 skillTriggerIntervalSeconds() 的毫秒數判斷是否觸發。
-  skillTimerStartedAt: number;
+  // 4 個主動技能欄位各自的倒數計時器起始時間戳(不存檔,重開只是倒數重新開始算)——
+  // 用 Date.now() - activeSkillTimers[slot] 對比 activeSkillTriggerIntervalSeconds() 的毫秒數判斷是否觸發。
+  activeSkillTimers: Record<ActiveSkillSlotId, number>;
   secondarySkillTimerStartedAt: number;
   // 技能剛觸發的時間戳,不存檔,只給 UI 顯示「剛發動」的短暫閃光用,跟 lastEnhanceOutcome 同一套模式。
   lastSkillTriggerAt: number | null;
@@ -187,7 +204,7 @@ interface GameState {
   unequip: (slot: EquipmentSlot) => void;
   purchaseItem: (itemId: string) => void;
   setBodyType: (bodyType: BodyType) => void;
-  upgradeSkill: (archetype: Archetype) => void;
+  upgradeSkillSlot: (archetype: Archetype, slot: SkillSlotId) => void;
   setGender: (gender: Gender) => void;
   purchaseCompanion: (id: string) => void;
   unequipCompanionSlot: (kind: CompanionKind) => void;
@@ -206,7 +223,7 @@ type PersistableState = Pick<
   | 'job'
   | 'equipment'
   | 'bodyType'
-  | 'skills'
+  | 'skillTree'
   | 'gender'
   | 'coins'
   | 'unlockedItemIds'
@@ -226,7 +243,7 @@ function persist(state: PersistableState): void {
     job: state.job,
     equipment: state.equipment,
     bodyType: state.bodyType,
-    skills: state.skills,
+    skillTree: state.skillTree,
     gender: state.gender,
     coins: state.coins,
     unlockedItemIds: state.unlockedItemIds,
@@ -247,7 +264,7 @@ export const useGameState = create<GameState>((set, get) => ({
   job: DEFAULT_JOB,
   equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
   bodyType: DEFAULT_BODY_TYPE,
-  skills: createInitialSkillLevels(),
+  skillTree: createInitialSkillTreeLevels(),
   gender: DEFAULT_GENDER,
   coins: 0,
   unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -270,7 +287,7 @@ export const useGameState = create<GameState>((set, get) => ({
   lastCompanionDropId: null,
   lastEquipmentDropId: null,
   lastCoinWindfall: null,
-  skillTimerStartedAt: Date.now(),
+  activeSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
   secondarySkillTimerStartedAt: Date.now(),
   lastSkillTriggerAt: null,
   lastSecondarySkillTriggerAt: null,
@@ -292,7 +309,8 @@ export const useGameState = create<GameState>((set, get) => ({
       save.equipment,
       save.companions,
       save.secondaryJob,
-      itemInstances
+      itemInstances,
+      save.skillTree
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
     const level = accumulateExp(save.level, gainedExp);
@@ -308,7 +326,7 @@ export const useGameState = create<GameState>((set, get) => ({
       job: save.job,
       equipment: save.equipment,
       bodyType: save.bodyType,
-      skills: save.skills,
+      skillTree: save.skillTree,
       gender: save.gender,
       coins,
       unlockedItemIds: save.unlockedItemIds,
@@ -325,6 +343,8 @@ export const useGameState = create<GameState>((set, get) => ({
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,
+      activeSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
+      secondarySkillTimerStartedAt: Date.now(),
     });
     persist(get());
   },
@@ -351,7 +371,8 @@ export const useGameState = create<GameState>((set, get) => ({
         state.equipment,
         state.companions,
         state.secondaryJob,
-        state.itemInstances
+        state.itemInstances,
+        state.skillTree
       );
       const isBoss = isBossSubStage(state.stageProgress.subStage);
       const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
@@ -384,7 +405,8 @@ export const useGameState = create<GameState>((set, get) => ({
       state.equipment,
       state.companions,
       state.secondaryJob,
-      state.itemInstances
+      state.itemInstances,
+      state.skillTree
     );
     // 關卡難度倍率:跟這隻怪生成當下用的是同一份 stageProgress(這次擊殺才會讓它晉級,
     // 所以算獎勵的當下它還沒變),疊加在等級/裝備既有的獎勵倍率之上,是完全獨立的另一條軸線。
@@ -393,47 +415,54 @@ export const useGameState = create<GameState>((set, get) => ({
     const event = getRandomEvent(state.currentEncounter.rarity);
     const nextStageProgress = advanceStageProgress(state.stageProgress);
 
-    // 主動技能:改成真正的秒數倒數觸發(等級越高秒數越短),不再靠擊殺次數累計——
-    // 倒數滿了才會在下一次擊殺結算時套用效果,依目前職業的 subtype 決定效果:
-    // 近戰=下一場戰鬥秒殺、遠程=這次擊殺獎勵翻倍、輔助=直接發一筆額外金幣。
+    // 主動技能:4 個技能欄位(active1-4)各自獨立秒數倒數,固定不受戰鬥/關卡時長影響,
+    // 全部同時運作、可以同一擊一起觸發,倒數滿了在下一次擊殺結算時套用效果。
     const now = Date.now();
-    const currentSkillLevel = state.skills[state.job.archetype];
-    const skillIntervalMs = skillTriggerIntervalSeconds(currentSkillLevel) * 1000;
-    const skillTriggered = now - state.skillTimerStartedAt >= skillIntervalMs;
-    const nextSkillTimerStartedAt = skillTriggered ? now : state.skillTimerStartedAt;
-
     let exp = reward.exp;
     let coins = reward.coins;
     let forceInstantNextFight = state.forceInstantNextFight;
     let lastSkillTriggerAt = state.lastSkillTriggerAt;
-    if (skillTriggered) {
-      const effect = getSkillEffectKind(state.job.archetype);
+    const nextActiveSkillTimers = { ...state.activeSkillTimers };
+    let anySkillTriggered = false;
+    for (const slot of ACTIVE_SLOT_IDS) {
+      const slotLevel = state.skillTree[state.job.archetype][slot];
+      const intervalMs = activeSkillTriggerIntervalSeconds(slotLevel) * 1000;
+      const triggered = now - state.activeSkillTimers[slot] >= intervalMs;
+      if (!triggered) continue;
+      nextActiveSkillTimers[slot] = now;
+      anySkillTriggered = true;
+      const effect = getActiveEffectKind(state.job.archetype, slot);
       if (effect === 'doubleReward') {
         exp *= 2;
         coins *= 2;
       } else if (effect === 'bonusCoins') {
         coins += getBonusCoinsAmount();
+      } else if (effect === 'expBoost') {
+        exp += getExpBoostAmount();
       } else if (effect === 'instantFinish') {
         forceInstantNextFight = true;
       }
-      lastSkillTriggerAt = now;
     }
+    if (anySkillTriggered) lastSkillTriggerAt = now;
 
-    // 副職的技能也會觸發,間隔是本職的兩倍,跟主職技能各自獨立計時、可以同一擊同時觸發。
+    // 副職只借用它的主動技能第1格(該職業招牌效果),間隔是本職的兩倍,跟主職各自獨立計時、
+    // 可以同一擊同時觸發,呼應副職只拿「部分加成」的定位。
     let nextSecondarySkillTimerStartedAt = state.secondarySkillTimerStartedAt;
     let lastSecondarySkillTriggerAt = state.lastSecondarySkillTriggerAt;
     if (state.secondaryJob) {
-      const secondarySkillLevel = state.skills[state.secondaryJob];
-      const secondaryIntervalMs = secondarySkillTriggerIntervalSeconds(secondarySkillLevel) * 1000;
+      const secondarySkillLevel = state.skillTree[state.secondaryJob].active1;
+      const secondaryIntervalMs = secondaryActiveSkillTriggerIntervalSeconds(secondarySkillLevel) * 1000;
       const secondaryTriggered = now - state.secondarySkillTimerStartedAt >= secondaryIntervalMs;
       nextSecondarySkillTimerStartedAt = secondaryTriggered ? now : state.secondarySkillTimerStartedAt;
       if (secondaryTriggered) {
-        const secondaryEffect = getSkillEffectKind(state.secondaryJob);
+        const secondaryEffect = getActiveEffectKind(state.secondaryJob, 'active1');
         if (secondaryEffect === 'doubleReward') {
           exp *= 2;
           coins *= 2;
         } else if (secondaryEffect === 'bonusCoins') {
           coins += getBonusCoinsAmount();
+        } else if (secondaryEffect === 'expBoost') {
+          exp += getExpBoostAmount();
         } else if (secondaryEffect === 'instantFinish') {
           forceInstantNextFight = true;
         }
@@ -498,7 +527,7 @@ export const useGameState = create<GameState>((set, get) => ({
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,
-      skillTimerStartedAt: nextSkillTimerStartedAt,
+      activeSkillTimers: nextActiveSkillTimers,
       secondarySkillTimerStartedAt: nextSecondarySkillTimerStartedAt,
       lastSkillTriggerAt,
       lastSecondarySkillTriggerAt,
@@ -711,17 +740,21 @@ export const useGameState = create<GameState>((set, get) => ({
     persist(get());
   },
 
-  upgradeSkill: (archetype) => {
-    const { level, skills, coins } = get();
-    const currentSkillLevel = skills[archetype];
-    if (!canUpgradeSkill(currentSkillLevel, level.bankedExp, coins)) return;
+  upgradeSkillSlot: (archetype, slot) => {
+    const { level, skillTree, coins } = get();
+    const tier = getCurrentTier(level.level);
+    const currentSlotLevel = skillTree[archetype][slot];
+    if (!canUpgradeSkillSlot(currentSlotLevel, tier, level.bankedExp, coins)) return;
 
-    const expCost = skillUpgradeCost(currentSkillLevel);
-    const coinCost = skillUpgradeCoinCost(currentSkillLevel);
+    const expCost = skillSlotUpgradeCost(currentSlotLevel);
+    const coinCost = skillSlotUpgradeCoinCost(currentSlotLevel);
     const nextLevel: LevelState = { level: level.level, bankedExp: level.bankedExp - expCost };
-    const nextSkills: SkillLevels = { ...skills, [archetype]: nextSkillLevel(currentSkillLevel) };
+    const nextSkillTree: SkillTreeLevels = {
+      ...skillTree,
+      [archetype]: { ...skillTree[archetype], [slot]: nextSkillSlotLevel(currentSlotLevel, tier) },
+    };
 
-    set({ level: nextLevel, skills: nextSkills, coins: coins - coinCost });
+    set({ level: nextLevel, skillTree: nextSkillTree, coins: coins - coinCost });
     persist(get());
     playSkillUpgrade();
   },

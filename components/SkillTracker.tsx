@@ -2,19 +2,26 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Archetype } from '../game/combat';
-import { secondarySkillTriggerIntervalSeconds, SKILL_LABELS, skillTriggerIntervalSeconds } from '../game/skills';
+import {
+  ACTIVE_SLOT_IDS,
+  ActiveSkillSlotId,
+  activeSkillTriggerIntervalSeconds,
+  secondaryActiveSkillTriggerIntervalSeconds,
+  SKILL_SLOT_NAMES,
+} from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
 
 const FLASH_WINDOW_MS = 900;
-const TILE_SIZE = 60;
+const TILE_SIZE = 52;
 const BORDER_THICKNESS = 3;
 const CLOCK_TICK_MS = 250;
 
 interface SkillTileProps {
-  kind: '主動' | '被動';
+  tag?: string;
   archetype: Archetype;
+  label: string;
   level: number;
   timerStartedAt: number;
   intervalSeconds: number;
@@ -43,7 +50,7 @@ function BorderCountdown({ progress }: { progress: number }) {
   );
 }
 
-function SkillTile({ kind, archetype, level, timerStartedAt, intervalSeconds, justTriggered, now }: SkillTileProps) {
+function SkillTile({ tag, archetype, label, level, timerStartedAt, intervalSeconds, justTriggered, now }: SkillTileProps) {
   'use no memo';
   const icon = getSkillIcon(archetype);
   const intervalMs = intervalSeconds * 1000;
@@ -57,40 +64,38 @@ function SkillTile({ kind, archetype, level, timerStartedAt, intervalSeconds, ju
         <BorderCountdown progress={justTriggered ? 1 : progress} />
         <View style={[styles.tile, justTriggered && styles.tileFlash]}>
           <View style={styles.iconWrap}>
-            <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={4} />
+            <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={3} />
           </View>
           <View style={styles.countdownBadge}>
             <Text style={styles.countdownText}>{justTriggered ? '發動!' : `${secondsLeft}s`}</Text>
           </View>
-          <View style={styles.kindTag}>
-            <Text style={styles.kindTagText}>{kind}</Text>
-          </View>
+          {tag && (
+            <View style={styles.kindTag}>
+              <Text style={styles.kindTagText}>{tag}</Text>
+            </View>
+          )}
         </View>
       </View>
       <Text style={styles.caption} numberOfLines={1}>
-        {SKILL_LABELS[archetype]} Lv.{level}
+        {label} Lv.{level}
       </Text>
     </View>
   );
 }
 
 export function SkillTracker() {
-  // 這個 component 讀 Date.now() 這種 impure 值來畫即時倒數,React Compiler 的自動記憶化
-  // 看不出來要在 forceTick 變動時重算(forceTick 的值本身沒被用在畫面上,只是拿來逼重新渲染),
-  // 結果會把整棵JSX樹凍結在第一次渲染的結果、秒數/外框永遠不動,所以整個 component 選擇跳出編譯優化。
+  // 讀 Date.now() 這種 impure 值畫即時倒數,React Compiler 的自動記憶化看不出來要跟著
+  // forceTick 重算,會把整棵JSX樹凍結在第一次渲染的結果,所以整個 component 選擇跳出編譯優化。
   'use no memo';
 
   const job = useGameState((state) => state.job);
   const secondaryJob = useGameState((state) => state.secondaryJob);
-  const skills = useGameState((state) => state.skills);
-  const skillTimerStartedAt = useGameState((state) => state.skillTimerStartedAt);
+  const skillTree = useGameState((state) => state.skillTree);
+  const activeSkillTimers = useGameState((state) => state.activeSkillTimers);
   const secondarySkillTimerStartedAt = useGameState((state) => state.secondarySkillTimerStartedAt);
   const lastSkillTriggerAt = useGameState((state) => state.lastSkillTriggerAt);
   const lastSecondarySkillTriggerAt = useGameState((state) => state.lastSecondarySkillTriggerAt);
 
-  // Date.now() 是 impure read,單純寫在render裡不保證每次重新渲染都被判定為「有變化」
-  // (React Compiler 可能依 props/state 依賴判斷跳過重算),所以用自己的計時器強制每 250ms
-  // 重新渲染一次,秒數倒數/外框進度才會確實跳動,不依賴其他欄位剛好同時變動。
   const [, forceTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => forceTick((t) => t + 1), CLOCK_TICK_MS);
@@ -103,22 +108,26 @@ export function SkillTracker() {
 
   return (
     <View style={styles.container}>
-      <SkillTile
-        kind="主動"
-        archetype={job.archetype}
-        level={skills[job.archetype]}
-        timerStartedAt={skillTimerStartedAt}
-        intervalSeconds={skillTriggerIntervalSeconds(skills[job.archetype])}
-        justTriggered={primaryJustTriggered}
-        now={now}
-      />
+      {ACTIVE_SLOT_IDS.map((slot: ActiveSkillSlotId) => (
+        <SkillTile
+          key={slot}
+          archetype={job.archetype}
+          label={SKILL_SLOT_NAMES[job.archetype][slot]}
+          level={skillTree[job.archetype][slot]}
+          timerStartedAt={activeSkillTimers[slot]}
+          intervalSeconds={activeSkillTriggerIntervalSeconds(skillTree[job.archetype][slot])}
+          justTriggered={primaryJustTriggered}
+          now={now}
+        />
+      ))}
       {secondaryJob && (
         <SkillTile
-          kind="被動"
+          tag="副職"
           archetype={secondaryJob}
-          level={skills[secondaryJob]}
+          label={SKILL_SLOT_NAMES[secondaryJob].active1}
+          level={skillTree[secondaryJob].active1}
           timerStartedAt={secondarySkillTimerStartedAt}
-          intervalSeconds={secondarySkillTriggerIntervalSeconds(skills[secondaryJob])}
+          intervalSeconds={secondaryActiveSkillTriggerIntervalSeconds(skillTree[secondaryJob].active1)}
           justTriggered={secondaryJustTriggered}
           now={now}
         />
@@ -130,12 +139,16 @@ export function SkillTracker() {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 16,
+    gap: 10,
+    maxWidth: 300,
+    alignSelf: 'center',
   },
   tileGroup: {
     alignItems: 'center',
     gap: 4,
+    width: TILE_SIZE + BORDER_THICKNESS * 2 + 8,
   },
   tileWrapper: {
     width: TILE_SIZE + BORDER_THICKNESS * 2,
@@ -144,6 +157,7 @@ const styles = StyleSheet.create({
     borderWidth: BORDER_THICKNESS,
     borderColor: '#3a3a45',
     borderRadius: 12,
+    alignSelf: 'center',
   },
   tile: {
     position: 'absolute',
@@ -204,10 +218,10 @@ const styles = StyleSheet.create({
   },
   countdownText: {
     color: '#f2f2f2',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     borderRadius: 4,
   },
   kindTag: {
@@ -225,8 +239,7 @@ const styles = StyleSheet.create({
   },
   caption: {
     color: '#f2f2f2',
-    fontSize: 10,
-    maxWidth: TILE_SIZE + 20,
+    fontSize: 9,
     textAlign: 'center',
   },
 });

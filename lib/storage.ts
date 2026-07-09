@@ -18,13 +18,14 @@ import {
   upgradeItemInstancesToV13,
 } from '../game/equipment';
 import { createInitialLevelState, LevelState } from '../game/leveling';
-import { createInitialSkillLevels, SkillLevels, SKILL_IDS } from '../game/skills';
+import { SkillLevels, SKILL_IDS } from '../game/skills';
+import { createInitialSkillTreeLevels, SKILL_SLOT_IDS, SkillTreeLevels } from '../game/skillTree';
 import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialStageProgress, StageProgress } from '../game/stages';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -51,7 +52,7 @@ export interface SaveData {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skills: SkillLevels;
+  skillTree: SkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -72,7 +73,7 @@ export function createInitialSaveData(): SaveData {
     job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
     equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
     bodyType: DEFAULT_BODY_TYPE,
-    skills: createInitialSkillLevels(),
+    skillTree: createInitialSkillTreeLevels(),
     gender: DEFAULT_GENDER,
     coins: DEFAULT_COINS,
     unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -118,8 +119,19 @@ function isSkillLevels(value: unknown): value is SkillLevels {
   return SKILL_IDS.every((id) => typeof record[id] === 'number');
 }
 
+function isSkillTreeLevels(value: unknown): value is SkillTreeLevels {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return SKILL_IDS.every((archetypeId) => {
+    const slots = record[archetypeId];
+    if (typeof slots !== 'object' || slots === null) return false;
+    const slotRecord = slots as Record<string, unknown>;
+    return SKILL_SLOT_IDS.every((slotId) => typeof slotRecord[slotId] === 'number');
+  });
+}
+
 // v8 以前的 skills 是完全不同的形狀(5 個通用技能 id,不是 6 職業 id),
-// 只做寬鬆的物件檢查,實際值在遷移時一律丟棄改用 createInitialSkillLevels()。
+// 只做寬鬆的物件檢查,實際值在遷移時一律丟棄改用 createInitialSkillTreeLevels()。
 function isLegacySkillLevels(value: unknown): boolean {
   return typeof value === 'object' && value !== null;
 }
@@ -559,7 +571,27 @@ function isStageProgress(value: unknown): value is StageProgress {
   return typeof record.stage === 'number' && typeof record.subStage === 'number' && typeof record.killsInSubStage === 'number';
 }
 
-function isSaveDataV14(value: unknown): value is SaveData {
+interface SaveDataV14 {
+  version: 14;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skills: SkillLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  stageProgress: StageProgress;
+  lastActiveAt: number;
+}
+
+function isSaveDataV14(value: unknown): value is SaveDataV14 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -583,6 +615,30 @@ function isSaveDataV14(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV15(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    isStageProgress(record.stageProgress)
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
@@ -592,10 +648,33 @@ function isSaveDataV14(value: unknown): value is SaveData {
 // v11 沒有 itemInstances,補空物件(舊裝備要等玩家重新裝備一次才會補上隨機/隱藏素質);
 // v12 的 itemInstances 沒有 enhanceLevel/socketedGems,補強化 0 級 + 依裝備規則清空插槽,
 // 另外補 enhanceStones=0、gemCounts=0(強化/鑲嵌系統還沒出生);
-// v13 沒有 stageProgress,補第 1 關第 1 小關(關卡系統還沒出生前這本來就是唯一合法起始值)。
+// v13 沒有 stageProgress,補第 1 關第 1 小關(關卡系統還沒出生前這本來就是唯一合法起始值);
+// v14 的 skills 是「每職業一個等級」的舊形狀,跟新版「每職業 6 個技能欄位(2被動+4主動)」對不上,
+// 一律重置成 createInitialSkillTreeLevels()(技能點數重來,職業/裝備/等級等其餘進度不受影響)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV14(value)) return value;
+  if (isSaveDataV15(value)) return value;
+  if (isSaveDataV14(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: value.equipment,
+      bodyType: value.bodyType,
+      skillTree: createInitialSkillTreeLevels(),
+      gender: value.gender,
+      coins: value.coins,
+      unlockedItemIds: value.unlockedItemIds,
+      companions: value.companions,
+      secondaryJob: value.secondaryJob,
+      itemInstances: value.itemInstances,
+      enhanceStones: value.enhanceStones,
+      gemCounts: value.gemCounts,
+      stageProgress: value.stageProgress,
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV13(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -604,7 +683,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: value.skills,
+      skillTree: createInitialSkillTreeLevels(),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -625,7 +704,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: value.skills,
+      skillTree: createInitialSkillTreeLevels(),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -646,7 +725,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: value.skills,
+      skillTree: createInitialSkillTreeLevels(),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -667,7 +746,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: value.skills,
+      skillTree: createInitialSkillTreeLevels(),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -688,7 +767,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: value.skills,
+      skillTree: createInitialSkillTreeLevels(),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -709,7 +788,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: createInitialSkillLevels(),
+      skillTree: createInitialSkillTreeLevels(),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -730,7 +809,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: createInitialSkillLevels(),
+      skillTree: createInitialSkillTreeLevels(),
       gender: value.gender,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(value.gender),
@@ -751,7 +830,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: createInitialSkillLevels(),
+      skillTree: createInitialSkillTreeLevels(),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -772,7 +851,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skills: createInitialSkillLevels(),
+      skillTree: createInitialSkillTreeLevels(),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -793,7 +872,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: DEFAULT_BODY_TYPE,
-      skills: createInitialSkillLevels(),
+      skillTree: createInitialSkillTreeLevels(),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -814,7 +893,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
       bodyType: DEFAULT_BODY_TYPE,
-      skills: createInitialSkillLevels(),
+      skillTree: createInitialSkillTreeLevels(),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -835,7 +914,7 @@ function migrate(value: unknown): SaveData {
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
       equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
       bodyType: DEFAULT_BODY_TYPE,
-      skills: createInitialSkillLevels(),
+      skillTree: createInitialSkillTreeLevels(),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -856,7 +935,7 @@ function migrate(value: unknown): SaveData {
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
       equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
       bodyType: DEFAULT_BODY_TYPE,
-      skills: createInitialSkillLevels(),
+      skillTree: createInitialSkillTreeLevels(),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
