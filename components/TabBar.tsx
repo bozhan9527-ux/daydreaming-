@@ -18,7 +18,9 @@ export function TabBar({ tabs, activeId, onSelect }: TabBarProps) {
         const active = tab.id === activeId;
         return (
           <Pressable key={tab.id} style={[styles.tab, active && styles.tabActive]} onPress={() => onSelect(tab.id)}>
-            <PixelSprite frame={frame} palette={palette} pixelSize={3} />
+            <View style={styles.iconBox}>
+              <PixelSprite frame={frame} palette={palette} pixelSize={tab.iconPixelSize ?? 3} />
+            </View>
             <Text style={styles.label}>{tab.label}</Text>
           </Pressable>
         );
@@ -30,23 +32,31 @@ export function TabBar({ tabs, activeId, onSelect }: TabBarProps) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     justifyContent: 'center',
-    gap: 8,
+    gap: 3,
+    width: '100%',
   },
   tab: {
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    gap: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 5,
     borderRadius: 8,
     backgroundColor: '#2a2a35',
+  },
+  // 固定高度讓不同 pixelSize 的圖示(裝備/技能放大、圖鑑縮小)都能置中,
+  // 底下的文字標籤才會對齊同一條線,不會因圖示大小不同而高低不一。
+  iconBox: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabActive: {
     backgroundColor: '#4a4456',
   },
   label: {
     color: '#f2f2f2',
-    fontSize: 12,
+    fontSize: 9,
   },
 });

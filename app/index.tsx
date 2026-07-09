@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BattleScene } from '../components/BattleScene';
-import { BodyTypeSelector } from '../components/BodyTypeSelector';
 import { EventIcon } from '../components/EventIcon';
-import { GenderSelector } from '../components/GenderSelector';
+import { ExpBar } from '../components/ExpBar';
 import { PANEL_TABS } from '../components/panelTabs';
 import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
@@ -69,10 +68,6 @@ export default function HomeScreen() {
         </Text>
       )}
 
-      <GenderSelector />
-
-      <BodyTypeSelector />
-
       {lastEvent !== null && (
         <View style={styles.resultBox}>
           <EventIcon rarity={lastEvent.rarity} />
@@ -81,11 +76,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      <View style={styles.statsBox}>
-        <Text style={styles.statsText}>Lv.{level.level}</Text>
-        <Text style={styles.statsText}>{isMaxLevel ? '已封頂' : `${level.bankedExp} / ${needed}`}</Text>
-        <Text style={styles.statsText}>金幣 {coins}</Text>
-      </View>
+      <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} />
 
       <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
 
@@ -176,14 +167,6 @@ const styles = StyleSheet.create({
     color: '#f2f2f2',
     fontSize: 14,
     textAlign: 'center',
-  },
-  statsBox: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  statsText: {
-    color: '#f2f2f2',
-    fontSize: 16,
   },
   levelUpRow: {
     flexDirection: 'row',
