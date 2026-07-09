@@ -1,4 +1,4 @@
-import { Archetype, getCurrentTier, getJobTitle } from './combat';
+import { Archetype, getCurrentTier, getJobTitle, JobTier } from './combat';
 
 export type EquipmentSlot =
   | 'back'
@@ -120,81 +120,378 @@ const SLOT_STAT: Record<EquipmentSlot, EquipmentBonusStat> = {
   offhand: 'coins',
 };
 
-// 每個職業的裝備名稱都對應該職業現實中真的會用到的物品(不再是「頭飾/戰袍」這種通用詞),
-// 呼應 game/combat.ts JOB_TITLES 分支 A 的世界觀:physicalMelee=工地勞力、
-// physicalRanged=外送/駕駛/警務、physicalSupport=服務/護理、magicMelee=道士/玄學、
-// magicRanged=電競/科技、magicSupport=醫療/藥學。
-const SLOT_BASE_NOUN_BY_ARCHETYPE: Record<Archetype, Partial<Record<EquipmentSlot, string>>> = {
+// 每個職業的裝備名稱都對應「該轉職階段」現實中真的會用到的物品,不是整條 50 檔共用一個詞。
+// 5 階對應 game/combat.ts JOB_TITLES 分支 A 的 5 個現實身分,裝備跟著身分換,例如
+// physicalMelee 從「工讀生」的棉紗手套換到「特種部隊」的戰術手套,不是同一款東西穿到底。
+type SlotNounsByTier = Record<JobTier, Partial<Record<EquipmentSlot, string>>>;
+
+const SLOT_BASE_NOUN_BY_ARCHETYPE_TIER: Record<Archetype, SlotNounsByTier> = {
+  // 工讀生 → 搬運工 → 工地師傅 → 消防員 → 特種部隊
   physicalMelee: {
-    back: '工作背帶',
-    bottom: '工作褲',
-    top: '反光背心',
-    belt: '工具腰帶',
-    headwear: '工地安全帽',
-    face: '防塵口罩',
-    gloves: '棉紗手套',
-    offhand: '工具箱',
+    1: {
+      back: '工作背帶',
+      bottom: '工作褲',
+      top: '反光背心',
+      belt: '工具腰帶',
+      headwear: '工地安全帽',
+      face: '防塵口罩',
+      gloves: '棉紗手套',
+      offhand: '工具箱',
+    },
+    2: {
+      back: '搬運護腰帶',
+      bottom: '耐磨工作褲',
+      top: '搬運背心',
+      belt: '貨物固定帶',
+      headwear: '針織帽',
+      face: '防塵面罩',
+      gloves: '防滑手套',
+      offhand: '手推車',
+    },
+    3: {
+      back: '工程背心',
+      bottom: '工程長褲',
+      top: '反光工程外套',
+      belt: '電工腰帶',
+      headwear: 'ABS 安全帽',
+      face: '焊接面罩',
+      gloves: '皮革工作手套',
+      offhand: '對講機',
+    },
+    4: {
+      back: '消防氧氣瓶',
+      bottom: '防火褲',
+      top: '消防衣',
+      belt: '消防安全帶',
+      headwear: '消防頭盔',
+      face: '防毒面具',
+      gloves: '消防手套',
+      offhand: '滅火器',
+    },
+    5: {
+      back: '戰術背包',
+      bottom: '戰術長褲',
+      top: '防彈背心',
+      belt: '戰術腰帶',
+      headwear: '戰術頭盔',
+      face: '夜視鏡',
+      gloves: '戰術手套',
+      offhand: '閃光彈',
+    },
   },
+  // 外送員 → 計程車司機 → 警察 → 職業獵人 → 狙擊手
   physicalRanged: {
-    back: '外送保溫箱',
-    bottom: '機車雨褲',
-    top: '反光外送背心',
-    belt: '證件腰包',
-    headwear: '全罩安全帽',
-    face: '防風鏡',
-    gloves: '騎士手套',
-    offhand: '對講機',
+    1: {
+      back: '外送保溫箱',
+      bottom: '機車雨褲',
+      top: '反光外送背心',
+      belt: '證件腰包',
+      headwear: '全罩安全帽',
+      face: '防風鏡',
+      gloves: '騎士手套',
+      offhand: '對講機',
+    },
+    2: {
+      back: '計程車座椅靠枕',
+      bottom: '司機長褲',
+      top: '計程車制服',
+      belt: '零錢腰包',
+      headwear: '司機帽',
+      face: '太陽眼鏡',
+      gloves: '排檔手套',
+      offhand: '導航機',
+    },
+    3: {
+      back: '警用背包',
+      bottom: '警用長褲',
+      top: '警用制服',
+      belt: '警用勤務帶',
+      headwear: '警帽',
+      face: '防彈面罩',
+      gloves: '防刺手套',
+      offhand: '警用無線電',
+    },
+    4: {
+      back: '獵人背包',
+      bottom: '迷彩長褲',
+      top: '迷彩獵裝',
+      belt: '彈藥腰帶',
+      headwear: '迷彩帽',
+      face: '偽裝面罩',
+      gloves: '狩獵手套',
+      offhand: '誘鳥笛',
+    },
+    5: {
+      back: '狙擊背包',
+      bottom: '吉利服褲',
+      top: '吉利服',
+      belt: '彈匣腰帶',
+      headwear: '狙擊頭套',
+      face: '測距鏡',
+      gloves: '狙擊手套',
+      offhand: '風速計',
+    },
   },
+  // 超商店員 → 餐廳服務生 → 護理師 → 健身教練 → 急診室王牌護理長
   physicalSupport: {
-    back: '急救後背包',
-    bottom: '護理長褲',
-    top: '護理師制服',
-    belt: '工作圍裙',
-    headwear: '護理帽',
-    face: '醫療口罩',
-    gloves: '拋棄式手套',
-    offhand: '保溫餐盤',
+    1: {
+      back: '店員背包',
+      bottom: '店員長褲',
+      top: '店員制服',
+      belt: '收銀腰包',
+      headwear: '店員小帽',
+      face: '口罩',
+      gloves: '收銀手套',
+      offhand: '條碼掃描器',
+    },
+    2: {
+      back: '服務生圍裙背帶',
+      bottom: '服務生長褲',
+      top: '服務生背心',
+      belt: '點餐機腰包',
+      headwear: '服務生領結',
+      face: '餐廳口罩',
+      gloves: '上菜手套',
+      offhand: '托盤',
+    },
+    3: {
+      back: '急救後背包',
+      bottom: '護理長褲',
+      top: '護理師制服',
+      belt: '工作圍裙',
+      headwear: '護理帽',
+      face: '醫療口罩',
+      gloves: '拋棄式手套',
+      offhand: '血氧機',
+    },
+    4: {
+      back: '健身背心',
+      bottom: '訓練短褲',
+      top: '緊身運動衣',
+      belt: '舉重腰帶',
+      headwear: '運動頭帶',
+      face: '運動墨鏡',
+      gloves: '健身手套',
+      offhand: '計時碼錶',
+    },
+    5: {
+      back: '急診值班背包',
+      bottom: '手術長褲',
+      top: '手術服',
+      belt: '急救腰包',
+      headwear: '手術髮帽',
+      face: '護目面罩',
+      gloves: '無菌手套',
+      offhand: '心臟去顫器',
+    },
   },
+  // 中二國中生 → 阿志 → 道士/法師 → 命理師 → 得道仙人
   magicMelee: {
-    back: '符咒披風',
-    bottom: '道士褲',
-    top: '道袍',
-    belt: '八卦腰帶',
-    headwear: '頭巾',
-    face: '護身符',
-    gloves: '白棉手套',
-    offhand: '桃木劍鞘',
+    1: {
+      back: '黑色連帽外套',
+      bottom: '制服長褲',
+      top: '制服襯衫',
+      belt: '帆布腰帶',
+      headwear: '單邊瀏海',
+      face: '眼罩',
+      gloves: '繃帶手套',
+      offhand: '中二筆記本',
+    },
+    2: {
+      back: '神轎背帶',
+      bottom: '陣頭褲',
+      top: '廟會背心',
+      belt: '符令腰帶',
+      headwear: '陣頭頭巾',
+      face: '面繪',
+      gloves: '白手套',
+      offhand: '銅鑼',
+    },
+    3: {
+      back: '符咒披風',
+      bottom: '道士褲',
+      top: '道袍',
+      belt: '八卦腰帶',
+      headwear: '道士帽',
+      face: '護身符',
+      gloves: '白棉手套',
+      offhand: '桃木劍鞘',
+    },
+    4: {
+      back: '卦攤布幔',
+      bottom: '唐裝褲',
+      top: '唐裝',
+      belt: '銅錢腰帶',
+      headwear: '瓜皮帽',
+      face: '老花眼鏡',
+      gloves: '占卜手套',
+      offhand: '羅盤',
+    },
+    5: {
+      back: '仙氣雲紋披風',
+      bottom: '仙裙褲',
+      top: '仙人白袍',
+      belt: '玉帶',
+      headwear: '蓮花冠',
+      face: '仙氣面紗',
+      gloves: '白玉護手',
+      offhand: '拂塵',
+    },
   },
+  // 電競選手/實況主 → 軟體工程師 → 研究員/科學家 → 駭客 → AI 天才工程師
   magicRanged: {
-    back: '戰隊背包',
-    bottom: '電競長褲',
-    top: '連帽衛衣',
-    belt: '隨身碟腰包',
-    headwear: '電競耳機',
-    face: '藍光眼鏡',
-    gloves: '電競手套',
-    offhand: '行動電源',
+    1: {
+      back: '戰隊背包',
+      bottom: '電競長褲',
+      top: '連帽衛衣',
+      belt: '隨身碟腰包',
+      headwear: '電競耳機',
+      face: '藍光眼鏡',
+      gloves: '電競手套',
+      offhand: '行動電源',
+    },
+    2: {
+      back: '筆電後背包',
+      bottom: '工程師長褲',
+      top: '格子襯衫',
+      belt: '識別證吊帶',
+      headwear: '降噪耳機',
+      face: '抗藍光眼鏡',
+      gloves: '打字手套',
+      offhand: '保溫咖啡杯',
+    },
+    3: {
+      back: '實驗室背包',
+      bottom: '實驗長褲',
+      top: '白色實驗袍',
+      belt: '儀器腰帶',
+      headwear: '護目鏡頭帶',
+      face: '實驗護目鏡',
+      gloves: '丁腈手套',
+      offhand: '試管架',
+    },
+    4: {
+      back: '匿名背包',
+      bottom: '黑色連帽長褲',
+      top: '連帽外套',
+      belt: '隨身硬碟腰帶',
+      headwear: '面罩兜帽',
+      face: '面具',
+      gloves: '觸控手套',
+      offhand: '隨身路由器',
+    },
+    5: {
+      back: '量子背包',
+      bottom: '未來科技長褲',
+      top: '全息投影外套',
+      belt: '神經連結腰帶',
+      headwear: '腦機介面頭環',
+      face: 'AR 智慧眼鏡',
+      gloves: '觸覺回饋手套',
+      offhand: '量子運算晶片',
+    },
   },
+  // 藥師 → 醫生 → 心理諮商師 → 老中醫 → 神醫/華佗再世
   magicSupport: {
-    back: '醫師後背包',
-    bottom: '白袍長褲',
-    top: '白袍',
-    belt: '聽診器',
-    headwear: '手術髮帽',
-    face: '醫療口罩',
-    gloves: '乳膠手套',
-    offhand: '血壓計',
+    1: {
+      back: '藥師背包',
+      bottom: '藥局長褲',
+      top: '藥師白袍',
+      belt: '藥袋腰包',
+      headwear: '藥師帽',
+      face: '藥用口罩',
+      gloves: '藥品手套',
+      offhand: '藥杵藥臼',
+    },
+    2: {
+      back: '醫師後背包',
+      bottom: '白袍長褲',
+      top: '白袍',
+      belt: '聽診器',
+      headwear: '手術髮帽',
+      face: '醫療口罩',
+      gloves: '乳膠手套',
+      offhand: '血壓計',
+    },
+    3: {
+      back: '諮商背包',
+      bottom: '諮商師西裝褲',
+      top: '針織開襟外套',
+      belt: '筆記本腰包',
+      headwear: '舒壓髮帶',
+      face: '溫和款眼鏡',
+      gloves: '無指手套',
+      offhand: '沙盤玩具',
+    },
+    4: {
+      back: '藥箱背帶',
+      bottom: '唐裝褲',
+      top: '中醫唐裝',
+      belt: '脈枕腰帶',
+      headwear: '瓜皮帽',
+      face: '老花眼鏡',
+      gloves: '把脈手套',
+      offhand: '藥碾',
+    },
+    5: {
+      back: '神醫藥箱背帶',
+      bottom: '仙醫長袍褲',
+      top: '神醫長袍',
+      belt: '金針腰帶',
+      headwear: '醫仙冠',
+      face: '仙氣面紗',
+      gloves: '金針手套',
+      offhand: '再生藥丸',
+    },
   },
 };
 
-// 主手武器名稱呼應各職業既有的稱號世界觀(見 game/combat.ts 的 JOB_TITLES)。
-const WEAPON_NOUNS: Record<Archetype, { oneHanded: string; twoHanded: string }> = {
-  physicalMelee: { oneHanded: '工作手套', twoHanded: '鐵鎚' },
-  physicalRanged: { oneHanded: '飛鏢', twoHanded: '長弓' },
-  physicalSupport: { oneHanded: '急救箱', twoHanded: '擔架' },
-  magicMelee: { oneHanded: '符咒短刀', twoHanded: '降魔大劍' },
-  magicRanged: { oneHanded: '法術鍵盤', twoHanded: '法杖' },
-  magicSupport: { oneHanded: '藥瓶', twoHanded: '藥箱權杖' },
+// 武器一樣按 5 階換款,呼應各階現實身分(見上方 SLOT_BASE_NOUN_BY_ARCHETYPE_TIER 的職業世界觀)。
+type WeaponNounsByTier = Record<JobTier, { oneHanded: string; twoHanded: string }>;
+
+const WEAPON_NOUNS_BY_TIER: Record<Archetype, WeaponNounsByTier> = {
+  physicalMelee: {
+    1: { oneHanded: '工作手套', twoHanded: '鐵鎚' },
+    2: { oneHanded: '打包膠帶槍', twoHanded: '貨物撬棍' },
+    3: { oneHanded: '電鑽', twoHanded: '電鋸' },
+    4: { oneHanded: '消防斧', twoHanded: '破壞剪' },
+    5: { oneHanded: '戰鬥匕首', twoHanded: '突擊步槍' },
+  },
+  physicalRanged: {
+    1: { oneHanded: '美工刀', twoHanded: 'U 型大鎖' },
+    2: { oneHanded: '方向盤鎖', twoHanded: '千斤頂' },
+    3: { oneHanded: '警棍', twoHanded: '霰彈槍' },
+    4: { oneHanded: '獵刀', twoHanded: '獵槍' },
+    5: { oneHanded: '消音手槍', twoHanded: '狙擊步槍' },
+  },
+  physicalSupport: {
+    1: { oneHanded: '御飯糰加熱夾', twoHanded: '補貨推車' },
+    2: { oneHanded: '開瓶器', twoHanded: '大托盤' },
+    3: { oneHanded: '針筒', twoHanded: '點滴架' },
+    4: { oneHanded: '啞鈴', twoHanded: '槓鈴' },
+    5: { oneHanded: '急救剪', twoHanded: '急救推車' },
+  },
+  magicMelee: {
+    1: { oneHanded: '木劍', twoHanded: '掃把' },
+    2: { oneHanded: '七星劍', twoHanded: '關刀' },
+    3: { oneHanded: '桃木劍', twoHanded: '拂塵杖' },
+    4: { oneHanded: '銅錢劍', twoHanded: '招財貓棒' },
+    5: { oneHanded: '仙劍', twoHanded: '如意金箍棒' },
+  },
+  magicRanged: {
+    1: { oneHanded: '電競鍵盤', twoHanded: '電競滑鼠墊' },
+    2: { oneHanded: '機械鍵盤', twoHanded: '雙螢幕支架' },
+    3: { oneHanded: '雷射筆', twoHanded: '顯微鏡' },
+    4: { oneHanded: '資安隨身碟', twoHanded: '伺服器主機' },
+    5: { oneHanded: '神經連結手環', twoHanded: 'AI 核心終端機' },
+  },
+  magicSupport: {
+    1: { oneHanded: '藥瓶', twoHanded: '藥箱權杖' },
+    2: { oneHanded: '反射錘', twoHanded: '點滴架' },
+    3: { oneHanded: '減壓筆', twoHanded: '沙發抱枕' },
+    4: { oneHanded: '銀針', twoHanded: '藥杵' },
+    5: { oneHanded: '華佗神針', twoHanded: '再世金刀' },
+  },
 };
 
 const ARCHETYPE_BASE_COLOR: Record<Archetype, string> = {
@@ -224,20 +521,21 @@ function shiftColorForBracket(baseHex: string, bracket: number): string {
   return rgbToHex(r + (255 - r) * brighten, g + (255 - g) * brighten, b + (255 - b) * brighten);
 }
 
-function jobTitleAtLevel(archetype: Archetype, level: number): string {
-  return getJobTitle(archetype, 'A', getCurrentTier(level));
+function jobTierAndTitleAtLevel(archetype: Archetype, level: number): { tier: JobTier; title: string } {
+  const tier = getCurrentTier(level);
+  return { tier, title: getJobTitle(archetype, 'A', tier) };
 }
 
 function generateRegularSlotItems(slot: EquipmentSlot): EquipmentItem[] {
   const stat = SLOT_STAT[slot];
   const items: EquipmentItem[] = [];
   for (const archetype of ARCHETYPES) {
-    const baseNoun = SLOT_BASE_NOUN_BY_ARCHETYPE[archetype][slot];
-    if (!baseNoun) continue;
     const baseColor = ARCHETYPE_BASE_COLOR[archetype];
     for (let bracket = 1; bracket <= BRACKET_COUNT; bracket++) {
       const requiredLevel = bracketRequiredLevel(bracket);
-      const title = jobTitleAtLevel(archetype, requiredLevel);
+      const { tier, title } = jobTierAndTitleAtLevel(archetype, requiredLevel);
+      const baseNoun = SLOT_BASE_NOUN_BY_ARCHETYPE_TIER[archetype][tier][slot];
+      if (!baseNoun) continue;
       items.push({
         id: `${slot}-${archetype}-${bracket}`,
         slot,
@@ -258,10 +556,10 @@ function generateMainhandItems(): EquipmentItem[] {
   const items: EquipmentItem[] = [];
   for (const archetype of ARCHETYPES) {
     const baseColor = ARCHETYPE_BASE_COLOR[archetype];
-    const nouns = WEAPON_NOUNS[archetype];
     for (let bracket = 1; bracket <= BRACKET_COUNT; bracket++) {
       const requiredLevel = bracketRequiredLevel(bracket);
-      const title = jobTitleAtLevel(archetype, requiredLevel);
+      const { tier, title } = jobTierAndTitleAtLevel(archetype, requiredLevel);
+      const nouns = WEAPON_NOUNS_BY_TIER[archetype][tier];
       const color = shiftColorForBracket(baseColor, bracket);
       const oneHandedBonus = bracketBonusValue(bracket);
       const price = bracketPrice(bracket);
