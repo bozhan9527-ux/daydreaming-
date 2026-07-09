@@ -11,6 +11,7 @@ import Animated, {
 
 import { EquipmentLoadout, getEquippedOverlays } from '../game/equipment';
 import { BodyType, buildHeroFrames, HERO_PALETTE } from '../game/sprites/heroSilhouette';
+import { getWeaponFrame } from '../game/sprites/weapons';
 import { playClick } from '../lib/sounds';
 import { PixelSprite } from './PixelSprite';
 
@@ -70,19 +71,33 @@ export function HeroSprite({ bodyType = 'normal', equipment, pixelSize = 6, onPr
       <Animated.View style={animatedStyle}>
         <View style={{ position: 'relative' }}>
           <PixelSprite frame={blinking ? frames.blink : frames.open} palette={HERO_PALETTE} pixelSize={pixelSize} />
-          {overlays.map((overlay, index) => (
-            <View
-              key={index}
-              style={{
-                position: 'absolute',
-                left: overlay.rect.x * pixelSize,
-                top: overlay.rect.y * pixelSize,
-                width: overlay.rect.w * pixelSize,
-                height: overlay.rect.h * pixelSize,
-                backgroundColor: overlay.color,
-              }}
-            />
-          ))}
+          {overlays.map((overlay, index) => {
+            const wrapperStyle = {
+              position: 'absolute' as const,
+              left: overlay.rect.x * pixelSize,
+              top: overlay.rect.y * pixelSize,
+            };
+            // 主手武器用專屬外型(game/sprites/weapons.ts)取代純色色塊,其餘槽位維持色塊疊圖。
+            if (overlay.slot === 'mainhand') {
+              const weapon = getWeaponFrame(overlay.item.archetype, overlay.item.twoHanded);
+              return (
+                <View key={index} style={wrapperStyle}>
+                  <PixelSprite frame={weapon.frame} palette={{ [weapon.fillKey]: overlay.color }} pixelSize={pixelSize} />
+                </View>
+              );
+            }
+            return (
+              <View
+                key={index}
+                style={{
+                  ...wrapperStyle,
+                  width: overlay.rect.w * pixelSize,
+                  height: overlay.rect.h * pixelSize,
+                  backgroundColor: overlay.color,
+                }}
+              />
+            );
+          })}
         </View>
       </Animated.View>
     </Pressable>

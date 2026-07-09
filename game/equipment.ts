@@ -390,7 +390,8 @@ export const SLOT_ANCHORS: Record<EquipmentSlot, Rect[]> = {
     { x: 15, y: 11, w: 1, h: 2 },
   ],
   offhand: [{ x: 1, y: 10, w: 3, h: 4 }],
-  mainhand: [{ x: 15, y: 8, w: 3, h: 6 }],
+  // 比其他槽位大,給武器外型(game/sprites/weapons.ts)足夠的像素空間畫出可辨識的形狀。
+  mainhand: [{ x: 14, y: 8, w: 6, h: 10 }],
 };
 
 // 疊圖繪製順序,對應 CLAUDE.md 文件的 z-order:背飾→下身→上身→腰帶→頭飾→面飾→手套→副手→主手武器。
@@ -409,6 +410,8 @@ export const SLOT_Z_ORDER: EquipmentSlot[] = [
 export interface EquipmentOverlay {
   rect: Rect;
   color: string;
+  slot: EquipmentSlot;
+  item: EquipmentItem;
 }
 
 export function getEquippedOverlays(loadout: EquipmentLoadout): EquipmentOverlay[] {
@@ -419,7 +422,7 @@ export function getEquippedOverlays(loadout: EquipmentLoadout): EquipmentOverlay
     const item = getItemById(itemId);
     if (!item) continue;
     for (const rect of SLOT_ANCHORS[slot]) {
-      overlays.push({ rect, color: item.color });
+      overlays.push({ rect, color: item.color, slot, item });
     }
   }
   return overlays;
