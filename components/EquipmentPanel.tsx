@@ -60,6 +60,14 @@ const RIGHT_COLUMN: EquipmentSlot[] = ['mainhand', 'face', 'back', 'gloves'];
 
 const EMPTY_ICON_COLOR = '#4a4456';
 
+type SubView = 'worn' | 'bag' | 'shop';
+
+const SUB_VIEWS: { id: SubView; label: string }[] = [
+  { id: 'worn', label: '穿戴' },
+  { id: 'bag', label: '背包' },
+  { id: 'shop', label: '商店' },
+];
+
 function formatBonus(stat: EquipmentBonusStat, value: number): string {
   return `${STAT_LABELS[stat]} +${Math.round(value * 100)}%`;
 }
@@ -99,6 +107,7 @@ export function EquipmentPanel() {
   const showToast = useToast((state) => state.show);
 
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
+  const [subView, setSubView] = useState<SubView>('worn');
 
   const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const substatTotals = getSubstatTotals(equipment, itemInstances);
@@ -108,6 +117,10 @@ export function EquipmentPanel() {
   const items = [...getEquippableItemsForSlot(selectedSlot, job.archetype)].sort(
     (a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0)
   );
+  // 背包:已擁有但沒穿在身上的款式;商店:還沒擁有(不管有沒有等級鎖)的款式——
+  // 「穿戴」畫面不需要這兩份清單,只顯示目前穿著的那一件。
+  const bagItems = items.filter((item) => isItemUnlocked(unlockedItemIds, item.id) && item.id !== currentId);
+  const shopItems = items.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
 
   function pickItem(item: EquipmentItem) {
     // equip()/purchaseItem() 是第一次擁有這件裝備時擲隨機/隱藏素質的地方(同步 set),
@@ -151,6 +164,35 @@ export function EquipmentPanel() {
     );
   }
 
+  function renderItemRow(item: EquipmentItem, mode: 'bag' | 'shop') {
+    const locked = mode === 'shop' && item.requiredLevel !== undefined && level.level < item.requiredLevel;
+    const icon = getItemIcon(item);
+    const instance = itemInstances[item.id];
+    const canIdentify = mode === 'bag' && instance !== undefined && !instance.identified;
+    return (
+      <View key={item.id}>
+        <Pressable style={[styles.itemRow, locked && styles.itemRowLocked]} onPress={() => pickItem(item)} disabled={locked}>
+          <View style={styles.rowLeft}>
+            <View style={styles.iconWrap}>
+              <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={2} />
+            </View>
+            <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
+              {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
+            </Text>
+          </View>
+          <Text style={styles.itemRowMeta}>
+            {mode === 'bag' ? '點擊裝備' : locked ? `Lv${item.requiredLevel} 解鎖` : `${item.price} 金幣`}
+          </Text>
+        </Pressable>
+        {canIdentify && (
+          <Pressable style={styles.identifyRow} onPress={() => handleIdentify(item)}>
+            <Text style={styles.identifyLabel}>🔍 鑑定隱藏素質({getIdentifyCost(item)} 金幣)</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.paperdollRow}>
@@ -168,49 +210,59 @@ export function EquipmentPanel() {
       <Text style={styles.totalsText}>
         素質總和:{formatSubstat('critRate', substatTotals.critRate)} / {formatSubstat('resistance', substatTotals.resistance)}
       </Text>
-      <View style={styles.itemList}>
-        {currentItem && (
-          <Pressable style={styles.itemRow} onPress={() => unequip(selectedSlot)}>
-            <Text style={styles.itemRowLabel}>
-              卸下 {currentItem.name} ({formatBonus(currentItem.bonus.stat, getEnhancedBonusValue(currentItem, itemInstances[currentItem.id]))})
+
+      <View style={styles.subNav}>
+        {SUB_VIEWS.map((view) => (
+          <Pressable
+            key={view.id}
+            style={[styles.subNavButton, subView === view.id && styles.subNavButtonActive]}
+            onPress={() => setSubView(view.id)}
+          >
+            <Text style={styles.subNavLabel}>
+              {view.label}
+              {view.id === 'bag' ? `(${bagItems.length})` : view.id === 'shop' ? `(${shopItems.length})` : ''}
             </Text>
           </Pressable>
-        )}
-        {items.map((item) => {
-          const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
-          const unlocked = isItemUnlocked(unlockedItemIds, item.id);
-          const isEquipped = currentId === item.id;
-          const icon = getItemIcon(item);
-          const instance = itemInstances[item.id];
-          const canIdentify = instance !== undefined && !instance.identified;
-          return (
-            <View key={item.id}>
-              <Pressable
-                style={[styles.itemRow, isEquipped && styles.itemRowActive, locked && styles.itemRowLocked]}
-                onPress={() => pickItem(item)}
-                disabled={locked}
-              >
-                <View style={styles.rowLeft}>
-                  <View style={styles.iconWrap}>
-                    <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={2} />
-                  </View>
-                  <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
-                    {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
-                  </Text>
-                </View>
-                <Text style={styles.itemRowMeta}>
-                  {locked ? `Lv${item.requiredLevel} 解鎖` : unlocked ? (isEquipped ? '裝備中' : '點擊裝備') : `${item.price} 金幣`}
-                </Text>
-              </Pressable>
-              {canIdentify && (
-                <Pressable style={styles.identifyRow} onPress={() => handleIdentify(item)}>
-                  <Text style={styles.identifyLabel}>🔍 鑑定隱藏素質({getIdentifyCost(item)} 金幣)</Text>
-                </Pressable>
-              )}
-            </View>
-          );
-        })}
+        ))}
       </View>
+
+      {subView === 'worn' && (
+        <View style={styles.wornCard}>
+          {currentItem ? (
+            <>
+              <Text style={styles.wornItemName}>{currentItem.name}</Text>
+              <Text style={styles.wornItemBonus}>
+                {formatBonus(currentItem.bonus.stat, getEnhancedBonusValue(currentItem, itemInstances[currentItem.id]))}
+              </Text>
+              <Pressable style={styles.unequipButton} onPress={() => unequip(selectedSlot)}>
+                <Text style={styles.unequipLabel}>卸下</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.wornEmptyText}>這個部位還沒有裝備,去「背包」或「商店」挑一件</Text>
+          )}
+        </View>
+      )}
+
+      {subView === 'bag' && (
+        <View style={styles.itemList}>
+          {bagItems.length === 0 ? (
+            <Text style={styles.wornEmptyText}>背包裡沒有這個部位的其他款式</Text>
+          ) : (
+            bagItems.map((item) => renderItemRow(item, 'bag'))
+          )}
+        </View>
+      )}
+
+      {subView === 'shop' && (
+        <View style={styles.itemList}>
+          {shopItems.length === 0 ? (
+            <Text style={styles.wornEmptyText}>這個部位的款式都收集齊了</Text>
+          ) : (
+            shopItems.map((item) => renderItemRow(item, 'shop'))
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -263,6 +315,58 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 4,
   },
+  subNav: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 4,
+  },
+  subNavButton: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
+  },
+  subNavButtonActive: {
+    backgroundColor: '#4a4456',
+  },
+  subNavLabel: {
+    color: '#f2f2f2',
+    fontSize: 11,
+  },
+  wornCard: {
+    gap: 6,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
+  },
+  wornItemName: {
+    color: '#f2f2f2',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  wornItemBonus: {
+    color: '#c9a94f',
+    fontSize: 12,
+  },
+  wornEmptyText: {
+    color: '#8a8a95',
+    fontSize: 11,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  unequipButton: {
+    marginTop: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    backgroundColor: '#2a2a35',
+  },
+  unequipLabel: {
+    color: '#f2f2f2',
+    fontSize: 12,
+  },
   itemList: {
     gap: 3,
   },
@@ -286,9 +390,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 6,
     backgroundColor: '#1c1c24',
-  },
-  itemRowActive: {
-    backgroundColor: '#4a4456',
   },
   itemRowLocked: {
     opacity: 0.45,
