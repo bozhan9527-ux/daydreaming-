@@ -6,6 +6,7 @@ import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
 import { MainVisual } from '../components/MainVisual';
 import { PANEL_TABS } from '../components/panelTabs';
+import { ResourceBar } from '../components/ResourceBar';
 import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
@@ -121,6 +122,8 @@ export default function HomeScreen() {
             <Text style={styles.levelUpLabel}>升 10 級</Text>
           </Pressable>
         </View>
+
+        <ResourceBar />
 
         <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
       </MainVisual>
