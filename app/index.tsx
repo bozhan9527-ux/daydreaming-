@@ -11,7 +11,7 @@ import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
 import { getCompanionById } from '../game/companions';
 import { getItemById } from '../game/equipment';
-import { expToNext, MAX_LEVEL } from '../game/leveling';
+import { canLevelUp, expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
 import { useBattleLoop } from '../hooks/useBattleLoop';
 import { useGameState } from '../hooks/useGameState';
@@ -54,6 +54,8 @@ export default function HomeScreen() {
 
   const isMaxLevel = level.level >= MAX_LEVEL;
   const needed = isMaxLevel ? 0 : expToNext(level.level);
+  // 已存的經驗值不夠升1級時,三顆按鈕都該直接disable,不然點了沒反應,玩家會以為壞了。
+  const canLevel = !isMaxLevel && canLevelUp(level);
   const showOfflineModal = lastOfflineKills > 0 && !offlineModalDismissed;
   const equipmentDropItem = lastEquipmentDropId ? getItemById(lastEquipmentDropId) : undefined;
 
@@ -143,13 +145,13 @@ export default function HomeScreen() {
       </Modal>
 
       <View style={styles.levelUpRow}>
-        <Pressable style={styles.levelUpButton} onPress={() => levelUp(1)} disabled={isMaxLevel}>
+        <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(1)} disabled={!canLevel}>
           <Text style={styles.levelUpLabel}>升 1 級</Text>
         </Pressable>
-        <Pressable style={styles.levelUpButton} onPress={() => levelUp(5)} disabled={isMaxLevel}>
+        <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(5)} disabled={!canLevel}>
           <Text style={styles.levelUpLabel}>升 5 級</Text>
         </Pressable>
-        <Pressable style={styles.levelUpButton} onPress={() => levelUp(10)} disabled={isMaxLevel}>
+        <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(10)} disabled={!canLevel}>
           <Text style={styles.levelUpLabel}>升 10 級</Text>
         </Pressable>
       </View>
@@ -235,6 +237,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     backgroundColor: '#2a2a35',
+  },
+  // 銀行經驗值不夠升1級時視覺變暗,搭配 disabled 一起用,不然按鈕看起來能按、按了卻沒反應。
+  levelUpButtonDisabled: {
+    opacity: 0.4,
   },
   levelUpLabel: {
     color: '#f2f2f2',
