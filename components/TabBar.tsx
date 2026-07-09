@@ -30,6 +30,8 @@ export function TabBar({ tabs, activeId, onSelect }: TabBarProps) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 8,
   },
   tab: {

@@ -6,7 +6,8 @@ import {
   EquipmentBonusStat,
   EquipmentItem,
   EquipmentSlot,
-  getEquipmentBonusTotals,
+  getEnhancedBonusValue,
+  getEquipmentBonusTotalsFull,
   getEquippableItemsForSlot,
   getIdentifyCost,
   getItemById,
@@ -95,7 +96,7 @@ export function EquipmentPanel() {
 
   const [expandedSlot, setExpandedSlot] = useState<EquipmentSlot | null>(null);
 
-  const totals = getEquipmentBonusTotals(equipment);
+  const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const substatTotals = getSubstatTotals(equipment, itemInstances);
 
   function toggleSlot(slot: EquipmentSlot) {
@@ -157,7 +158,9 @@ export function EquipmentPanel() {
                 <Text style={styles.slotLabel}>{SLOT_LABELS[slot]}</Text>
               </View>
               <Text style={styles.itemLabel}>
-                {currentItem ? `${currentItem.name} (${formatBonus(currentItem.bonus.stat, currentItem.bonus.value)})` : '空'}
+                {currentItem
+                  ? `${currentItem.name} (${formatBonus(currentItem.bonus.stat, getEnhancedBonusValue(currentItem, itemInstances[currentItem.id]))})`
+                  : '空'}
               </Text>
             </Pressable>
             {isExpanded && (

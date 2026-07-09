@@ -4,15 +4,18 @@ import { Archetype, JobBranch } from '../game/combat';
 import { CompanionState, createEmptyCompanionState } from '../game/companions';
 import {
   applyGenderDefault,
+  createEmptyGemCounts,
   createEmptyItemInstances,
   createEmptyLoadout,
   createEmptyUnlockedItems,
   EquipmentLoadout,
   Gender,
+  GemCounts,
   getGenderUnlockItems,
   ItemInstances,
   UnlockedItemIds,
   unlockItem,
+  upgradeItemInstancesToV13,
 } from '../game/equipment';
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { createInitialSkillLevels, SkillLevels, SKILL_IDS } from '../game/skills';
@@ -20,7 +23,7 @@ import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 12;
+const SCHEMA_VERSION = 13;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -54,6 +57,8 @@ export interface SaveData {
   companions: CompanionState;
   secondaryJob: Archetype | null;
   itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
   lastActiveAt: number;
 }
 
@@ -72,6 +77,8 @@ export function createInitialSaveData(): SaveData {
     companions: createEmptyCompanionState(),
     secondaryJob: null,
     itemInstances: createEmptyItemInstances(),
+    enhanceStones: 0,
+    gemCounts: createEmptyGemCounts(),
     lastActiveAt: Date.now(),
   };
 }
@@ -427,18 +434,35 @@ function isSubstat(value: unknown): boolean {
   return (record.type === 'critRate' || record.type === 'resistance') && typeof record.value === 'number';
 }
 
-function isItemInstanceData(value: unknown): boolean {
+function isItemInstanceDataV12(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return isSubstat(record.randomSubstat) && isSubstat(record.hiddenSubstat) && typeof record.identified === 'boolean';
 }
 
-function isItemInstances(value: unknown): value is ItemInstances {
+function isItemInstancesV12(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false;
-  return Object.values(value as Record<string, unknown>).every(isItemInstanceData);
+  return Object.values(value as Record<string, unknown>).every(isItemInstanceDataV12);
 }
 
-function isSaveDataV12(value: unknown): value is SaveData {
+interface SaveDataV12 {
+  version: 12;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skills: SkillLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: Record<string, { randomSubstat: { type: 'critRate' | 'resistance'; value: number }; hiddenSubstat: { type: 'critRate' | 'resistance'; value: number }; identified: boolean }>;
+  lastActiveAt: number;
+}
+
+function isSaveDataV12(value: unknown): value is SaveDataV12 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -455,7 +479,55 @@ function isSaveDataV12(value: unknown): value is SaveData {
     isUnlockedItemIds(record.unlockedItemIds) &&
     isCompanionState(record.companions) &&
     isArchetypeOrNull(record.secondaryJob) &&
-    isItemInstances(record.itemInstances)
+    isItemInstancesV12(record.itemInstances)
+  );
+}
+
+function isGemType(value: unknown): boolean {
+  return value === 'expGem' || value === 'coinGem' || value === 'speedGem';
+}
+
+function isItemInstanceDataV13(value: unknown): boolean {
+  if (!isItemInstanceDataV12(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.enhanceLevel === 'number' &&
+    Array.isArray(record.socketedGems) &&
+    record.socketedGems.every((g) => g === null || isGemType(g))
+  );
+}
+
+function isItemInstances(value: unknown): value is ItemInstances {
+  if (typeof value !== 'object' || value === null) return false;
+  return Object.values(value as Record<string, unknown>).every(isItemInstanceDataV13);
+}
+
+function isGemCounts(value: unknown): value is GemCounts {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.expGem === 'number' && typeof record.coinGem === 'number' && typeof record.speedGem === 'number';
+}
+
+function isSaveDataV13(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 13 &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillLevels(record.skills) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts)
   );
 }
 
@@ -465,10 +537,32 @@ function isSaveDataV12(value: unknown): value is SaveData {
 // v8 的 skills 是舊版 5 通用技能形狀,跟新版 6 職業主動技能對不上,一律重置成 createInitialSkillLevels();
 // v9 沒有 companions,補空的審物/坐騎狀態(沒解鎖、沒裝備);
 // v10 沒有 secondaryJob,補 null(尚未解鎖雙職兼修前這本來就是唯一合法值);
-// v11 沒有 itemInstances,補空物件(舊裝備要等玩家重新裝備一次才會補上隨機/隱藏素質)。
+// v11 沒有 itemInstances,補空物件(舊裝備要等玩家重新裝備一次才會補上隨機/隱藏素質);
+// v12 的 itemInstances 沒有 enhanceLevel/socketedGems,補強化 0 級 + 依裝備規則清空插槽,
+// 另外補 enhanceStones=0、gemCounts=0(強化/鑲嵌系統還沒出生)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV12(value)) return value;
+  if (isSaveDataV13(value)) return value;
+  if (isSaveDataV12(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: value.equipment,
+      bodyType: value.bodyType,
+      skills: value.skills,
+      gender: value.gender,
+      coins: value.coins,
+      unlockedItemIds: value.unlockedItemIds,
+      companions: value.companions,
+      secondaryJob: value.secondaryJob,
+      itemInstances: upgradeItemInstancesToV13(value.itemInstances),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV11(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -484,6 +578,8 @@ function migrate(value: unknown): SaveData {
       companions: value.companions,
       secondaryJob: value.secondaryJob,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -502,6 +598,8 @@ function migrate(value: unknown): SaveData {
       companions: value.companions,
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -520,6 +618,8 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -538,6 +638,8 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -556,6 +658,8 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -574,6 +678,8 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -592,6 +698,8 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -610,6 +718,8 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -628,6 +738,8 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -646,6 +758,8 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -664,6 +778,8 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
+      enhanceStones: 0,
+      gemCounts: createEmptyGemCounts(),
       lastActiveAt: value.lastActiveAt,
     };
   }

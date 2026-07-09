@@ -17,20 +17,33 @@ import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDua
 import {
   applyGenderDefault,
   canEquipItem,
+  createEmptyGemCounts,
   createEmptyItemInstances,
   createEmptyLoadout,
   createEmptyUnlockedItems,
+  ENHANCE_MAX_LEVEL,
+  ENHANCE_STONE_PRICE,
   equipItem,
   EquipmentLoadout,
   filterLoadoutForArchetype,
   Gender,
-  getEquipmentBonusTotals,
+  GEM_SPECS,
+  GEM_TYPES,
+  GemCounts,
+  GemType,
+  getEnhanceCoinCost,
+  getEnhanceFailChance,
+  getEnhanceStoneCost,
+  getEquipmentBonusTotalsFull,
   getGenderUnlockItems,
   getIdentifyCost,
   getItemById,
   getSubstatTotals,
   isItemUnlocked,
   ItemInstances,
+  rollEnhanceOutcome,
+  rollEnhanceStoneDrop,
+  rollGemDrop,
   rollItemInstance,
   unequipSlot,
   unlockItem,
@@ -56,7 +69,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { JobSelection, loadSave, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 
-const SAVE_SCHEMA_VERSION = 12;
+const SAVE_SCHEMA_VERSION = 13;
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
@@ -83,16 +96,17 @@ interface RewardMultipliers {
   speedMultiplier: number;
 }
 
-// 職業倍率只影響經驗;裝備跟寵物/坐騎的 exp/coins/speed 加成疊加在職業倍率之上。
+// 職業倍率只影響經驗;裝備(含強化+鑲嵌寶石)跟寵物/坐騎的 exp/coins/speed 加成疊加在職業倍率之上。
 function computeRewardMultipliers(
   job: JobSelection,
   level: number,
   equipment: EquipmentLoadout,
   companions: CompanionState,
-  secondaryJob: Archetype | null
+  secondaryJob: Archetype | null,
+  itemInstances: ItemInstances
 ): RewardMultipliers {
   const jobMultiplier = currentJobMultiplier(job, level, secondaryJob);
-  const equipmentBonus = getEquipmentBonusTotals(equipment);
+  const equipmentBonus = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const companionBonus = getCompanionBonusTotals(companions);
   return {
     expMultiplier: jobMultiplier * (1 + equipmentBonus.exp + companionBonus.exp),
@@ -129,6 +143,9 @@ interface GameState {
   companions: CompanionState;
   secondaryJob: Archetype | null;
   itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  lastEnhanceOutcome: string | null;
   lastOfflineGain: number;
   lastOfflineKills: number;
   lastOfflineCoins: number;
@@ -156,6 +173,11 @@ interface GameState {
   purchaseCompanion: (id: string) => void;
   unequipCompanionSlot: (kind: CompanionKind) => void;
   identifyItem: (itemId: string) => void;
+  enhanceItem: (itemId: string) => void;
+  purchaseEnhanceStone: () => void;
+  purchaseGem: (gemType: GemType) => void;
+  socketGem: (itemId: string, socketIndex: number, gemType: GemType) => void;
+  unsocketGem: (itemId: string, socketIndex: number) => void;
 }
 
 type PersistableState = Pick<
@@ -172,6 +194,8 @@ type PersistableState = Pick<
   | 'companions'
   | 'secondaryJob'
   | 'itemInstances'
+  | 'enhanceStones'
+  | 'gemCounts'
 >;
 
 function persist(state: PersistableState): void {
@@ -189,6 +213,8 @@ function persist(state: PersistableState): void {
     companions: state.companions,
     secondaryJob: state.secondaryJob,
     itemInstances: state.itemInstances,
+    enhanceStones: state.enhanceStones,
+    gemCounts: state.gemCounts,
     lastActiveAt: Date.now(),
   });
 }
@@ -207,6 +233,9 @@ export const useGameState = create<GameState>((set, get) => ({
   companions: createEmptyCompanionState(),
   secondaryJob: null,
   itemInstances: createEmptyItemInstances(),
+  enhanceStones: 0,
+  gemCounts: createEmptyGemCounts(),
+  lastEnhanceOutcome: null,
   lastOfflineGain: 0,
   lastOfflineKills: 0,
   lastOfflineCoins: 0,
@@ -224,12 +253,19 @@ export const useGameState = create<GameState>((set, get) => ({
     const save = await loadSave();
     const elapsedMs = Date.now() - save.lastActiveAt;
     const baseGain = calcOfflineExp(save.level.level, elapsedMs);
+
+    // 補齊舊存檔(v11 以前)已經擁有的裝備(含免費起始款,免費款不會出現在 unlockedItemIds 裡)
+    // 的隨機/隱藏素質,不用等玩家重新裝備一次才生效。
+    const ownedItemIds = [...save.unlockedItemIds, ...Object.values(save.equipment).filter((id): id is string => !!id)];
+    const itemInstances = backfillItemInstances(ownedItemIds, save.itemInstances);
+
     const { expMultiplier, coinMultiplier, speedMultiplier } = computeRewardMultipliers(
       save.job,
       save.level.level,
       save.equipment,
       save.companions,
-      save.secondaryJob
+      save.secondaryJob,
+      itemInstances
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
     const level = accumulateExp(save.level, gainedExp);
@@ -238,11 +274,6 @@ export const useGameState = create<GameState>((set, get) => ({
     // (風味數字,經驗值仍然是上面 calcOfflineExp 那套沒變的公式在算),跟前景同一套裝備/寵物加成。
     const offlineBattle = estimateOfflineBattleResult(elapsedMs, speedMultiplier, coinMultiplier);
     const coins = save.coins + offlineBattle.coins;
-
-    // 補齊舊存檔(v11 以前)已經擁有的裝備(含免費起始款,免費款不會出現在 unlockedItemIds 裡)
-    // 的隨機/隱藏素質,不用等玩家重新裝備一次才生效。
-    const ownedItemIds = [...save.unlockedItemIds, ...Object.values(save.equipment).filter((id): id is string => !!id)];
-    const itemInstances = backfillItemInstances(ownedItemIds, save.itemInstances);
 
     set({
       level,
@@ -257,6 +288,8 @@ export const useGameState = create<GameState>((set, get) => ({
       companions: save.companions,
       secondaryJob: save.secondaryJob,
       itemInstances,
+      enhanceStones: save.enhanceStones,
+      gemCounts: save.gemCounts,
       isLoaded: true,
       lastOfflineGain: gainedExp,
       lastOfflineKills: offlineBattle.kills,
@@ -289,7 +322,8 @@ export const useGameState = create<GameState>((set, get) => ({
         state.level.level,
         state.equipment,
         state.companions,
-        state.secondaryJob
+        state.secondaryJob,
+        state.itemInstances
       );
       const encounter = generateEncounter(state.trigger, speedMultiplier);
       if (state.forceInstantNextFight) {
@@ -317,7 +351,8 @@ export const useGameState = create<GameState>((set, get) => ({
       state.level.level,
       state.equipment,
       state.companions,
-      state.secondaryJob
+      state.secondaryJob,
+      state.itemInstances
     );
     const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, expMultiplier, coinMultiplier);
     const event = getRandomEvent(state.currentEncounter.rarity);
@@ -382,6 +417,11 @@ export const useGameState = create<GameState>((set, get) => ({
       lastCompanionDropId = companionDrop.id;
     }
 
+    // 強化石/寶石掉落:各自獨立判定,互不干擾、跟寵物掉落同一套邏輯。
+    const nextEnhanceStones = state.enhanceStones + (rollEnhanceStoneDrop() ? 1 : 0);
+    const gemDrop = rollGemDrop();
+    const nextGemCounts = gemDrop ? { ...state.gemCounts, [gemDrop]: state.gemCounts[gemDrop] + 1 } : state.gemCounts;
+
     const nextLevel = accumulateExp(state.level, exp);
     const nextCoins = state.coins + coins;
 
@@ -389,6 +429,8 @@ export const useGameState = create<GameState>((set, get) => ({
       level: nextLevel,
       coins: nextCoins,
       companions: nextCompanions,
+      enhanceStones: nextEnhanceStones,
+      gemCounts: nextGemCounts,
       killCount: state.killCount + 1,
       lastEvent: event,
       lastCompanionDropId,
@@ -488,6 +530,106 @@ export const useGameState = create<GameState>((set, get) => ({
     set({
       coins: coins - cost,
       itemInstances: { ...itemInstances, [itemId]: { ...instance, identified: true } },
+    });
+    persist(get());
+  },
+
+  // 花金幣+強化石嘗試 +1;Lv1~5 失敗只浪費資源,Lv6~10 失敗可能降級或直接損毀(從裝備欄跟
+  // 已解鎖清單一併移除)。resistance 素質(裝備自己的,不是全身加總)拉低失敗率。
+  enhanceItem: (itemId) => {
+    const { coins, enhanceStones, itemInstances, equipment, unlockedItemIds } = get();
+    const item = getItemById(itemId);
+    const instance = itemInstances[itemId];
+    if (!item || !instance) return;
+    if (instance.enhanceLevel >= ENHANCE_MAX_LEVEL) return;
+
+    const coinCost = getEnhanceCoinCost(item, instance.enhanceLevel);
+    const stoneCost = getEnhanceStoneCost(instance.enhanceLevel);
+    if (coins < coinCost || enhanceStones < stoneCost) return;
+
+    const outcome = rollEnhanceOutcome(instance, instance.enhanceLevel);
+    let nextInstances = itemInstances;
+    let nextEquipment = equipment;
+    let nextUnlockedItemIds = unlockedItemIds;
+    let message: string;
+
+    if (outcome === 'success') {
+      const nextLevel = instance.enhanceLevel + 1;
+      nextInstances = { ...itemInstances, [itemId]: { ...instance, enhanceLevel: nextLevel } };
+      message = `強化成功!${item.name} 提升到 +${nextLevel}`;
+    } else if (outcome === 'fail_safe') {
+      message = `強化失敗,${item.name} 沒有受到影響`;
+    } else if (outcome === 'fail_downgrade') {
+      const nextLevel = Math.max(0, instance.enhanceLevel - 1);
+      nextInstances = { ...itemInstances, [itemId]: { ...instance, enhanceLevel: nextLevel } };
+      message = `強化失敗,${item.name} 降級到 +${nextLevel}`;
+    } else {
+      const rest = { ...itemInstances };
+      delete rest[itemId];
+      nextInstances = rest;
+      nextEquipment = unequipSlot(equipment, item.slot);
+      nextUnlockedItemIds = unlockedItemIds.filter((id) => id !== itemId);
+      message = `強化失敗,${item.name} 損毀了!`;
+    }
+
+    set({
+      coins: coins - coinCost,
+      enhanceStones: enhanceStones - stoneCost,
+      itemInstances: nextInstances,
+      equipment: nextEquipment,
+      unlockedItemIds: nextUnlockedItemIds,
+      lastEnhanceOutcome: message,
+    });
+    persist(get());
+  },
+
+  purchaseEnhanceStone: () => {
+    const { coins, enhanceStones } = get();
+    if (coins < ENHANCE_STONE_PRICE) return;
+    set({ coins: coins - ENHANCE_STONE_PRICE, enhanceStones: enhanceStones + 1 });
+    persist(get());
+  },
+
+  purchaseGem: (gemType) => {
+    const { coins, gemCounts } = get();
+    const price = GEM_SPECS[gemType].price;
+    if (coins < price) return;
+    set({ coins: coins - price, gemCounts: { ...gemCounts, [gemType]: gemCounts[gemType] + 1 } });
+    persist(get());
+  },
+
+  // 鑲嵌:插槽必須是空的才能鑲(要換款先 unsocketGem)。拔除寶石原樣退回背包,不會損毀。
+  socketGem: (itemId, socketIndex, gemType) => {
+    const { gemCounts, itemInstances } = get();
+    const instance = itemInstances[itemId];
+    if (!instance) return;
+    if (socketIndex < 0 || socketIndex >= instance.socketedGems.length) return;
+    if (instance.socketedGems[socketIndex] !== null) return;
+    if (gemCounts[gemType] <= 0) return;
+
+    const nextSockets = [...instance.socketedGems];
+    nextSockets[socketIndex] = gemType;
+
+    set({
+      gemCounts: { ...gemCounts, [gemType]: gemCounts[gemType] - 1 },
+      itemInstances: { ...itemInstances, [itemId]: { ...instance, socketedGems: nextSockets } },
+    });
+    persist(get());
+  },
+
+  unsocketGem: (itemId, socketIndex) => {
+    const { gemCounts, itemInstances } = get();
+    const instance = itemInstances[itemId];
+    if (!instance) return;
+    const gemType = instance.socketedGems[socketIndex];
+    if (!gemType) return;
+
+    const nextSockets = [...instance.socketedGems];
+    nextSockets[socketIndex] = null;
+
+    set({
+      gemCounts: { ...gemCounts, [gemType]: gemCounts[gemType] + 1 },
+      itemInstances: { ...itemInstances, [itemId]: { ...instance, socketedGems: nextSockets } },
     });
     persist(get());
   },

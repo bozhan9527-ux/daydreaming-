@@ -2,9 +2,11 @@ import { ComponentType } from 'react';
 
 import { TabIconId } from '../game/sprites/tabIcons';
 import { CompanionPanel } from './CompanionPanel';
+import { EnhancementPanel } from './EnhancementPanel';
 import { EquipmentPanel } from './EquipmentPanel';
 import { JobSelector } from './JobSelector';
 import { SkillPanel } from './SkillPanel';
+import { SocketPanel } from './SocketPanel';
 
 export interface PanelTab {
   id: string;
@@ -20,4 +22,6 @@ export const PANEL_TABS: PanelTab[] = [
   { id: 'equipment', label: '裝備', icon: 'equipment', Component: EquipmentPanel },
   { id: 'skill', label: '技能', icon: 'skill', Component: SkillPanel },
   { id: 'companion', label: '寵物坐騎', icon: 'companion', Component: CompanionPanel },
+  { id: 'enhance', label: '強化', icon: 'enhance', Component: EnhancementPanel },
+  { id: 'socket', label: '鑲嵌', icon: 'socket', Component: SocketPanel },
 ];

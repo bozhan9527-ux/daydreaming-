@@ -816,6 +816,8 @@ export interface ItemInstanceData {
   randomSubstat: Substat;
   hiddenSubstat: Substat;
   identified: boolean;
+  enhanceLevel: number;
+  socketedGems: (GemType | null)[];
 }
 
 const SUBSTAT_TYPES: SubstatType[] = ['critRate', 'resistance'];
@@ -838,10 +840,29 @@ export function rollItemInstance(item: EquipmentItem, rng: () => number = Math.r
     randomSubstat: rollSubstat(bracket, rng),
     hiddenSubstat: rollSubstat(bracket, rng),
     identified: false,
+    enhanceLevel: 0,
+    socketedGems: new Array(getSocketCount(item)).fill(null),
   };
 }
 
 export type ItemInstances = Record<string, ItemInstanceData>;
+
+// v12 存檔的 itemInstances 沒有 enhanceLevel/socketedGems(強化/鑲嵌系統還沒出生),
+// 遷移到 v13 時用這個補齊:強化 0 級、插槽依裝備當下的規則清空。
+export function upgradeItemInstancesToV13(
+  instances: Record<string, { randomSubstat: Substat; hiddenSubstat: Substat; identified: boolean }>
+): ItemInstances {
+  const upgraded: ItemInstances = {};
+  for (const [id, data] of Object.entries(instances)) {
+    const item = getItemById(id);
+    upgraded[id] = {
+      ...data,
+      enhanceLevel: 0,
+      socketedGems: new Array(item ? getSocketCount(item) : 1).fill(null),
+    };
+  }
+  return upgraded;
+}
 
 export function createEmptyItemInstances(): ItemInstances {
   return {};
@@ -873,4 +894,139 @@ const IDENTIFY_COST_MULTIPLIER = 0.5;
 // 鑑定花費跟這件裝備的原價掛勾,越貴的裝備鑑定費越高。
 export function getIdentifyCost(item: EquipmentItem): number {
   return Math.max(1, Math.round(item.price * IDENTIFY_COST_MULTIPLIER));
+}
+
+// ---- 強化系統 ----
+// 花金幣 + 強化石把裝備從 +0 強化到 +10,每級疊加主加成的固定比例。Lv1~5 是安全區,失敗只
+// 浪費資源;Lv6~10 失敗有機會降級或直接損毀裝備,抗性素質(見上方隨機/隱藏素質)降低失敗率。
+export const ENHANCE_MAX_LEVEL = 10;
+export const ENHANCE_STONE_PRICE = 50; // 商店直接用金幣買強化石的價格(掉落是另一條免費取得的路)
+const ENHANCE_BONUS_PER_LEVEL = 0.08;
+const ENHANCE_SAFE_LEVEL = 5;
+const ENHANCE_BASE_FAIL_CHANCE = 0.05;
+const ENHANCE_FAIL_CHANCE_PER_LEVEL = 0.05;
+const ENHANCE_MAX_FAIL_CHANCE = 0.6;
+const ENHANCE_MIN_FAIL_CHANCE = 0.01;
+const ENHANCE_DESTROY_SHARE = 0.5; // 危險區失敗時,一半機率降級、一半機率損毀
+
+// 強化後的實際加成值(疊加在裝備原本的主加成上),UI/戰鬥計算都要用這個而不是 item.bonus.value。
+export function getEnhancedBonusValue(item: EquipmentItem, instance: ItemInstanceData | undefined): number {
+  const level = instance?.enhanceLevel ?? 0;
+  return Math.round(item.bonus.value * (1 + level * ENHANCE_BONUS_PER_LEVEL) * 1000) / 1000;
+}
+
+export function getEnhanceCoinCost(item: EquipmentItem, currentLevel: number): number {
+  return Math.round(item.price * (0.3 + currentLevel * 0.15));
+}
+
+export function getEnhanceStoneCost(currentLevel: number): number {
+  return currentLevel + 1;
+}
+
+function itemInstanceResistance(instance: ItemInstanceData): number {
+  let total = 0;
+  if (instance.randomSubstat.type === 'resistance') total += instance.randomSubstat.value;
+  if (instance.identified && instance.hiddenSubstat.type === 'resistance') total += instance.hiddenSubstat.value;
+  return total;
+}
+
+// 目標等級(currentLevel+1)決定基礎失敗率,裝備自己的抗性素質(不是全身加總)拉低失敗率。
+export function getEnhanceFailChance(instance: ItemInstanceData, currentLevel: number): number {
+  const base = Math.min(ENHANCE_MAX_FAIL_CHANCE, ENHANCE_BASE_FAIL_CHANCE + currentLevel * ENHANCE_FAIL_CHANCE_PER_LEVEL);
+  const reduced = base - itemInstanceResistance(instance);
+  return Math.max(ENHANCE_MIN_FAIL_CHANCE, reduced);
+}
+
+export type EnhanceOutcome = 'success' | 'fail_safe' | 'fail_downgrade' | 'fail_destroy';
+
+// 純函式,方便測試:傳固定 rng 就能重現結果。丟出這次強化(currentLevel -> currentLevel+1)的結果,
+// 呼叫端負責照結果更新/刪除 instance。
+export function rollEnhanceOutcome(
+  instance: ItemInstanceData,
+  currentLevel: number,
+  rng: () => number = Math.random
+): EnhanceOutcome {
+  const failChance = getEnhanceFailChance(instance, currentLevel);
+  if (rng() >= failChance) return 'success';
+  const targetLevel = currentLevel + 1;
+  if (targetLevel <= ENHANCE_SAFE_LEVEL) return 'fail_safe';
+  return rng() < ENHANCE_DESTROY_SHARE ? 'fail_destroy' : 'fail_downgrade';
+}
+
+// ---- 鑲嵌系統 ----
+// 寶石鑲入裝備插槽,直接加成 exp/coins/speed(跟裝備主加成同一個維度),插槽數依裝備階級(1~5階
+// 對應 1~3 格)。寶石雙軌取得:戰鬥獨立掉落 + 商店用金幣買,拔除寶石不會損毀、原樣退回背包。
+export type GemType = 'expGem' | 'coinGem' | 'speedGem';
+
+interface GemSpec {
+  stat: EquipmentBonusStat;
+  value: number;
+  price: number;
+  name: string;
+}
+
+export const GEM_SPECS: Record<GemType, GemSpec> = {
+  expGem: { stat: 'exp', value: 0.03, price: 80, name: '經驗石' },
+  coinGem: { stat: 'coins', value: 0.03, price: 80, name: '金幣石' },
+  speedGem: { stat: 'speed', value: 0.03, price: 80, name: '速度石' },
+};
+
+export const GEM_TYPES: GemType[] = ['expGem', 'coinGem', 'speedGem'];
+
+// 強化石/寶石掉落:跟寵物/坐騎掉落一樣,每次擊殺獨立判定一次,互不干擾、多數時候不會掉落。
+const ENHANCE_STONE_DROP_CHANCE = 0.04;
+const GEM_DROP_CHANCE = 0.04;
+
+export function rollEnhanceStoneDrop(rng: () => number = Math.random): boolean {
+  return rng() < ENHANCE_STONE_DROP_CHANCE;
+}
+
+export function rollGemDrop(rng: () => number = Math.random): GemType | null {
+  if (rng() >= GEM_DROP_CHANCE) return null;
+  return GEM_TYPES[Math.floor(rng() * GEM_TYPES.length)];
+}
+
+export function getSocketCount(item: EquipmentItem): number {
+  const tier = getCurrentTier(item.requiredLevel ?? 1);
+  return Math.ceil(tier / 2);
+}
+
+export type GemCounts = Record<GemType, number>;
+
+export function createEmptyGemCounts(): GemCounts {
+  return { expGem: 0, coinGem: 0, speedGem: 0 };
+}
+
+// 只算目前已裝備項目上鑲嵌的寶石,跟裝備主加成/強化是同一個 exp/coins/speed 維度,直接相加。
+export function getGemBonusTotals(loadout: EquipmentLoadout, instances: ItemInstances): EquipmentBonusTotals {
+  const totals: EquipmentBonusTotals = { exp: 0, coins: 0, speed: 0 };
+  for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
+    const itemId = loadout[slot];
+    if (!itemId) continue;
+    const instance = instances[itemId];
+    if (!instance) continue;
+    for (const gemType of instance.socketedGems) {
+      if (!gemType) continue;
+      const spec = GEM_SPECS[gemType];
+      totals[spec.stat] += spec.value;
+    }
+  }
+  return totals;
+}
+
+// 裝備主加成(含強化)+鑲嵌寶石的完整加總,取代單純只看 item.bonus.value 的 getEquipmentBonusTotals。
+export function getEquipmentBonusTotalsFull(loadout: EquipmentLoadout, instances: ItemInstances): EquipmentBonusTotals {
+  const totals: EquipmentBonusTotals = { exp: 0, coins: 0, speed: 0 };
+  for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
+    const itemId = loadout[slot];
+    if (!itemId) continue;
+    const item = getItemById(itemId);
+    if (!item) continue;
+    totals[item.bonus.stat] += getEnhancedBonusValue(item, instances[itemId]);
+  }
+  const gemTotals = getGemBonusTotals(loadout, instances);
+  totals.exp += gemTotals.exp;
+  totals.coins += gemTotals.coins;
+  totals.speed += gemTotals.speed;
+  return totals;
 }
