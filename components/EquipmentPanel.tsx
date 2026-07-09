@@ -19,6 +19,7 @@ import {
 import { getEquipmentSlotIcon, getItemIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
+import { HeroSprite } from './HeroSprite';
 import { PixelSprite } from './PixelSprite';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
@@ -53,7 +54,9 @@ const SUBSTAT_LABELS: Record<SubstatType, string> = {
   resistance: '抗性',
 };
 
-const SLOTS: EquipmentSlot[] = ['back', 'bottom', 'top', 'belt', 'headwear', 'face', 'gloves', 'offhand', 'mainhand'];
+// 角色紙娃娃兩側各一欄圖示按鈕:武器(主手/副手)對放最上排,其餘裝備往下排。
+const LEFT_COLUMN: EquipmentSlot[] = ['offhand', 'headwear', 'top', 'belt', 'bottom'];
+const RIGHT_COLUMN: EquipmentSlot[] = ['mainhand', 'face', 'back', 'gloves'];
 
 const EMPTY_ICON_COLOR = '#4a4456';
 
@@ -82,6 +85,7 @@ function formatItemStats(item: EquipmentItem, instance: ItemInstanceData | undef
 }
 
 export function EquipmentPanel() {
+  const bodyType = useGameState((state) => state.bodyType);
   const equipment = useGameState((state) => state.equipment);
   const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
   const itemInstances = useGameState((state) => state.itemInstances);
@@ -94,14 +98,16 @@ export function EquipmentPanel() {
   const identifyItem = useGameState((state) => state.identifyItem);
   const showToast = useToast((state) => state.show);
 
-  const [expandedSlot, setExpandedSlot] = useState<EquipmentSlot | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
 
   const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const substatTotals = getSubstatTotals(equipment, itemInstances);
 
-  function toggleSlot(slot: EquipmentSlot) {
-    setExpandedSlot((current) => (current === slot ? null : slot));
-  }
+  const currentId = equipment[selectedSlot];
+  const currentItem = currentId !== undefined ? getItemById(currentId) : undefined;
+  const items = [...getEquippableItemsForSlot(selectedSlot, job.archetype)].sort(
+    (a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0)
+  );
 
   function pickItem(item: EquipmentItem) {
     // equip()/purchaseItem() 是第一次擁有這件裝備時擲隨機/隱藏素質的地方(同步 set),
@@ -128,8 +134,33 @@ export function EquipmentPanel() {
     showToast(`鑑定完成:${item.name}\n${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
   }
 
+  function renderSlotButton(slot: EquipmentSlot) {
+    const slotItemId = equipment[slot];
+    const slotItem = slotItemId !== undefined ? getItemById(slotItemId) : undefined;
+    const icon = slotItem ? getItemIcon(slotItem) : getEquipmentSlotIcon(slot);
+    const iconColor = slotItem ? slotItem.color : EMPTY_ICON_COLOR;
+    const active = slot === selectedSlot;
+    return (
+      <Pressable
+        key={slot}
+        style={[styles.slotButton, slotItem && styles.slotButtonFilled, active && styles.slotButtonActive]}
+        onPress={() => setSelectedSlot(slot)}
+      >
+        <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: iconColor }} pixelSize={2} />
+      </Pressable>
+    );
+  }
+
   return (
     <View style={styles.container}>
+      <View style={styles.paperdollRow}>
+        <View style={styles.slotColumn}>{LEFT_COLUMN.map(renderSlotButton)}</View>
+        <View style={styles.heroWrap}>
+          <HeroSprite bodyType={bodyType} equipment={equipment} pixelSize={6} />
+        </View>
+        <View style={styles.slotColumn}>{RIGHT_COLUMN.map(renderSlotButton)}</View>
+      </View>
+      <Text style={styles.hint}>目前選擇:{SLOT_LABELS[selectedSlot]}</Text>
       <Text style={styles.totalsText}>
         總加成:{formatBonus('exp', totals.exp)} / {formatBonus('coins', totals.coins)} /{' '}
         {formatBonus('speed', totals.speed)}
@@ -137,78 +168,49 @@ export function EquipmentPanel() {
       <Text style={styles.totalsText}>
         素質總和:{formatSubstat('critRate', substatTotals.critRate)} / {formatSubstat('resistance', substatTotals.resistance)}
       </Text>
-      {SLOTS.map((slot) => {
-        const currentId = equipment[slot];
-        const currentItem = currentId !== undefined ? getItemById(currentId) : undefined;
-        const isExpanded = expandedSlot === slot;
-        const headerIcon = currentItem ? getItemIcon(currentItem) : getEquipmentSlotIcon(slot);
-        const headerIconColor = currentItem ? currentItem.color : EMPTY_ICON_COLOR;
-        // 職業鎖裝目錄依等級門檻排序,由低到高;不限職業的起始款排在最前面。
-        const items = [...getEquippableItemsForSlot(slot, job.archetype)].sort(
-          (a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0)
-        );
-
-        return (
-          <View key={slot}>
-            <Pressable style={styles.row} onPress={() => toggleSlot(slot)}>
-              <View style={styles.rowLeft}>
-                <View style={styles.iconWrap}>
-                  <PixelSprite frame={headerIcon.frame} palette={{ [headerIcon.fillKey]: headerIconColor }} pixelSize={2} />
+      <View style={styles.itemList}>
+        {currentItem && (
+          <Pressable style={styles.itemRow} onPress={() => unequip(selectedSlot)}>
+            <Text style={styles.itemRowLabel}>
+              卸下 {currentItem.name} ({formatBonus(currentItem.bonus.stat, getEnhancedBonusValue(currentItem, itemInstances[currentItem.id]))})
+            </Text>
+          </Pressable>
+        )}
+        {items.map((item) => {
+          const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
+          const unlocked = isItemUnlocked(unlockedItemIds, item.id);
+          const isEquipped = currentId === item.id;
+          const icon = getItemIcon(item);
+          const instance = itemInstances[item.id];
+          const canIdentify = instance !== undefined && !instance.identified;
+          return (
+            <View key={item.id}>
+              <Pressable
+                style={[styles.itemRow, isEquipped && styles.itemRowActive, locked && styles.itemRowLocked]}
+                onPress={() => pickItem(item)}
+                disabled={locked}
+              >
+                <View style={styles.rowLeft}>
+                  <View style={styles.iconWrap}>
+                    <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={2} />
+                  </View>
+                  <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
+                    {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
+                  </Text>
                 </View>
-                <Text style={styles.slotLabel}>{SLOT_LABELS[slot]}</Text>
-              </View>
-              <Text style={styles.itemLabel}>
-                {currentItem
-                  ? `${currentItem.name} (${formatBonus(currentItem.bonus.stat, getEnhancedBonusValue(currentItem, itemInstances[currentItem.id]))})`
-                  : '空'}
-              </Text>
-            </Pressable>
-            {isExpanded && (
-              <View style={styles.itemList}>
-                {currentItem && (
-                  <Pressable style={styles.itemRow} onPress={() => unequip(slot)}>
-                    <Text style={styles.itemRowLabel}>卸下</Text>
-                  </Pressable>
-                )}
-                {items.map((item) => {
-                  const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
-                  const unlocked = isItemUnlocked(unlockedItemIds, item.id);
-                  const isEquipped = currentId === item.id;
-                  const icon = getItemIcon(item);
-                  const instance = itemInstances[item.id];
-                  const canIdentify = instance !== undefined && !instance.identified;
-                  return (
-                    <View key={item.id}>
-                      <Pressable
-                        style={[styles.itemRow, isEquipped && styles.itemRowActive, locked && styles.itemRowLocked]}
-                        onPress={() => pickItem(item)}
-                        disabled={locked}
-                      >
-                        <View style={styles.rowLeft}>
-                          <View style={styles.iconWrap}>
-                            <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={2} />
-                          </View>
-                          <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
-                            {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
-                          </Text>
-                        </View>
-                        <Text style={styles.itemRowMeta}>
-                          {locked ? `Lv${item.requiredLevel} 解鎖` : unlocked ? (isEquipped ? '裝備中' : '點擊裝備') : `${item.price} 金幣`}
-                        </Text>
-                      </Pressable>
-                      {canIdentify && (
-                        <Pressable style={styles.identifyRow} onPress={() => handleIdentify(item)}>
-                          <Text style={styles.identifyLabel}>🔍 鑑定隱藏素質({getIdentifyCost(item)} 金幣)</Text>
-                        </Pressable>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-          </View>
-        );
-      })}
+                <Text style={styles.itemRowMeta}>
+                  {locked ? `Lv${item.requiredLevel} 解鎖` : unlocked ? (isEquipped ? '裝備中' : '點擊裝備') : `${item.price} 金幣`}
+                </Text>
+              </Pressable>
+              {canIdentify && (
+                <Pressable style={styles.identifyRow} onPress={() => handleIdentify(item)}>
+                  <Text style={styles.identifyLabel}>🔍 鑑定隱藏素質({getIdentifyCost(item)} 金幣)</Text>
+                </Pressable>
+              )}
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -219,20 +221,50 @@ const styles = StyleSheet.create({
     maxWidth: 280,
     gap: 4,
   },
+  paperdollRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  heroWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotColumn: {
+    gap: 6,
+  },
+  slotButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#3a3a45',
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotButtonFilled: {
+    borderColor: '#6ab0e0',
+  },
+  slotButtonActive: {
+    backgroundColor: '#4a4456',
+  },
+  hint: {
+    color: '#8a8a95',
+    fontSize: 10,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
   totalsText: {
     color: '#c9a94f',
     fontSize: 11,
     textAlign: 'center',
     marginBottom: 4,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    backgroundColor: '#2a2a35',
+  itemList: {
+    gap: 3,
   },
   rowLeft: {
     flexDirection: 'row',
@@ -245,22 +277,6 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  slotLabel: {
-    color: '#8a8a95',
-    fontSize: 12,
-  },
-  itemLabel: {
-    color: '#f2f2f2',
-    fontSize: 12,
-    flexShrink: 1,
-    textAlign: 'right',
-  },
-  itemList: {
-    marginTop: 4,
-    marginBottom: 4,
-    paddingLeft: 8,
-    gap: 3,
   },
   itemRow: {
     flexDirection: 'row',

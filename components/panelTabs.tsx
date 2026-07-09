@@ -3,7 +3,6 @@ import { ComponentType } from 'react';
 import { TabIconId } from '../game/sprites/tabIcons';
 import { CompanionPanel } from './CompanionPanel';
 import { EnhancementPanel } from './EnhancementPanel';
-import { EquipmentCodexPanel } from './EquipmentCodexPanel';
 import { EquipmentPanel } from './EquipmentPanel';
 import { JobSelector } from './JobSelector';
 import { SkillPanel } from './SkillPanel';
@@ -14,8 +13,7 @@ export interface PanelTab {
   label: string;
   icon: TabIconId;
   Component: ComponentType;
-  // 分頁圖示的像素放大倍率,不填就用 TabBar 的預設值。裝備/技能是最常用的兩個分頁,
-  // 特別放大方便辨識;圖鑑圖示縮小,讓 7 個分頁擠得進同一排。
+  // 分頁圖示的像素放大倍率,不填就用 TabBar 的預設值。裝備/技能是最常用的兩個分頁,特別放大方便辨識。
   iconPixelSize?: number;
 }
 
@@ -28,5 +26,4 @@ export const PANEL_TABS: PanelTab[] = [
   { id: 'companion', label: '寵物坐騎', icon: 'companion', Component: CompanionPanel },
   { id: 'enhance', label: '強化', icon: 'enhance', Component: EnhancementPanel },
   { id: 'socket', label: '鑲嵌', icon: 'socket', Component: SocketPanel },
-  { id: 'codex', label: '圖鑑', icon: 'codex', Component: EquipmentCodexPanel, iconPixelSize: 2 },
 ];
