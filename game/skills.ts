@@ -93,3 +93,23 @@ const BONUS_COINS_AMOUNT = 20;
 export function getBonusCoinsAmount(): number {
   return BONUS_COINS_AMOUNT;
 }
+
+// 職業樹點入單一技能時顯示的風味描述,單一真相來源。
+export const SKILL_DESCRIPTIONS: Record<Archetype, string> = {
+  physicalMelee: '一拳打爆眼前的敵人,直接讓下一場戰鬥瞬間結束。',
+  physicalRanged: '連續多重射擊招呼過去,這次擊殺的經驗與金幣獎勵直接翻倍。',
+  physicalSupport: '一圈治療光環罩住全場,額外進帳一筆金幣。',
+  magicMelee: '灌注能量的爆發斬,直接讓下一場戰鬥瞬間結束。',
+  magicRanged: '法術齊射覆蓋戰場,這次擊殺的經驗與金幣獎勵直接翻倍。',
+  magicSupport: '增幅祝福籠罩全隊,額外進帳一筆金幣。',
+};
+
+// 依目前技能等級,把「每N隻怪觸發一次+實際效果」組成一句人看得懂的加成說明,
+// 對應 hooks/useGameState.ts tickBattle() 裡技能觸發時實際套用的效果,不是另一套規則。
+export function getSkillEffectDescription(archetype: Archetype, skillLevel: number): string {
+  const kind = getSkillEffectKind(archetype);
+  const interval = skillTriggerInterval(skillLevel);
+  if (kind === 'instantFinish') return `每擊敗 ${interval} 隻怪觸發一次,下一場戰鬥直接瞬間結束`;
+  if (kind === 'doubleReward') return `每擊敗 ${interval} 隻怪觸發一次,這次擊殺的經驗與金幣翻倍`;
+  return `每擊敗 ${interval} 隻怪觸發一次,額外獲得 ${getBonusCoinsAmount()} 金幣`;
+}

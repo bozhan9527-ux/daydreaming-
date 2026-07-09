@@ -62,6 +62,16 @@ export function getArchetypeComposition(archetype: Archetype): { subtype: Subtyp
   return ARCHETYPE_COMPOSITION[archetype];
 }
 
+// 反查:職業樹UI用(damageType, subtype)兩軸畫節點,需要從組合反查回實際的 Archetype id。
+const ARCHETYPE_BY_COMPOSITION: Record<DamageType, Record<Subtype, Archetype>> = {
+  physical: { melee: 'physicalMelee', ranged: 'physicalRanged', support: 'physicalSupport' },
+  magic: { melee: 'magicMelee', ranged: 'magicRanged', support: 'magicSupport' },
+};
+
+export function getArchetypeByComposition(damageType: DamageType, subtype: Subtype): Archetype {
+  return ARCHETYPE_BY_COMPOSITION[damageType][subtype];
+}
+
 export function canPromoteToTier(tier: JobTier, level: number): boolean {
   return level >= TIER_UNLOCK_LEVELS[tier];
 }
