@@ -53,12 +53,18 @@ export function expPerMin(level: number): number {
   return BASE_EXP_PER_MIN * (1 + level * EXP_PER_MIN_LEVEL_FACTOR);
 }
 
+// Lv1-49 的花費砍半,讓練到 Lv50 的時間變成原本的一半;Lv50 起銜接回原曲線,不動後段任何節奏。
+const FAST_START_LEVEL_CAP = 50;
+const FAST_START_MULTIPLIER = 0.5;
+
 export function expToNext(level: number): number {
   let tier = RESOLVED_EXP_TIERS[0];
   for (const t of RESOLVED_EXP_TIERS) {
     if (level >= t.startLevel) tier = t;
   }
-  return Math.floor(tier.baseCost * Math.pow(tier.growth, level - tier.referenceLevel));
+  const cost = tier.baseCost * Math.pow(tier.growth, level - tier.referenceLevel);
+  const scaled = level < FAST_START_LEVEL_CAP ? cost * FAST_START_MULTIPLIER : cost;
+  return Math.floor(scaled);
 }
 
 export function expBankCap(level: number): number {
