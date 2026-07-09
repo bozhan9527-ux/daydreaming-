@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BattleScene } from '../components/BattleScene';
 import { BodyTypeSelector } from '../components/BodyTypeSelector';
@@ -32,7 +32,8 @@ export default function HomeScreen() {
   const lastEvent = useGameState((state) => state.lastEvent);
   const lastCompanionDropId = useGameState((state) => state.lastCompanionDropId);
 
-  const [activeTabId, setActiveTabId] = useState(PANEL_TABS[0].id);
+  const [openTabId, setOpenTabId] = useState<string | null>(null);
+  const openTab = PANEL_TABS.find((tab) => tab.id === openTabId) ?? null;
 
   useBattleLoop();
 
@@ -85,13 +86,27 @@ export default function HomeScreen() {
         <Text style={styles.statsText}>金幣 {coins}</Text>
       </View>
 
-      <TabBar tabs={PANEL_TABS} activeId={activeTabId} onSelect={setActiveTabId} />
+      <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
 
-      {PANEL_TABS.map((tab) => {
-        if (tab.id !== activeTabId) return null;
-        const Panel = tab.Component;
-        return <Panel key={tab.id} />;
-      })}
+      <Modal
+        visible={openTab !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setOpenTabId(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setOpenTabId(null)} />
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{openTab?.label}</Text>
+            <Pressable style={styles.modalCloseButton} onPress={() => setOpenTabId(null)}>
+              <Text style={styles.modalCloseLabel}>✕</Text>
+            </Pressable>
+          </View>
+          <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
+            {openTab && <openTab.Component />}
+          </ScrollView>
+        </View>
+      </Modal>
 
       <View style={styles.levelUpRow}>
         <Pressable style={styles.levelUpButton} onPress={() => levelUp(1)} disabled={isMaxLevel}>
@@ -180,5 +195,51 @@ const styles = StyleSheet.create({
   },
   levelUpLabel: {
     color: '#f2f2f2',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  modalSheet: {
+    maxHeight: '75%',
+    backgroundColor: '#17171f',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    borderColor: '#3a3a45',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderColor: '#2a2a35',
+  },
+  modalTitle: {
+    color: '#f2f2f2',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalCloseButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#2a2a35',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseLabel: {
+    color: '#f2f2f2',
+    fontSize: 14,
+  },
+  modalBody: {
+    flexGrow: 0,
+  },
+  modalBodyContent: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
   },
 });
