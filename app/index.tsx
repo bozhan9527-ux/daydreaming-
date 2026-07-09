@@ -7,6 +7,7 @@ import { EventIcon } from '../components/EventIcon';
 import { GenderSelector } from '../components/GenderSelector';
 import { PANEL_TABS } from '../components/panelTabs';
 import { TabBar } from '../components/TabBar';
+import { ToastHost } from '../components/Toast';
 import { getCompanionById } from '../game/companions';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
@@ -106,6 +107,7 @@ export default function HomeScreen() {
             {openTab && <openTab.Component />}
           </ScrollView>
         </View>
+        <ToastHost />
       </Modal>
 
       <View style={styles.levelUpRow}>
