@@ -1,27 +1,44 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { isTabUnlocked, tabUnlockLevel } from '../game/onboarding';
 import { getTabIcon } from '../game/sprites/tabIcons';
+import { useToast } from '../hooks/useToast';
 import { PanelTab } from './panelTabs';
 import { PixelSprite } from './PixelSprite';
 
 interface TabBarProps {
   tabs: PanelTab[];
   activeId: string;
+  level: number;
   onSelect: (id: string) => void;
 }
 
-export function TabBar({ tabs, activeId, onSelect }: TabBarProps) {
+export function TabBar({ tabs, activeId, level, onSelect }: TabBarProps) {
+  const showToast = useToast((state) => state.show);
+
   return (
     <View style={styles.row}>
       {tabs.map((tab) => {
         const { frame, palette } = getTabIcon(tab.icon);
         const active = tab.id === activeId;
+        const unlockLevel = tabUnlockLevel(tab.id);
+        const unlocked = isTabUnlocked(tab.id, level);
         return (
-          <Pressable key={tab.id} style={[styles.tab, active && styles.tabActive]} onPress={() => onSelect(tab.id)}>
+          <Pressable
+            key={tab.id}
+            style={[styles.tab, active && styles.tabActive, !unlocked && styles.tabLocked]}
+            onPress={() => {
+              if (!unlocked) {
+                showToast(`Lv${unlockLevel} 解鎖「${tab.label}」`);
+                return;
+              }
+              onSelect(tab.id);
+            }}
+          >
             <View style={styles.iconBox}>
               <PixelSprite frame={frame} palette={palette} pixelSize={tab.iconPixelSize ?? 3} />
             </View>
-            <Text style={styles.label}>{tab.label}</Text>
+            <Text style={styles.label}>{unlocked ? tab.label : `Lv${unlockLevel}`}</Text>
           </Pressable>
         );
       })}
@@ -54,6 +71,9 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     backgroundColor: '#4a4456',
+  },
+  tabLocked: {
+    opacity: 0.4,
   },
   label: {
     color: '#f2f2f2',

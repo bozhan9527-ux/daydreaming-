@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BattleScene } from '../components/BattleScene';
@@ -14,9 +14,11 @@ import { getCompanionById } from '../game/companions';
 import { canClaimDailyQuest, DAILY_QUEST_KILL_TARGET } from '../game/daily';
 import { getItemById } from '../game/equipment';
 import { canLevelUp, expToNext, levelsAvailable, MAX_LEVEL } from '../game/leveling';
+import { newlyUnlockedTabs } from '../game/onboarding';
 import { Rarity } from '../game/trigger';
 import { useBattleLoop } from '../hooks/useBattleLoop';
 import { useGameState } from '../hooks/useGameState';
+import { useToast } from '../hooks/useToast';
 
 const RARITY_LABEL: Record<Rarity, string> = {
   common: '一般反應',
@@ -51,6 +53,24 @@ export default function HomeScreen() {
 
   useBattleLoop();
 
+  // 追蹤玩家這次 session 裡等級有沒有跨過某個分頁的解鎖門檻,跨過就跳提示——
+  // previousLevelRef 在第一次load完成時才取樣,避免老玩家重新整理頁面時被誤判成「剛解鎖」而狂跳提示。
+  const showToast = useToast((state) => state.show);
+  const previousLevelRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (previousLevelRef.current === null) {
+      previousLevelRef.current = level.level;
+      return;
+    }
+    const unlocked = newlyUnlockedTabs(previousLevelRef.current, level.level);
+    if (unlocked.length > 0) {
+      const names = unlocked.map((id) => PANEL_TABS.find((tab) => tab.id === id)?.label).filter(Boolean).join('、');
+      showToast(`解鎖新分頁:${names}`);
+    }
+    previousLevelRef.current = level.level;
+  }, [isLoaded, level.level, showToast]);
+
   if (!isLoaded) {
     return (
       <View style={styles.loadingContainer}>
@@ -81,6 +101,7 @@ export default function HomeScreen() {
         : null;
 
   return (
+    <View style={styles.root}>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
 
@@ -149,7 +170,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
+        <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} level={level.level} onSelect={setOpenTabId} />
       </MainVisual>
 
       <Modal visible={showOfflineModal} animationType="fade" transparent onRequestClose={() => setOfflineModalDismissed(true)}>
@@ -200,13 +221,21 @@ export default function HomeScreen() {
             {openTab && <openTab.Component />}
           </ScrollView>
         </View>
-        <ToastHost />
       </Modal>
     </ScrollView>
+
+    {/* Toast 提示(分頁鎖定提示/新分頁解鎖公告)要在主畫面就能跳出來,不能只綁在分頁 Modal 底下——
+        跟 ScrollView 同層放在共用的 flex:1 root 裡,不會被捲動帶走,也不會像 Modal 那樣疊出
+        一層擋住底下按鈕點擊的全螢幕 wrapper。 */}
+    <ToastHost />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   scroll: {
     flex: 1,
     backgroundColor: '#0f0f14',
