@@ -89,6 +89,25 @@ export function canLevelUp(state: LevelState): boolean {
   return state.level < MAX_LEVEL && state.bankedExp >= expToNext(state.level);
 }
 
+// 銀行經驗值最多可以放到 expBankCap(單級所需的30倍),所以可能一次囤好幾級份——
+// UI用這個算「現在點下去可以兌換幾級」,取代直接顯示囤積量對比單級所需的原始數字
+// (那樣數字量級差太多,看起來像壞掉)。
+export function levelsAvailable(state: LevelState): number {
+  let level = state.level;
+  let bankedExp = state.bankedExp;
+  let count = 0;
+
+  while (level < MAX_LEVEL) {
+    const cost = expToNext(level);
+    if (bankedExp < cost) break;
+    bankedExp -= cost;
+    level += 1;
+    count += 1;
+  }
+
+  return count;
+}
+
 export function levelUp(state: LevelState, times: 1 | 5 | 10): { state: LevelState; levelsGained: number } {
   let level = state.level;
   let bankedExp = state.bankedExp;

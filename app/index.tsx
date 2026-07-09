@@ -11,7 +11,7 @@ import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
 import { getCompanionById } from '../game/companions';
 import { getItemById } from '../game/equipment';
-import { canLevelUp, expToNext, MAX_LEVEL } from '../game/leveling';
+import { canLevelUp, expToNext, levelsAvailable, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
 import { useBattleLoop } from '../hooks/useBattleLoop';
 import { useGameState } from '../hooks/useGameState';
@@ -56,6 +56,7 @@ export default function HomeScreen() {
   const needed = isMaxLevel ? 0 : expToNext(level.level);
   // 已存的經驗值不夠升1級時,三顆按鈕都該直接disable,不然點了沒反應,玩家會以為壞了。
   const canLevel = !isMaxLevel && canLevelUp(level);
+  const availableLevels = isMaxLevel ? 0 : levelsAvailable(level);
   const showOfflineModal = lastOfflineKills > 0 && !offlineModalDismissed;
   const equipmentDropItem = lastEquipmentDropId ? getItemById(lastEquipmentDropId) : undefined;
 
@@ -103,7 +104,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} />
+        <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} levelsAvailable={availableLevels} />
 
         <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
       </MainVisual>
