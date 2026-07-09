@@ -107,43 +107,60 @@ export function SkillTracker() {
   const secondaryJustTriggered = lastSecondarySkillTriggerAt !== null && now - lastSecondarySkillTriggerAt < FLASH_WINDOW_MS;
 
   return (
-    <View style={styles.container}>
-      {ACTIVE_SLOT_IDS.map((slot: ActiveSkillSlotId) => (
-        <SkillTile
-          key={slot}
-          archetype={job.archetype}
-          label={SKILL_SLOT_NAMES[job.archetype][slot]}
-          level={skillTree[job.archetype][slot]}
-          timerStartedAt={activeSkillTimers[slot]}
-          intervalSeconds={activeSkillTriggerIntervalSeconds(skillTree[job.archetype][slot])}
-          justTriggered={primaryJustTriggered}
-          now={now}
-        />
-      ))}
+    <View style={styles.wrapper}>
+      <View style={styles.container}>
+        {ACTIVE_SLOT_IDS.map((slot: ActiveSkillSlotId) => (
+          <SkillTile
+            key={slot}
+            archetype={job.archetype}
+            label={SKILL_SLOT_NAMES[job.archetype][slot]}
+            level={skillTree[job.archetype][slot]}
+            timerStartedAt={activeSkillTimers[slot]}
+            intervalSeconds={activeSkillTriggerIntervalSeconds(skillTree[job.archetype][slot])}
+            justTriggered={primaryJustTriggered}
+            now={now}
+          />
+        ))}
+      </View>
+      {/* 副職輔助技能獨立一排、有自己的標籤,不跟主職的4顆混在同一排自動換行——
+          4顆主動剛好能塞滿一行,加上第5顆會在窄螢幕上擠成3+2或4+1,版面亂掉。 */}
       {secondaryJob && (
-        <SkillTile
-          tag="副職"
-          archetype={secondaryJob}
-          label={SKILL_SLOT_NAMES[secondaryJob].active1}
-          level={skillTree[secondaryJob].active1}
-          timerStartedAt={secondarySkillTimerStartedAt}
-          intervalSeconds={secondaryActiveSkillTriggerIntervalSeconds(skillTree[secondaryJob].active1)}
-          justTriggered={secondaryJustTriggered}
-          now={now}
-        />
+        <View style={styles.secondaryRow}>
+          <Text style={styles.secondaryLabel}>副職輔助</Text>
+          <SkillTile
+            tag="副職"
+            archetype={secondaryJob}
+            label={SKILL_SLOT_NAMES[secondaryJob].active1}
+            level={skillTree[secondaryJob].active1}
+            timerStartedAt={secondarySkillTimerStartedAt}
+            intervalSeconds={secondaryActiveSkillTriggerIntervalSeconds(skillTree[secondaryJob].active1)}
+            justTriggered={secondaryJustTriggered}
+            now={now}
+          />
+        </View>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center',
+    gap: 8,
+  },
   container: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 10,
-    maxWidth: 300,
-    alignSelf: 'center',
+  },
+  secondaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  secondaryLabel: {
+    color: '#8a8a95',
+    fontSize: 10,
   },
   tileGroup: {
     alignItems: 'center',

@@ -75,22 +75,24 @@ export default function HomeScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
 
-      <View style={styles.resultBox}>
-        {lastEvent !== null ? (
-          <>
-            <EventIcon rarity={lastEvent.rarity} />
-            <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
-            <Text style={styles.resultText} numberOfLines={3} ellipsizeMode="tail">
-              {lastEvent.payload}
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
-        )}
-      </View>
-
       <MainVisual>
         <BattleScene />
+
+        {/* 彩蛋反應是點擊觸發的flavor內容,不是核心玩法,版面優先權要低於戰鬥主視覺——
+            移到BattleScene下方,不再搶在遊戲畫面之前佔據第一眼的視覺焦點。 */}
+        <View style={styles.resultBox}>
+          {lastEvent !== null ? (
+            <>
+              <EventIcon rarity={lastEvent.rarity} />
+              <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
+              <Text style={styles.resultText} numberOfLines={2} ellipsizeMode="tail">
+                {lastEvent.payload}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
+          )}
+        </View>
 
         <SkillTracker />
 
@@ -105,6 +107,20 @@ export default function HomeScreen() {
         </View>
 
         <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} levelsAvailable={availableLevels} />
+
+        {/* 升級按鈕緊跟在經驗條後面,看到「可升N級」可以馬上按,不用再滑到畫面最下面——
+            原本放在Tab列之後、跨過整個分頁按鈕區,操作路徑被拉斷。 */}
+        <View style={styles.levelUpRow}>
+          <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(1)} disabled={!canLevel}>
+            <Text style={styles.levelUpLabel}>升 1 級</Text>
+          </Pressable>
+          <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(5)} disabled={!canLevel}>
+            <Text style={styles.levelUpLabel}>升 5 級</Text>
+          </Pressable>
+          <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(10)} disabled={!canLevel}>
+            <Text style={styles.levelUpLabel}>升 10 級</Text>
+          </Pressable>
+        </View>
 
         <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
       </MainVisual>
@@ -144,18 +160,6 @@ export default function HomeScreen() {
         </View>
         <ToastHost />
       </Modal>
-
-      <View style={styles.levelUpRow}>
-        <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(1)} disabled={!canLevel}>
-          <Text style={styles.levelUpLabel}>升 1 級</Text>
-        </Pressable>
-        <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(5)} disabled={!canLevel}>
-          <Text style={styles.levelUpLabel}>升 5 級</Text>
-        </Pressable>
-        <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(10)} disabled={!canLevel}>
-          <Text style={styles.levelUpLabel}>升 10 級</Text>
-        </Pressable>
-      </View>
     </ScrollView>
   );
 }
@@ -210,23 +214,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   // 固定高度+置中,不管有沒有觸發到事件、文案長短,這個區塊佔的空間都一樣,
-  // 不會因為內容不同把下面的遊戲畫面往下推。
+  // 不會因為內容不同把下面的技能列/經驗條往下推。降到2行文字上限,配合縮小後的高度。
   resultBox: {
     width: '100%',
     maxWidth: 280,
-    height: 140,
+    height: 100,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 2,
     overflow: 'hidden',
   },
   resultRarity: {
     color: '#8a8a95',
-    fontSize: 12,
+    fontSize: 11,
   },
   resultText: {
     color: '#f2f2f2',
-    fontSize: 14,
+    fontSize: 12,
     textAlign: 'center',
   },
   levelUpRow: {
