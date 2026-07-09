@@ -58,21 +58,24 @@ export function upgradeSkill(skillLevel: number): number {
   return Math.min(MAX_LEVEL, skillLevel + 1);
 }
 
-// 主動技能觸發間隔:每打倒幾隻怪觸發一次,等級越高間隔越短,封頂在 3 隻。
-const BASE_TRIGGER_INTERVAL = 10;
-const MIN_TRIGGER_INTERVAL = 3;
+// 主動技能觸發間隔:改成真正的秒數倒數(不再靠擊殺次數累計),等級越高秒數越短,
+// 封頂在 9 秒。每 50 等縮短 3 秒,跟舊版「每 50 等縮短 1 隻怪、約 3 秒一隻怪」換算後同一條曲線,
+// 玩家練等節奏不變,只是觸發判定改成看真實經過時間。
+const BASE_TRIGGER_INTERVAL_SECONDS = 30;
+const MIN_TRIGGER_INTERVAL_SECONDS = 9;
+const INTERVAL_STEP_SECONDS = 3;
 const LEVELS_PER_INTERVAL_STEP = 50;
 
-export function skillTriggerInterval(skillLevel: number): number {
-  const reduction = Math.floor(skillLevel / LEVELS_PER_INTERVAL_STEP);
-  return Math.max(MIN_TRIGGER_INTERVAL, BASE_TRIGGER_INTERVAL - reduction);
+export function skillTriggerIntervalSeconds(skillLevel: number): number {
+  const reduction = Math.floor(skillLevel / LEVELS_PER_INTERVAL_STEP) * INTERVAL_STEP_SECONDS;
+  return Math.max(MIN_TRIGGER_INTERVAL_SECONDS, BASE_TRIGGER_INTERVAL_SECONDS - reduction);
 }
 
 // 副職的技能也會觸發,但間隔是本職的兩倍,呼應副職只拿「部分加成」的定位。
 const SECONDARY_SKILL_INTERVAL_MULTIPLIER = 2;
 
-export function secondarySkillTriggerInterval(skillLevel: number): number {
-  return skillTriggerInterval(skillLevel) * SECONDARY_SKILL_INTERVAL_MULTIPLIER;
+export function secondarySkillTriggerIntervalSeconds(skillLevel: number): number {
+  return skillTriggerIntervalSeconds(skillLevel) * SECONDARY_SKILL_INTERVAL_MULTIPLIER;
 }
 
 // 三種主動技能效果,依 subtype(近戰/遠程/輔助)決定,物理/魔法只是同一個效果換個特效顏色。
@@ -104,12 +107,12 @@ export const SKILL_DESCRIPTIONS: Record<Archetype, string> = {
   magicSupport: '增幅祝福籠罩全隊,額外進帳一筆金幣。',
 };
 
-// 依目前技能等級,把「每N隻怪觸發一次+實際效果」組成一句人看得懂的加成說明,
+// 依目前技能等級,把「每N秒觸發一次+實際效果」組成一句人看得懂的加成說明,
 // 對應 hooks/useGameState.ts tickBattle() 裡技能觸發時實際套用的效果,不是另一套規則。
 export function getSkillEffectDescription(archetype: Archetype, skillLevel: number): string {
   const kind = getSkillEffectKind(archetype);
-  const interval = skillTriggerInterval(skillLevel);
-  if (kind === 'instantFinish') return `每擊敗 ${interval} 隻怪觸發一次,下一場戰鬥直接瞬間結束`;
-  if (kind === 'doubleReward') return `每擊敗 ${interval} 隻怪觸發一次,這次擊殺的經驗與金幣翻倍`;
-  return `每擊敗 ${interval} 隻怪觸發一次,額外獲得 ${getBonusCoinsAmount()} 金幣`;
+  const seconds = skillTriggerIntervalSeconds(skillLevel);
+  if (kind === 'instantFinish') return `每 ${seconds} 秒觸發一次,下一場戰鬥直接瞬間結束`;
+  if (kind === 'doubleReward') return `每 ${seconds} 秒觸發一次,這次擊殺的經驗與金幣翻倍`;
+  return `每 ${seconds} 秒觸發一次,額外獲得 ${getBonusCoinsAmount()} 金幣`;
 }

@@ -59,9 +59,9 @@ import {
   createInitialSkillLevels,
   getBonusCoinsAmount,
   getSkillEffectKind,
-  secondarySkillTriggerInterval,
+  secondarySkillTriggerIntervalSeconds,
   SkillLevels,
-  skillTriggerInterval,
+  skillTriggerIntervalSeconds,
   skillUpgradeCoinCost,
   skillUpgradeCost,
   upgradeSkill as nextSkillLevel,
@@ -169,8 +169,10 @@ interface GameState {
   lastCompanionDropId: string | null;
   lastEquipmentDropId: string | null;
   lastCoinWindfall: number | null;
-  skillKillsSinceTrigger: number;
-  secondarySkillKillsSinceTrigger: number;
+  // 技能倒數計時器起始時間戳(不存檔,重開只是倒數重新開始算),取代舊版的擊殺次數計數——
+  // 用 Date.now() - skillTimerStartedAt 對比 skillTriggerIntervalSeconds() 的毫秒數判斷是否觸發。
+  skillTimerStartedAt: number;
+  secondarySkillTimerStartedAt: number;
   // 技能剛觸發的時間戳,不存檔,只給 UI 顯示「剛發動」的短暫閃光用,跟 lastEnhanceOutcome 同一套模式。
   lastSkillTriggerAt: number | null;
   lastSecondarySkillTriggerAt: number | null;
@@ -268,8 +270,8 @@ export const useGameState = create<GameState>((set, get) => ({
   lastCompanionDropId: null,
   lastEquipmentDropId: null,
   lastCoinWindfall: null,
-  skillKillsSinceTrigger: 0,
-  secondarySkillKillsSinceTrigger: 0,
+  skillTimerStartedAt: Date.now(),
+  secondarySkillTimerStartedAt: Date.now(),
   lastSkillTriggerAt: null,
   lastSecondarySkillTriggerAt: null,
   forceInstantNextFight: false,
@@ -391,13 +393,14 @@ export const useGameState = create<GameState>((set, get) => ({
     const event = getRandomEvent(state.currentEncounter.rarity);
     const nextStageProgress = advanceStageProgress(state.stageProgress);
 
-    // 主動技能:每打倒幾隻怪觸發一次(等級越高間隔越短),依目前職業的 subtype 決定效果——
+    // 主動技能:改成真正的秒數倒數觸發(等級越高秒數越短),不再靠擊殺次數累計——
+    // 倒數滿了才會在下一次擊殺結算時套用效果,依目前職業的 subtype 決定效果:
     // 近戰=下一場戰鬥秒殺、遠程=這次擊殺獎勵翻倍、輔助=直接發一筆額外金幣。
+    const now = Date.now();
     const currentSkillLevel = state.skills[state.job.archetype];
-    const killsSinceTrigger = state.skillKillsSinceTrigger + 1;
-    const interval = skillTriggerInterval(currentSkillLevel);
-    const skillTriggered = killsSinceTrigger >= interval;
-    const nextKillsSinceTrigger = skillTriggered ? 0 : killsSinceTrigger;
+    const skillIntervalMs = skillTriggerIntervalSeconds(currentSkillLevel) * 1000;
+    const skillTriggered = now - state.skillTimerStartedAt >= skillIntervalMs;
+    const nextSkillTimerStartedAt = skillTriggered ? now : state.skillTimerStartedAt;
 
     let exp = reward.exp;
     let coins = reward.coins;
@@ -413,18 +416,17 @@ export const useGameState = create<GameState>((set, get) => ({
       } else if (effect === 'instantFinish') {
         forceInstantNextFight = true;
       }
-      lastSkillTriggerAt = Date.now();
+      lastSkillTriggerAt = now;
     }
 
-    // 副職的技能也會觸發,間隔是本職的兩倍,跟主職技能各自獨立計數、可以同一擊同時觸發。
-    let nextSecondaryKillsSinceTrigger = state.secondarySkillKillsSinceTrigger;
+    // 副職的技能也會觸發,間隔是本職的兩倍,跟主職技能各自獨立計時、可以同一擊同時觸發。
+    let nextSecondarySkillTimerStartedAt = state.secondarySkillTimerStartedAt;
     let lastSecondarySkillTriggerAt = state.lastSecondarySkillTriggerAt;
     if (state.secondaryJob) {
       const secondarySkillLevel = state.skills[state.secondaryJob];
-      const secondaryKillsSinceTrigger = state.secondarySkillKillsSinceTrigger + 1;
-      const secondaryInterval = secondarySkillTriggerInterval(secondarySkillLevel);
-      const secondaryTriggered = secondaryKillsSinceTrigger >= secondaryInterval;
-      nextSecondaryKillsSinceTrigger = secondaryTriggered ? 0 : secondaryKillsSinceTrigger;
+      const secondaryIntervalMs = secondarySkillTriggerIntervalSeconds(secondarySkillLevel) * 1000;
+      const secondaryTriggered = now - state.secondarySkillTimerStartedAt >= secondaryIntervalMs;
+      nextSecondarySkillTimerStartedAt = secondaryTriggered ? now : state.secondarySkillTimerStartedAt;
       if (secondaryTriggered) {
         const secondaryEffect = getSkillEffectKind(state.secondaryJob);
         if (secondaryEffect === 'doubleReward') {
@@ -435,7 +437,7 @@ export const useGameState = create<GameState>((set, get) => ({
         } else if (secondaryEffect === 'instantFinish') {
           forceInstantNextFight = true;
         }
-        lastSecondarySkillTriggerAt = Date.now();
+        lastSecondarySkillTriggerAt = now;
       }
     }
 
@@ -496,8 +498,8 @@ export const useGameState = create<GameState>((set, get) => ({
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,
-      skillKillsSinceTrigger: nextKillsSinceTrigger,
-      secondarySkillKillsSinceTrigger: nextSecondaryKillsSinceTrigger,
+      skillTimerStartedAt: nextSkillTimerStartedAt,
+      secondarySkillTimerStartedAt: nextSecondarySkillTimerStartedAt,
       lastSkillTriggerAt,
       lastSecondarySkillTriggerAt,
       forceInstantNextFight,
@@ -543,7 +545,7 @@ export const useGameState = create<GameState>((set, get) => ({
       if (!canUnlockDualClass(level.level)) return;
       if (archetype === job.archetype) return;
     }
-    set({ secondaryJob: archetype, secondarySkillKillsSinceTrigger: 0, lastSecondarySkillTriggerAt: null });
+    set({ secondaryJob: archetype, secondarySkillTimerStartedAt: Date.now(), lastSecondarySkillTriggerAt: null });
     persist(get());
   },
 
