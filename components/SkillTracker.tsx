@@ -10,34 +10,66 @@ import { PixelSprite } from './PixelSprite';
 // 不需要額外計時器,徽章會在接下來 2-3 次 tick 內自然從亮轉暗。
 const FLASH_WINDOW_MS = 900;
 
-interface SkillBadgeProps {
+const TILE_SIZE = 60;
+
+// 用「這場戰鬥剩多久 + 還差幾場戰鬥(以目前這場的時長當估計值)」換算成秒數倒數——
+// 觸發機制本身還是擊殺數(game/skills.ts),這裡只是給 UI 一個看得懂的秒數估計,
+// 不是改動實際觸發邏輯,所以每次擊殺重置區間時秒數會自然跳動,不會不準到離譜。
+function estimateSecondsRemaining(remainingKills: number, fightDurationMs: number | null, fightElapsedMs: number): number {
+  if (remainingKills <= 0) return 0;
+  const avgFightMs = fightDurationMs ?? 3000;
+  const currentFightRemainingMs = fightDurationMs !== null ? Math.max(0, fightDurationMs - fightElapsedMs) : 0;
+  const additionalFights = Math.max(0, remainingKills - 1);
+  const totalMs = currentFightRemainingMs + additionalFights * avgFightMs;
+  return Math.max(0, Math.ceil(totalMs / 1000));
+}
+
+interface SkillTileProps {
   kind: '主動' | '被動';
   archetype: Archetype;
   level: number;
   killsSinceTrigger: number;
   interval: number;
   justTriggered: boolean;
+  fightDurationMs: number | null;
+  fightElapsedMs: number;
 }
 
-function SkillBadge({ kind, archetype, level, killsSinceTrigger, interval, justTriggered }: SkillBadgeProps) {
+function SkillTile({
+  kind,
+  archetype,
+  level,
+  killsSinceTrigger,
+  interval,
+  justTriggered,
+  fightDurationMs,
+  fightElapsedMs,
+}: SkillTileProps) {
   const icon = getSkillIcon(archetype);
-  const remaining = Math.max(0, interval - killsSinceTrigger);
+  const remainingKills = Math.max(0, interval - killsSinceTrigger);
   const ratio = Math.min(1, killsSinceTrigger / interval);
+  // 疊在圖示上方、由滿到空的暗色遮罩,呈現「還沒集滿」的部分,隨進度往上縮,是圖像化倒數
+  // 的主要視覺(數字秒數是輔助,遮罩才是一眼就看得出「快好了沒」的東西)。
+  const overlayHeight = (1 - ratio) * TILE_SIZE;
+  const seconds = estimateSecondsRemaining(remainingKills, fightDurationMs, fightElapsedMs);
 
   return (
-    <View style={[styles.badge, justTriggered && styles.badgeFlash]}>
-      <View style={styles.iconWrap}>
-        <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={2} />
-      </View>
-      <View style={styles.textCol}>
-        <Text style={styles.name}>
-          [{kind}] {SKILL_LABELS[archetype]} Lv.{level}
-        </Text>
-        <View style={styles.cooldownTrack}>
-          <View style={[styles.cooldownFill, { width: `${ratio * 100}%` }]} />
+    <View style={styles.tileGroup}>
+      <View style={[styles.tile, justTriggered && styles.tileFlash]}>
+        <View style={styles.iconWrap}>
+          <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={4} />
         </View>
-        <Text style={styles.cooldownText}>{justTriggered ? '發動!' : `還差 ${remaining} 隻`}</Text>
+        {!justTriggered && overlayHeight > 0 && <View style={[styles.cooldownOverlay, { height: overlayHeight }]} />}
+        <View style={styles.countdownBadge}>
+          <Text style={styles.countdownText}>{justTriggered ? '發動!' : `${seconds}s`}</Text>
+        </View>
+        <View style={styles.kindTag}>
+          <Text style={styles.kindTagText}>{kind}</Text>
+        </View>
       </View>
+      <Text style={styles.caption} numberOfLines={1}>
+        {SKILL_LABELS[archetype]} Lv.{level}
+      </Text>
     </View>
   );
 }
@@ -50,29 +82,36 @@ export function SkillTracker() {
   const secondarySkillKillsSinceTrigger = useGameState((state) => state.secondarySkillKillsSinceTrigger);
   const lastSkillTriggerAt = useGameState((state) => state.lastSkillTriggerAt);
   const lastSecondarySkillTriggerAt = useGameState((state) => state.lastSecondarySkillTriggerAt);
+  const currentEncounter = useGameState((state) => state.currentEncounter);
+  const fightElapsedMs = useGameState((state) => state.fightElapsedMs);
 
   const now = Date.now();
   const primaryJustTriggered = lastSkillTriggerAt !== null && now - lastSkillTriggerAt < FLASH_WINDOW_MS;
   const secondaryJustTriggered = lastSecondarySkillTriggerAt !== null && now - lastSecondarySkillTriggerAt < FLASH_WINDOW_MS;
+  const fightDurationMs = currentEncounter ? currentEncounter.fightDurationMs : null;
 
   return (
     <View style={styles.container}>
-      <SkillBadge
+      <SkillTile
         kind="主動"
         archetype={job.archetype}
         level={skills[job.archetype]}
         killsSinceTrigger={skillKillsSinceTrigger}
         interval={skillTriggerInterval(skills[job.archetype])}
         justTriggered={primaryJustTriggered}
+        fightDurationMs={fightDurationMs}
+        fightElapsedMs={fightElapsedMs}
       />
       {secondaryJob && (
-        <SkillBadge
+        <SkillTile
           kind="被動"
           archetype={secondaryJob}
           level={skills[secondaryJob]}
           killsSinceTrigger={secondarySkillKillsSinceTrigger}
           interval={secondarySkillTriggerInterval(skills[secondaryJob])}
           justTriggered={secondaryJustTriggered}
+          fightDurationMs={fightDurationMs}
+          fightElapsedMs={fightElapsedMs}
         />
       )}
     </View>
@@ -81,48 +120,75 @@ export function SkillTracker() {
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-    maxWidth: 320,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  tileGroup: {
+    alignItems: 'center',
     gap: 4,
   },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+  tile: {
+    width: TILE_SIZE,
+    height: TILE_SIZE,
+    borderRadius: 10,
     backgroundColor: '#2a2a35',
+    borderWidth: 2,
+    borderColor: '#3a3a45',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  badgeFlash: {
+  tileFlash: {
     backgroundColor: '#4a4456',
+    borderColor: '#c9a94f',
   },
   iconWrap: {
-    width: 24,
-    height: 24,
+    width: TILE_SIZE,
+    height: TILE_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  textCol: {
-    flex: 1,
-    gap: 2,
+  // 由上往下蓋住的暗色遮罩,高度隨冷卻進度縮小,圖像化呈現「還差多少」,比純數字/長條更直覺。
+  cooldownOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    backgroundColor: 'rgba(15, 15, 20, 0.75)',
   },
-  name: {
+  countdownBadge: {
+    position: 'absolute',
+    bottom: 2,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  countdownText: {
     color: '#f2f2f2',
     fontSize: 11,
+    fontWeight: '700',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingHorizontal: 6,
+    borderRadius: 4,
   },
-  cooldownTrack: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#1c1c24',
-    overflow: 'hidden',
+  kindTag: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    borderRadius: 3,
+    paddingHorizontal: 3,
   },
-  cooldownFill: {
-    height: '100%',
-    backgroundColor: '#c9a94f',
+  kindTagText: {
+    color: '#c9a94f',
+    fontSize: 8,
+    fontWeight: '600',
   },
-  cooldownText: {
-    color: '#8a8a95',
-    fontSize: 9,
+  caption: {
+    color: '#f2f2f2',
+    fontSize: 10,
+    maxWidth: TILE_SIZE + 20,
+    textAlign: 'center',
   },
 });
