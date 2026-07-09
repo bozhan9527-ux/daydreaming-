@@ -44,6 +44,19 @@ export function calcCombatMultiplier(archetype: Archetype, tier: JobTier): numbe
   return BASE_MULTIPLIER[tier] + SUBTYPE_BONUS[subtype][tier] + DAMAGE_TYPE_BONUS[damageType][tier];
 }
 
+// 雙職兼修:3 階(Lv250)解鎖,可另選一個副職archetype。副職只吃自己那份倍率「超出 1.0 的部分」
+// 的一半,不會整個疊上去,維持主職才是數值主力的定位。
+export const DUAL_CLASS_UNLOCK_LEVEL = TIER_UNLOCK_LEVELS[3];
+const SECONDARY_JOB_WEIGHT = 0.5;
+
+export function canUnlockDualClass(level: number): boolean {
+  return level >= DUAL_CLASS_UNLOCK_LEVEL;
+}
+
+export function calcSecondaryCombatBonus(archetype: Archetype, tier: JobTier): number {
+  return SECONDARY_JOB_WEIGHT * (calcCombatMultiplier(archetype, tier) - 1);
+}
+
 // 給戰鬥視覺層(攻擊特效)用來判斷要畫近戰/遠程/輔助,物理/魔法哪一種呈現,純讀取不影響數值。
 export function getArchetypeComposition(archetype: Archetype): { subtype: Subtype; damageType: DamageType } {
   return ARCHETYPE_COMPOSITION[archetype];

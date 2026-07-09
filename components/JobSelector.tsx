@@ -1,6 +1,14 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Archetype, getCurrentTier, getJobTitle, JobBranch } from '../game/combat';
+import {
+  Archetype,
+  calcSecondaryCombatBonus,
+  canUnlockDualClass,
+  DUAL_CLASS_UNLOCK_LEVEL,
+  getCurrentTier,
+  getJobTitle,
+  JobBranch,
+} from '../game/combat';
 import { useGameState } from '../hooks/useGameState';
 
 const ARCHETYPE_LABELS: Record<Archetype, string> = {
@@ -23,13 +31,21 @@ const ARCHETYPES: Archetype[] = [
 
 const BRANCHES: JobBranch[] = ['A', 'B'];
 
+function formatSecondaryBonus(value: number): string {
+  return `經驗 +${Math.round(value * 100)}%`;
+}
+
 export function JobSelector() {
   const job = useGameState((state) => state.job);
   const level = useGameState((state) => state.level);
+  const secondaryJob = useGameState((state) => state.secondaryJob);
   const setJob = useGameState((state) => state.setJob);
+  const setSecondaryJob = useGameState((state) => state.setSecondaryJob);
 
   const tier = getCurrentTier(level.level);
   const title = getJobTitle(job.archetype, job.branch, tier);
+  const dualClassUnlocked = canUnlockDualClass(level.level);
+  const secondaryOptions = ARCHETYPES.filter((archetype) => archetype !== job.archetype);
 
   return (
     <View style={styles.container}>
@@ -57,6 +73,38 @@ export function JobSelector() {
             <Text style={styles.branchLabel}>分支 {branch}</Text>
           </Pressable>
         ))}
+      </View>
+
+      <View style={styles.secondarySection}>
+        <Text style={styles.secondaryTitle}>雙職兼修(副職)</Text>
+        {!dualClassUnlocked ? (
+          <Text style={styles.secondaryLocked}>Lv{DUAL_CLASS_UNLOCK_LEVEL} 解鎖,可另選一個副職分擔加成</Text>
+        ) : (
+          <>
+            <View style={styles.archetypeRow}>
+              <Pressable
+                style={[styles.archetypeButton, secondaryJob === null && styles.archetypeButtonActive]}
+                onPress={() => setSecondaryJob(null)}
+              >
+                <Text style={styles.archetypeLabel}>無</Text>
+              </Pressable>
+              {secondaryOptions.map((archetype) => (
+                <Pressable
+                  key={archetype}
+                  style={[styles.archetypeButton, secondaryJob === archetype && styles.archetypeButtonActive]}
+                  onPress={() => setSecondaryJob(archetype)}
+                >
+                  <Text style={styles.archetypeLabel}>{ARCHETYPE_LABELS[archetype]}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {secondaryJob && (
+              <Text style={styles.secondaryBonus}>
+                副職加成:{formatSecondaryBonus(calcSecondaryCombatBonus(secondaryJob, tier))}(技能觸發間隔為本職 2 倍)
+              </Text>
+            )}
+          </>
+        )}
       </View>
     </View>
   );
@@ -107,5 +155,28 @@ const styles = StyleSheet.create({
   branchLabel: {
     color: '#f2f2f2',
     fontSize: 12,
+  },
+  secondarySection: {
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderColor: '#2a2a35',
+    width: '100%',
+  },
+  secondaryTitle: {
+    color: '#8a8a95',
+    fontSize: 12,
+  },
+  secondaryLocked: {
+    color: '#6a6a75',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  secondaryBonus: {
+    color: '#c9a94f',
+    fontSize: 11,
+    textAlign: 'center',
   },
 });

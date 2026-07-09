@@ -13,7 +13,7 @@ import {
   unequipCompanion,
   unlockCompanion,
 } from '../game/companions';
-import { Archetype, calcCombatMultiplier, getCurrentTier, JobBranch } from '../game/combat';
+import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDualClass, getCurrentTier, JobBranch } from '../game/combat';
 import {
   applyGenderDefault,
   createEmptyLoadout,
@@ -37,6 +37,7 @@ import {
   createInitialSkillLevels,
   getBonusCoinsAmount,
   getSkillEffectKind,
+  secondarySkillTriggerInterval,
   SkillLevels,
   skillTriggerInterval,
   skillUpgradeCoinCost,
@@ -48,7 +49,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { JobSelection, loadSave, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 
-const SAVE_SCHEMA_VERSION = 10;
+const SAVE_SCHEMA_VERSION = 11;
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
@@ -61,9 +62,12 @@ function unlockedItemsForGender(gender: Gender): UnlockedItemIds {
   );
 }
 
-function currentJobMultiplier(job: JobSelection, level: number): number {
+// 副職(雙職兼修)只吃自己那份倍率超出 1.0 的一半,主職才是數值主力。
+function currentJobMultiplier(job: JobSelection, level: number, secondaryJob: Archetype | null): number {
   const tier = getCurrentTier(level);
-  return calcCombatMultiplier(job.archetype, tier);
+  const primary = calcCombatMultiplier(job.archetype, tier);
+  const secondaryBonus = secondaryJob ? calcSecondaryCombatBonus(secondaryJob, tier) : 0;
+  return primary + secondaryBonus;
 }
 
 interface RewardMultipliers {
@@ -77,9 +81,10 @@ function computeRewardMultipliers(
   job: JobSelection,
   level: number,
   equipment: EquipmentLoadout,
-  companions: CompanionState
+  companions: CompanionState,
+  secondaryJob: Archetype | null
 ): RewardMultipliers {
-  const jobMultiplier = currentJobMultiplier(job, level);
+  const jobMultiplier = currentJobMultiplier(job, level, secondaryJob);
   const equipmentBonus = getEquipmentBonusTotals(equipment);
   const companionBonus = getCompanionBonusTotals(companions);
   return {
@@ -101,6 +106,7 @@ interface GameState {
   coins: number;
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
+  secondaryJob: Archetype | null;
   lastOfflineGain: number;
   lastOfflineKills: number;
   lastOfflineCoins: number;
@@ -111,12 +117,14 @@ interface GameState {
   lastEvent: GameEvent | null;
   lastCompanionDropId: string | null;
   skillKillsSinceTrigger: number;
+  secondarySkillKillsSinceTrigger: number;
   forceInstantNextFight: boolean;
   load: () => Promise<void>;
   levelUp: (times: 1 | 5 | 10) => void;
   tickBattle: () => void;
   boostCurrentFight: () => void;
   setJob: (archetype: Archetype, branch: JobBranch) => void;
+  setSecondaryJob: (archetype: Archetype | null) => void;
   equip: (itemId: string) => void;
   unequip: (slot: EquipmentSlot) => void;
   purchaseItem: (itemId: string) => void;
@@ -139,6 +147,7 @@ type PersistableState = Pick<
   | 'coins'
   | 'unlockedItemIds'
   | 'companions'
+  | 'secondaryJob'
 >;
 
 function persist(state: PersistableState): void {
@@ -154,6 +163,7 @@ function persist(state: PersistableState): void {
     coins: state.coins,
     unlockedItemIds: state.unlockedItemIds,
     companions: state.companions,
+    secondaryJob: state.secondaryJob,
     lastActiveAt: Date.now(),
   });
 }
@@ -170,6 +180,7 @@ export const useGameState = create<GameState>((set, get) => ({
   coins: 0,
   unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
   companions: createEmptyCompanionState(),
+  secondaryJob: null,
   lastOfflineGain: 0,
   lastOfflineKills: 0,
   lastOfflineCoins: 0,
@@ -180,6 +191,7 @@ export const useGameState = create<GameState>((set, get) => ({
   lastEvent: null,
   lastCompanionDropId: null,
   skillKillsSinceTrigger: 0,
+  secondarySkillKillsSinceTrigger: 0,
   forceInstantNextFight: false,
 
   load: async () => {
@@ -190,7 +202,8 @@ export const useGameState = create<GameState>((set, get) => ({
       save.job,
       save.level.level,
       save.equipment,
-      save.companions
+      save.companions,
+      save.secondaryJob
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
     const level = accumulateExp(save.level, gainedExp);
@@ -211,6 +224,7 @@ export const useGameState = create<GameState>((set, get) => ({
       coins,
       unlockedItemIds: save.unlockedItemIds,
       companions: save.companions,
+      secondaryJob: save.secondaryJob,
       isLoaded: true,
       lastOfflineGain: gainedExp,
       lastOfflineKills: offlineBattle.kills,
@@ -238,7 +252,13 @@ export const useGameState = create<GameState>((set, get) => ({
     if (!state.isLoaded) return;
 
     if (!state.currentEncounter || state.fightStartedAt === null) {
-      const { speedMultiplier } = computeRewardMultipliers(state.job, state.level.level, state.equipment, state.companions);
+      const { speedMultiplier } = computeRewardMultipliers(
+        state.job,
+        state.level.level,
+        state.equipment,
+        state.companions,
+        state.secondaryJob
+      );
       const encounter = generateEncounter(state.trigger, speedMultiplier);
       if (state.forceInstantNextFight) {
         encounter.fightDurationMs = 0;
@@ -264,7 +284,8 @@ export const useGameState = create<GameState>((set, get) => ({
       state.job,
       state.level.level,
       state.equipment,
-      state.companions
+      state.companions,
+      state.secondaryJob
     );
     const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, expMultiplier, coinMultiplier);
     const event = getRandomEvent(state.currentEncounter.rarity);
@@ -292,6 +313,27 @@ export const useGameState = create<GameState>((set, get) => ({
       }
     }
 
+    // 副職的技能也會觸發,間隔是本職的兩倍,跟主職技能各自獨立計數、可以同一擊同時觸發。
+    let nextSecondaryKillsSinceTrigger = state.secondarySkillKillsSinceTrigger;
+    if (state.secondaryJob) {
+      const secondarySkillLevel = state.skills[state.secondaryJob];
+      const secondaryKillsSinceTrigger = state.secondarySkillKillsSinceTrigger + 1;
+      const secondaryInterval = secondarySkillTriggerInterval(secondarySkillLevel);
+      const secondaryTriggered = secondaryKillsSinceTrigger >= secondaryInterval;
+      nextSecondaryKillsSinceTrigger = secondaryTriggered ? 0 : secondaryKillsSinceTrigger;
+      if (secondaryTriggered) {
+        const secondaryEffect = getSkillEffectKind(state.secondaryJob);
+        if (secondaryEffect === 'doubleReward') {
+          exp *= 2;
+          coins *= 2;
+        } else if (secondaryEffect === 'bonusCoins') {
+          coins += getBonusCoinsAmount();
+        } else if (secondaryEffect === 'instantFinish') {
+          forceInstantNextFight = true;
+        }
+      }
+    }
+
     // 寵物/坐騎額外掉落:跟主要稀有度事件的保底機制完全獨立判定,多數時候不會掉落。
     const companionDrop = rollCompanionDrop();
     let nextCompanions = state.companions;
@@ -315,6 +357,7 @@ export const useGameState = create<GameState>((set, get) => ({
       fightStartedAt: null,
       fightElapsedMs: 0,
       skillKillsSinceTrigger: nextKillsSinceTrigger,
+      secondarySkillKillsSinceTrigger: nextSecondaryKillsSinceTrigger,
       forceInstantNextFight,
     });
     persist(get());
@@ -329,8 +372,22 @@ export const useGameState = create<GameState>((set, get) => ({
     set({ fightStartedAt: fightStartedAt - BOOST_MS });
   },
 
+  // 主職換成跟目前副職一樣的話,副職自動清空(不能兩職都選同一個)。
   setJob: (archetype, branch) => {
-    set({ job: { archetype, branch } });
+    const { secondaryJob } = get();
+    const nextSecondaryJob = secondaryJob === archetype ? null : secondaryJob;
+    set({ job: { archetype, branch }, secondaryJob: nextSecondaryJob });
+    persist(get());
+  },
+
+  // Lv250(3 階)解鎖雙職兼修,副職不能跟主職同一個archetype;傳 null 可以清空副職。
+  setSecondaryJob: (archetype) => {
+    const { job, level } = get();
+    if (archetype !== null) {
+      if (!canUnlockDualClass(level.level)) return;
+      if (archetype === job.archetype) return;
+    }
+    set({ secondaryJob: archetype, secondarySkillKillsSinceTrigger: 0 });
     persist(get());
   },
 

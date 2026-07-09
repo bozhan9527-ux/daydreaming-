@@ -58,6 +58,13 @@ export function skillTriggerInterval(skillLevel: number): number {
   return Math.max(MIN_TRIGGER_INTERVAL, BASE_TRIGGER_INTERVAL - reduction);
 }
 
+// 副職的技能也會觸發,但間隔是本職的兩倍,呼應副職只拿「部分加成」的定位。
+const SECONDARY_SKILL_INTERVAL_MULTIPLIER = 2;
+
+export function secondarySkillTriggerInterval(skillLevel: number): number {
+  return skillTriggerInterval(skillLevel) * SECONDARY_SKILL_INTERVAL_MULTIPLIER;
+}
+
 // 三種主動技能效果,依 subtype(近戰/遠程/輔助)決定,物理/魔法只是同一個效果換個特效顏色。
 export type SkillEffectKind = 'instantFinish' | 'doubleReward' | 'bonusCoins';
 
