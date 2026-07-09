@@ -44,6 +44,12 @@ export interface TriggerRoll {
   pityTriggered: boolean;
 }
 
+// 點擊勇者算一次「觸發點擊」,直接推進保底計數器,讓下一次判定更接近(或直接落入)保底門檻,
+// 藉此提高稀有以上結果的機率;沿用同一套保底邏輯,不是另開一條規則,夾住上限避免溢位。
+export function bumpPityFromClick(state: TriggerState): TriggerState {
+  return { pityCounter: Math.min(PITY_THRESHOLD, state.pityCounter + 1) };
+}
+
 export function rollTrigger(state: TriggerState, rng: () => number = Math.random): TriggerRoll {
   const pityTriggered = state.pityCounter >= PITY_THRESHOLD;
   const table = pityTriggered ? RARE_OR_ABOVE_TABLE : RARITY_TABLE;

@@ -75,7 +75,7 @@ import {
   isFinalBossStage,
   StageProgress,
 } from '../game/stages';
-import { createInitialTriggerState, TriggerState } from '../game/trigger';
+import { bumpPityFromClick, createInitialTriggerState, TriggerState } from '../game/trigger';
 import { JobSelection, loadSave, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 
@@ -163,6 +163,7 @@ interface GameState {
   currentEncounter: Encounter | null;
   fightStartedAt: number | null;
   fightElapsedMs: number;
+  heroClicksThisFight: number;
   killCount: number;
   lastEvent: GameEvent | null;
   lastCompanionDropId: string | null;
@@ -261,6 +262,7 @@ export const useGameState = create<GameState>((set, get) => ({
   currentEncounter: null,
   fightStartedAt: null,
   fightElapsedMs: 0,
+  heroClicksThisFight: 0,
   killCount: 0,
   lastEvent: null,
   lastCompanionDropId: null,
@@ -361,6 +363,7 @@ export const useGameState = create<GameState>((set, get) => ({
         trigger: encounter.triggerState,
         fightStartedAt: Date.now(),
         fightElapsedMs: 0,
+        heroClicksThisFight: 0,
         forceInstantNextFight: false,
       });
       persist(get());
@@ -503,12 +506,21 @@ export const useGameState = create<GameState>((set, get) => ({
     playEvent(state.currentEncounter.rarity);
   },
 
-  // 點擊勇者可以搶快一點打完當前這隻怪(縮短剩餘時間),不是回到舊版的點擊觸發機制。
+  // 點擊勇者可以搶快一點打完當前這隻怪(縮短剩餘時間);同時每次點擊都算一次「觸發點擊」,
+  // 推進保底計數器,提高下一次判定落到稀有以上的機率(當前這隻怪的稀有度已經生成好了,
+  // 點擊影響的是下一隻)。每場戰鬥點擊能貢獻的保底次數設上限,避免瘋狂連點直接洗出保底。
   boostCurrentFight: () => {
-    const { currentEncounter, fightStartedAt } = get();
+    const { currentEncounter, fightStartedAt, trigger, heroClicksThisFight } = get();
     if (!currentEncounter || fightStartedAt === null) return;
     const BOOST_MS = 400;
-    set({ fightStartedAt: fightStartedAt - BOOST_MS });
+    const CLICK_PITY_CAP_PER_FIGHT = 3;
+    const nextHeroClicksThisFight = heroClicksThisFight + 1;
+    const nextTrigger = heroClicksThisFight < CLICK_PITY_CAP_PER_FIGHT ? bumpPityFromClick(trigger) : trigger;
+    set({
+      fightStartedAt: fightStartedAt - BOOST_MS,
+      heroClicksThisFight: nextHeroClicksThisFight,
+      trigger: nextTrigger,
+    });
   },
 
   // 主職換成跟目前副職一樣的話,副職自動清空(不能兩職都選同一個);
