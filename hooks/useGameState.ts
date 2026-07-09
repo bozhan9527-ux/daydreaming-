@@ -52,6 +52,15 @@ import {
   UnlockedItemIds,
 } from '../game/equipment';
 import { rollCoinWindfall } from '../game/currency';
+import {
+  canClaimDailyQuest,
+  DAILY_LOGIN_COIN_BONUS,
+  DAILY_LOGIN_EXP_BONUS,
+  DAILY_QUEST_COIN_REWARD,
+  DAILY_QUEST_ENHANCE_STONE_REWARD,
+  isNewDay,
+  todayDateString,
+} from '../game/daily';
 import { getRandomEvent, GameEvent } from '../game/events';
 import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
 import {
@@ -82,10 +91,8 @@ import {
   StageProgress,
 } from '../game/stages';
 import { bumpPityFromClick, createInitialTriggerState, TriggerState } from '../game/trigger';
-import { JobSelection, loadSave, writeSave } from '../lib/storage';
+import { JobSelection, loadSave, SCHEMA_VERSION, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
-
-const SAVE_SCHEMA_VERSION = 15;
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
@@ -173,6 +180,11 @@ interface GameState {
   enhanceStones: number;
   gemCounts: GemCounts;
   stageProgress: StageProgress;
+  // 每日內容:見 game/daily.ts。lastDailyLoginBonus 不存檔,只給 UI 顯示一次性登入獎勵彈窗用。
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  lastDailyLoginBonus: { coins: number; exp: number } | null;
   lastEnhanceOutcome: string | null;
   lastOfflineGain: number;
   lastOfflineKills: number;
@@ -214,6 +226,7 @@ interface GameState {
   purchaseGem: (gemType: GemType) => void;
   socketGem: (itemId: string, socketIndex: number, gemType: GemType) => void;
   unsocketGem: (itemId: string, socketIndex: number) => void;
+  claimDailyQuest: () => void;
 }
 
 type PersistableState = Pick<
@@ -233,11 +246,14 @@ type PersistableState = Pick<
   | 'enhanceStones'
   | 'gemCounts'
   | 'stageProgress'
+  | 'lastDailyResetAt'
+  | 'dailyKillCount'
+  | 'dailyQuestClaimed'
 >;
 
 function persist(state: PersistableState): void {
   writeSave({
-    version: SAVE_SCHEMA_VERSION,
+    version: SCHEMA_VERSION,
     level: state.level,
     trigger: state.trigger,
     job: state.job,
@@ -253,6 +269,9 @@ function persist(state: PersistableState): void {
     enhanceStones: state.enhanceStones,
     gemCounts: state.gemCounts,
     stageProgress: state.stageProgress,
+    lastDailyResetAt: state.lastDailyResetAt,
+    dailyKillCount: state.dailyKillCount,
+    dailyQuestClaimed: state.dailyQuestClaimed,
     lastActiveAt: Date.now(),
   });
 }
@@ -274,6 +293,10 @@ export const useGameState = create<GameState>((set, get) => ({
   enhanceStones: 0,
   gemCounts: createEmptyGemCounts(),
   stageProgress: createInitialStageProgress(),
+  lastDailyResetAt: '',
+  dailyKillCount: 0,
+  dailyQuestClaimed: false,
+  lastDailyLoginBonus: null,
   lastEnhanceOutcome: null,
   lastOfflineGain: 0,
   lastOfflineKills: 0,
@@ -313,12 +336,17 @@ export const useGameState = create<GameState>((set, get) => ({
       save.skillTree
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
-    const level = accumulateExp(save.level, gainedExp);
+
+    // 每日內容:跨日(用UTC日期字串比對)才重置每日任務進度+領一次登入獎勵,固定小額,
+    // 不隨等級縮放,是「歡迎回來」的心意,不會變成新的主要收入來源。
+    const newDay = isNewDay(save.lastDailyResetAt);
+    const dailyLoginBonus = newDay ? { coins: DAILY_LOGIN_COIN_BONUS, exp: DAILY_LOGIN_EXP_BONUS } : null;
+    const level = accumulateExp(save.level, gainedExp + (dailyLoginBonus?.exp ?? 0));
 
     // 背景/關閉期間沒有畫面可以真的打怪,離線期間用平均戰鬥時長反推大概擊敗幾隻、賺多少金幣
     // (風味數字,經驗值仍然是上面 calcOfflineExp 那套沒變的公式在算),跟前景同一套裝備/寵物加成。
     const offlineBattle = estimateOfflineBattleResult(elapsedMs, speedMultiplier, coinMultiplier);
-    const coins = save.coins + offlineBattle.coins;
+    const coins = save.coins + offlineBattle.coins + (dailyLoginBonus?.coins ?? 0);
 
     set({
       level,
@@ -336,6 +364,10 @@ export const useGameState = create<GameState>((set, get) => ({
       enhanceStones: save.enhanceStones,
       gemCounts: save.gemCounts,
       stageProgress: save.stageProgress,
+      lastDailyResetAt: newDay ? todayDateString() : save.lastDailyResetAt,
+      dailyKillCount: newDay ? 0 : save.dailyKillCount,
+      dailyQuestClaimed: newDay ? false : save.dailyQuestClaimed,
+      lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,
       lastOfflineKills: offlineBattle.kills,
@@ -520,6 +552,7 @@ export const useGameState = create<GameState>((set, get) => ({
       itemInstances: nextItemInstances,
       stageProgress: nextStageProgress,
       killCount: state.killCount + 1,
+      dailyKillCount: state.dailyKillCount + 1,
       lastEvent: event,
       lastCompanionDropId,
       lastEquipmentDropId,
@@ -792,6 +825,18 @@ export const useGameState = create<GameState>((set, get) => ({
   unequipCompanionSlot: (kind) => {
     const { companions } = get();
     set({ companions: unequipCompanion(companions, kind) });
+    persist(get());
+  },
+
+  // 每日任務:今日擊敗數達標且還沒領過才會發獎勵,隔天(見load())dailyQuestClaimed會自動重置。
+  claimDailyQuest: () => {
+    const { dailyKillCount, dailyQuestClaimed, coins, enhanceStones } = get();
+    if (!canClaimDailyQuest(dailyKillCount, dailyQuestClaimed)) return;
+    set({
+      coins: coins + DAILY_QUEST_COIN_REWARD,
+      enhanceStones: enhanceStones + DAILY_QUEST_ENHANCE_STONE_REWARD,
+      dailyQuestClaimed: true,
+    });
     persist(get());
   },
 }));

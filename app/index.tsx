@@ -11,6 +11,7 @@ import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
 import { getCompanionById } from '../game/companions';
+import { canClaimDailyQuest, DAILY_QUEST_KILL_TARGET } from '../game/daily';
 import { getItemById } from '../game/equipment';
 import { canLevelUp, expToNext, levelsAvailable, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
@@ -37,11 +38,16 @@ export default function HomeScreen() {
   const lastCompanionDropId = useGameState((state) => state.lastCompanionDropId);
   const lastEquipmentDropId = useGameState((state) => state.lastEquipmentDropId);
   const lastCoinWindfall = useGameState((state) => state.lastCoinWindfall);
+  const lastDailyLoginBonus = useGameState((state) => state.lastDailyLoginBonus);
+  const dailyKillCount = useGameState((state) => state.dailyKillCount);
+  const dailyQuestClaimed = useGameState((state) => state.dailyQuestClaimed);
+  const claimDailyQuest = useGameState((state) => state.claimDailyQuest);
 
   const [openTabId, setOpenTabId] = useState<string | null>(null);
   const openTab = PANEL_TABS.find((tab) => tab.id === openTabId) ?? null;
   // 離線收益改成彈出視窗,關掉之後這次 session 就不再自動彈出(下次 load()重新設定 lastOfflineKills 時才會再跳)。
   const [offlineModalDismissed, setOfflineModalDismissed] = useState(false);
+  const [dailyBonusModalDismissed, setDailyBonusModalDismissed] = useState(false);
 
   useBattleLoop();
 
@@ -59,6 +65,8 @@ export default function HomeScreen() {
   const canLevel = !isMaxLevel && canLevelUp(level);
   const availableLevels = isMaxLevel ? 0 : levelsAvailable(level);
   const showOfflineModal = lastOfflineKills > 0 && !offlineModalDismissed;
+  const showDailyBonusModal = lastDailyLoginBonus !== null && !dailyBonusModalDismissed;
+  const canClaimQuest = canClaimDailyQuest(dailyKillCount, dailyQuestClaimed);
   const equipmentDropItem = lastEquipmentDropId ? getItemById(lastEquipmentDropId) : undefined;
 
   // 三種掉落通知(裝備/寵物/金幣)同一時間最多只顯示一則,固定高度的區塊,
@@ -125,6 +133,22 @@ export default function HomeScreen() {
 
         <ResourceBar />
 
+        {/* 每日任務:輕量的一行進度+領取按鈕,不開新分頁、不加彈窗,達標前只是安靜顯示進度。 */}
+        <View style={styles.dailyQuestRow}>
+          <Text style={styles.dailyQuestText}>
+            {dailyQuestClaimed ? '今日任務已領取' : `今日任務:擊敗怪物 ${Math.min(dailyKillCount, DAILY_QUEST_KILL_TARGET)}/${DAILY_QUEST_KILL_TARGET}`}
+          </Text>
+          {!dailyQuestClaimed && (
+            <Pressable
+              style={[styles.dailyQuestButton, !canClaimQuest && styles.dailyQuestButtonDisabled]}
+              onPress={() => claimDailyQuest()}
+              disabled={!canClaimQuest}
+            >
+              <Text style={styles.dailyQuestButtonLabel}>領取</Text>
+            </Pressable>
+          )}
+        </View>
+
         <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
       </MainVisual>
 
@@ -139,6 +163,21 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.offlineModalText}>
             離線期間擊敗了 {lastOfflineKills} 隻怪,{'\n'}獲得 {lastOfflineGain} 經驗、{lastOfflineCoins} 金幣
+          </Text>
+        </View>
+      </Modal>
+
+      <Modal visible={showDailyBonusModal} animationType="fade" transparent onRequestClose={() => setDailyBonusModalDismissed(true)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setDailyBonusModalDismissed(true)} />
+        <View style={styles.offlineModalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>每日登入獎勵</Text>
+            <Pressable style={styles.modalCloseButton} onPress={() => setDailyBonusModalDismissed(true)}>
+              <Text style={styles.modalCloseLabel}>✕</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.offlineModalText}>
+            歡迎回來!獲得 {lastDailyLoginBonus?.exp} 經驗、{lastDailyLoginBonus?.coins} 金幣
           </Text>
         </View>
       </Modal>
@@ -252,6 +291,36 @@ const styles = StyleSheet.create({
   },
   levelUpLabel: {
     color: '#f2f2f2',
+  },
+  dailyQuestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    maxWidth: 320,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
+  dailyQuestText: {
+    color: '#c9c9d2',
+    fontSize: 11,
+  },
+  dailyQuestButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#c9a94f',
+  },
+  dailyQuestButtonDisabled: {
+    opacity: 0.35,
+  },
+  dailyQuestButtonLabel: {
+    color: '#17171f',
+    fontSize: 11,
+    fontWeight: '600',
   },
   modalBackdrop: {
     flex: 1,

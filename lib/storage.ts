@@ -25,7 +25,7 @@ import { createInitialStageProgress, StageProgress } from '../game/stages';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -62,6 +62,11 @@ export interface SaveData {
   enhanceStones: number;
   gemCounts: GemCounts;
   stageProgress: StageProgress;
+  // 每日內容:上次重置的日期字串(''=從沒重置過,下次load()一定會觸發),今日已擊敗隻數,
+  // 今日任務是否已領過獎勵——三個欄位一起在跨日時歸零(見 hooks/useGameState.ts 的 load())。
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
   lastActiveAt: number;
 }
 
@@ -83,6 +88,9 @@ export function createInitialSaveData(): SaveData {
     enhanceStones: 0,
     gemCounts: createEmptyGemCounts(),
     stageProgress: createInitialStageProgress(),
+    lastDailyResetAt: '',
+    dailyKillCount: 0,
+    dailyQuestClaimed: false,
     lastActiveAt: Date.now(),
   };
 }
@@ -615,11 +623,31 @@ function isSaveDataV14(value: unknown): value is SaveDataV14 {
   );
 }
 
-function isSaveDataV15(value: unknown): value is SaveData {
+interface SaveDataV15 {
+  version: 15;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  stageProgress: StageProgress;
+  lastActiveAt: number;
+}
+
+function isSaveDataV15(value: unknown): value is SaveDataV15 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 15 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -639,6 +667,33 @@ function isSaveDataV15(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV16(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    isStageProgress(record.stageProgress) &&
+    typeof record.lastDailyResetAt === 'string' &&
+    typeof record.dailyKillCount === 'number' &&
+    typeof record.dailyQuestClaimed === 'boolean'
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
@@ -650,10 +705,35 @@ function isSaveDataV15(value: unknown): value is SaveData {
 // 另外補 enhanceStones=0、gemCounts=0(強化/鑲嵌系統還沒出生);
 // v13 沒有 stageProgress,補第 1 關第 1 小關(關卡系統還沒出生前這本來就是唯一合法起始值);
 // v14 的 skills 是「每職業一個等級」的舊形狀,跟新版「每職業 6 個技能欄位(2被動+4主動)」對不上,
-// 一律重置成 createInitialSkillTreeLevels()(技能點數重來,職業/裝備/等級等其餘進度不受影響)。
+// 一律重置成 createInitialSkillTreeLevels()(技能點數重來,職業/裝備/等級等其餘進度不受影響);
+// v15 沒有每日內容欄位,補空字串日期(下次 load() 會自然觸發第一次每日重置+登入獎勵)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV15(value)) return value;
+  if (isSaveDataV16(value)) return value;
+  if (isSaveDataV15(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: value.equipment,
+      bodyType: value.bodyType,
+      skillTree: value.skillTree,
+      gender: value.gender,
+      coins: value.coins,
+      unlockedItemIds: value.unlockedItemIds,
+      companions: value.companions,
+      secondaryJob: value.secondaryJob,
+      itemInstances: value.itemInstances,
+      enhanceStones: value.enhanceStones,
+      gemCounts: value.gemCounts,
+      stageProgress: value.stageProgress,
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV14(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -672,6 +752,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: value.enhanceStones,
       gemCounts: value.gemCounts,
       stageProgress: value.stageProgress,
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -693,6 +776,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: value.enhanceStones,
       gemCounts: value.gemCounts,
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -714,6 +800,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -735,6 +824,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -756,6 +848,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -777,6 +872,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -798,6 +896,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -819,6 +920,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -840,6 +944,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -861,6 +968,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -882,6 +992,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -903,6 +1016,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -924,6 +1040,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -945,6 +1064,9 @@ function migrate(value: unknown): SaveData {
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
       stageProgress: createInitialStageProgress(),
+      lastDailyResetAt: '',
+      dailyKillCount: 0,
+      dailyQuestClaimed: false,
       lastActiveAt: value.lastActiveAt,
     };
   }
