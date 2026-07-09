@@ -800,3 +800,77 @@ export function getEquipmentBonusTotals(loadout: EquipmentLoadout): EquipmentBon
   }
   return totals;
 }
+
+// ---- 隨機素質 / 隱藏素質 ----
+// 每件裝備第一次裝備時額外擲兩條這個池子裡的素質:一條「隨機素質」立即生效,一條「隱藏素質」
+// 要花錢鑑定過才會生效,鑑定前數值未知。跟主加成(exp/coins/speed)是完全獨立的維度,
+// critRate 影響戰鬥擊殺獎勵翻倍機率,resistance 留給強化系統用來降低失敗率。
+export type SubstatType = 'critRate' | 'resistance';
+
+export interface Substat {
+  type: SubstatType;
+  value: number;
+}
+
+export interface ItemInstanceData {
+  randomSubstat: Substat;
+  hiddenSubstat: Substat;
+  identified: boolean;
+}
+
+const SUBSTAT_TYPES: SubstatType[] = ['critRate', 'resistance'];
+const SUBSTAT_MAGNITUDE = 0.6; // 副素質整體比主加成弱一截,不會喧賓奪主
+const SUBSTAT_VARIANCE_MIN = 0.7;
+const SUBSTAT_VARIANCE_RANGE = 0.6; // 實際擲出 0.7~1.3 倍的隨機區間
+
+function rollSubstat(bracket: number, rng: () => number): Substat {
+  const type = SUBSTAT_TYPES[Math.floor(rng() * SUBSTAT_TYPES.length)];
+  const base = bracketBonusValue(bracket) * SUBSTAT_MAGNITUDE;
+  const variance = SUBSTAT_VARIANCE_MIN + rng() * SUBSTAT_VARIANCE_RANGE;
+  const value = Math.round(base * variance * 1000) / 1000;
+  return { type, value };
+}
+
+// 第一次裝備某款裝備時呼叫一次,擲出這件的隨機/隱藏素質並固定下來,之後不會再重擲。
+export function rollItemInstance(item: EquipmentItem, rng: () => number = Math.random): ItemInstanceData {
+  const bracket = item.requiredLevel !== undefined ? Math.max(1, Math.round(item.requiredLevel / LEVELS_PER_BRACKET)) : 1;
+  return {
+    randomSubstat: rollSubstat(bracket, rng),
+    hiddenSubstat: rollSubstat(bracket, rng),
+    identified: false,
+  };
+}
+
+export type ItemInstances = Record<string, ItemInstanceData>;
+
+export function createEmptyItemInstances(): ItemInstances {
+  return {};
+}
+
+export interface SubstatTotals {
+  critRate: number;
+  resistance: number;
+}
+
+// 只算目前已裝備的項目;隱藏素質要鑑定過(identified)才計入。
+export function getSubstatTotals(loadout: EquipmentLoadout, instances: ItemInstances): SubstatTotals {
+  const totals: SubstatTotals = { critRate: 0, resistance: 0 };
+  for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
+    const itemId = loadout[slot];
+    if (!itemId) continue;
+    const instance = instances[itemId];
+    if (!instance) continue;
+    totals[instance.randomSubstat.type] += instance.randomSubstat.value;
+    if (instance.identified) {
+      totals[instance.hiddenSubstat.type] += instance.hiddenSubstat.value;
+    }
+  }
+  return totals;
+}
+
+const IDENTIFY_COST_MULTIPLIER = 0.5;
+
+// 鑑定花費跟這件裝備的原價掛勾,越貴的裝備鑑定費越高。
+export function getIdentifyCost(item: EquipmentItem): number {
+  return Math.max(1, Math.round(item.price * IDENTIFY_COST_MULTIPLIER));
+}

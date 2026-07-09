@@ -4,11 +4,13 @@ import { Archetype, JobBranch } from '../game/combat';
 import { CompanionState, createEmptyCompanionState } from '../game/companions';
 import {
   applyGenderDefault,
+  createEmptyItemInstances,
   createEmptyLoadout,
   createEmptyUnlockedItems,
   EquipmentLoadout,
   Gender,
   getGenderUnlockItems,
+  ItemInstances,
   UnlockedItemIds,
   unlockItem,
 } from '../game/equipment';
@@ -18,7 +20,7 @@ import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -51,6 +53,7 @@ export interface SaveData {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
   lastActiveAt: number;
 }
 
@@ -68,6 +71,7 @@ export function createInitialSaveData(): SaveData {
     unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
     companions: createEmptyCompanionState(),
     secondaryJob: null,
+    itemInstances: createEmptyItemInstances(),
     lastActiveAt: Date.now(),
   };
 }
@@ -381,7 +385,23 @@ function isSaveDataV10(value: unknown): value is SaveDataV10 {
   );
 }
 
-function isSaveDataV11(value: unknown): value is SaveData {
+interface SaveDataV11 {
+  version: 11;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skills: SkillLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  lastActiveAt: number;
+}
+
+function isSaveDataV11(value: unknown): value is SaveDataV11 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -401,15 +421,72 @@ function isSaveDataV11(value: unknown): value is SaveData {
   );
 }
 
+function isSubstat(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (record.type === 'critRate' || record.type === 'resistance') && typeof record.value === 'number';
+}
+
+function isItemInstanceData(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return isSubstat(record.randomSubstat) && isSubstat(record.hiddenSubstat) && typeof record.identified === 'boolean';
+}
+
+function isItemInstances(value: unknown): value is ItemInstances {
+  if (typeof value !== 'object' || value === null) return false;
+  return Object.values(value as Record<string, unknown>).every(isItemInstanceData);
+}
+
+function isSaveDataV12(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 12 &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillLevels(record.skills) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances)
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
 // v8 的 skills 是舊版 5 通用技能形狀,跟新版 6 職業主動技能對不上,一律重置成 createInitialSkillLevels();
 // v9 沒有 companions,補空的審物/坐騎狀態(沒解鎖、沒裝備);
-// v10 沒有 secondaryJob,補 null(尚未解鎖雙職兼修前這本來就是唯一合法值)。
+// v10 沒有 secondaryJob,補 null(尚未解鎖雙職兼修前這本來就是唯一合法值);
+// v11 沒有 itemInstances,補空物件(舊裝備要等玩家重新裝備一次才會補上隨機/隱藏素質)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV11(value)) return value;
+  if (isSaveDataV12(value)) return value;
+  if (isSaveDataV11(value)) {
+    return {
+      version: SCHEMA_VERSION,
+      level: value.level,
+      trigger: value.trigger,
+      job: value.job,
+      equipment: value.equipment,
+      bodyType: value.bodyType,
+      skills: value.skills,
+      gender: value.gender,
+      coins: value.coins,
+      unlockedItemIds: value.unlockedItemIds,
+      companions: value.companions,
+      secondaryJob: value.secondaryJob,
+      itemInstances: createEmptyItemInstances(),
+      lastActiveAt: value.lastActiveAt,
+    };
+  }
   if (isSaveDataV10(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -424,6 +501,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: value.unlockedItemIds,
       companions: value.companions,
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -441,6 +519,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: value.unlockedItemIds,
       companions: createEmptyCompanionState(),
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -458,6 +537,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: value.unlockedItemIds,
       companions: createEmptyCompanionState(),
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -475,6 +555,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: unlockedItemsForGender(value.gender),
       companions: createEmptyCompanionState(),
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -492,6 +573,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       companions: createEmptyCompanionState(),
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -509,6 +591,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       companions: createEmptyCompanionState(),
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -526,6 +609,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       companions: createEmptyCompanionState(),
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -543,6 +627,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       companions: createEmptyCompanionState(),
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -560,6 +645,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       companions: createEmptyCompanionState(),
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -577,6 +663,7 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
       companions: createEmptyCompanionState(),
       secondaryJob: null,
+      itemInstances: createEmptyItemInstances(),
       lastActiveAt: value.lastActiveAt,
     };
   }

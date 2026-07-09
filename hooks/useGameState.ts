@@ -17,6 +17,7 @@ import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDua
 import {
   applyGenderDefault,
   canEquipItem,
+  createEmptyItemInstances,
   createEmptyLoadout,
   createEmptyUnlockedItems,
   equipItem,
@@ -25,8 +26,12 @@ import {
   Gender,
   getEquipmentBonusTotals,
   getGenderUnlockItems,
+  getIdentifyCost,
   getItemById,
+  getSubstatTotals,
   isItemUnlocked,
+  ItemInstances,
+  rollItemInstance,
   unequipSlot,
   unlockItem,
   EquipmentSlot,
@@ -51,7 +56,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { JobSelection, loadSave, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 
-const SAVE_SCHEMA_VERSION = 11;
+const SAVE_SCHEMA_VERSION = 12;
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
@@ -96,6 +101,20 @@ function computeRewardMultipliers(
   };
 }
 
+// 某件裝備第一次被玩家擁有(購買/裝備)時才擲隨機/隱藏素質,擲過就固定下來,不會重擲。
+function ensureItemInstance(itemId: string, instances: ItemInstances): ItemInstances {
+  if (instances[itemId]) return instances;
+  const item = getItemById(itemId);
+  if (!item) return instances;
+  return { ...instances, [itemId]: rollItemInstance(item) };
+}
+
+// 存檔遷移到 v12 之前就已經擁有的裝備(不論免費起始款或已解鎖付費款)在這裡補齊素質,
+// 不用等玩家重新裝備一次才生效。
+function backfillItemInstances(itemIds: string[], instances: ItemInstances): ItemInstances {
+  return itemIds.reduce((acc, id) => ensureItemInstance(id, acc), instances);
+}
+
 interface GameState {
   isLoaded: boolean;
   level: LevelState;
@@ -109,6 +128,7 @@ interface GameState {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
   lastOfflineGain: number;
   lastOfflineKills: number;
   lastOfflineCoins: number;
@@ -135,6 +155,7 @@ interface GameState {
   setGender: (gender: Gender) => void;
   purchaseCompanion: (id: string) => void;
   unequipCompanionSlot: (kind: CompanionKind) => void;
+  identifyItem: (itemId: string) => void;
 }
 
 type PersistableState = Pick<
@@ -150,6 +171,7 @@ type PersistableState = Pick<
   | 'unlockedItemIds'
   | 'companions'
   | 'secondaryJob'
+  | 'itemInstances'
 >;
 
 function persist(state: PersistableState): void {
@@ -166,6 +188,7 @@ function persist(state: PersistableState): void {
     unlockedItemIds: state.unlockedItemIds,
     companions: state.companions,
     secondaryJob: state.secondaryJob,
+    itemInstances: state.itemInstances,
     lastActiveAt: Date.now(),
   });
 }
@@ -183,6 +206,7 @@ export const useGameState = create<GameState>((set, get) => ({
   unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
   companions: createEmptyCompanionState(),
   secondaryJob: null,
+  itemInstances: createEmptyItemInstances(),
   lastOfflineGain: 0,
   lastOfflineKills: 0,
   lastOfflineCoins: 0,
@@ -215,6 +239,11 @@ export const useGameState = create<GameState>((set, get) => ({
     const offlineBattle = estimateOfflineBattleResult(elapsedMs, speedMultiplier, coinMultiplier);
     const coins = save.coins + offlineBattle.coins;
 
+    // 補齊舊存檔(v11 以前)已經擁有的裝備(含免費起始款,免費款不會出現在 unlockedItemIds 裡)
+    // 的隨機/隱藏素質,不用等玩家重新裝備一次才生效。
+    const ownedItemIds = [...save.unlockedItemIds, ...Object.values(save.equipment).filter((id): id is string => !!id)];
+    const itemInstances = backfillItemInstances(ownedItemIds, save.itemInstances);
+
     set({
       level,
       trigger: save.trigger,
@@ -227,6 +256,7 @@ export const useGameState = create<GameState>((set, get) => ({
       unlockedItemIds: save.unlockedItemIds,
       companions: save.companions,
       secondaryJob: save.secondaryJob,
+      itemInstances,
       isLoaded: true,
       lastOfflineGain: gainedExp,
       lastOfflineKills: offlineBattle.kills,
@@ -336,6 +366,13 @@ export const useGameState = create<GameState>((set, get) => ({
       }
     }
 
+    // 裝備隨機/隱藏素質的爆擊率:獨立於技能觸發之外的機率,額外翻倍這次擊殺獎勵。
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    if (Math.random() < substatTotals.critRate) {
+      exp *= 2;
+      coins *= 2;
+    }
+
     // 寵物/坐騎額外掉落:跟主要稀有度事件的保底機制完全獨立判定,多數時候不會掉落。
     const companionDrop = rollCompanionDrop();
     let nextCompanions = state.companions;
@@ -399,11 +436,11 @@ export const useGameState = create<GameState>((set, get) => ({
   },
 
   equip: (itemId) => {
-    const { equipment, unlockedItemIds, job, level } = get();
+    const { equipment, unlockedItemIds, job, level, itemInstances } = get();
     const item = getItemById(itemId);
     if (!item || !canEquipItem(item, job.archetype, level.level)) return;
     if (!isItemUnlocked(unlockedItemIds, itemId)) return;
-    set({ equipment: equipItem(equipment, itemId) });
+    set({ equipment: equipItem(equipment, itemId), itemInstances: ensureItemInstance(itemId, itemInstances) });
     persist(get());
   },
 
@@ -415,14 +452,15 @@ export const useGameState = create<GameState>((set, get) => ({
 
   // 未解鎖的裝備第一次點擊會先扣貨幣解鎖並直接穿上;貨幣不夠就靜默不做事(跟技能升級一致)。
   // 職業鎖裝/等級不足一律靜默擋下,UI 本身也只會列出目前職業+已達等級的款式。
+  // 第一次真的擁有(不管免費還是花錢)這件裝備時順便擲隨機/隱藏素質,之後固定不變。
   purchaseItem: (itemId) => {
-    const { equipment, coins, unlockedItemIds, job, level } = get();
+    const { equipment, coins, unlockedItemIds, job, level, itemInstances } = get();
     const item = getItemById(itemId);
     if (!item) return;
     if (!canEquipItem(item, job.archetype, level.level)) return;
 
     if (isItemUnlocked(unlockedItemIds, itemId)) {
-      set({ equipment: equipItem(equipment, itemId) });
+      set({ equipment: equipItem(equipment, itemId), itemInstances: ensureItemInstance(itemId, itemInstances) });
       persist(get());
       return;
     }
@@ -433,6 +471,23 @@ export const useGameState = create<GameState>((set, get) => ({
       coins: coins - item.price,
       unlockedItemIds: unlockItem(unlockedItemIds, itemId),
       equipment: equipItem(equipment, itemId),
+      itemInstances: ensureItemInstance(itemId, itemInstances),
+    });
+    persist(get());
+  },
+
+  // 花錢鑑定隱藏素質,鑑定過就永久生效;裝備不存在/沒有素質資料/金幣不夠就靜默不做事。
+  identifyItem: (itemId) => {
+    const { coins, itemInstances } = get();
+    const item = getItemById(itemId);
+    const instance = itemInstances[itemId];
+    if (!item || !instance || instance.identified) return;
+    const cost = getIdentifyCost(item);
+    if (coins < cost) return;
+
+    set({
+      coins: coins - cost,
+      itemInstances: { ...itemInstances, [itemId]: { ...instance, identified: true } },
     });
     persist(get());
   },
