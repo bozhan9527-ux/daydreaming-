@@ -1,5 +1,10 @@
 // 怪物像素美術,跟 heroSilhouette.ts 同一套「半寬參數 + 中心對稱」產生手法,
 // 差別是每種怪物的半寬序列(rows)手工設計,做出不同輪廓,而不是共用同一套身體。
+// 配合勇者本體密度提升,getMonsterFrame 輸出時整張放大3倍,形狀本身不重新設計。
+import { upscaleFrame } from './spriteScale';
+
+const SCALE = 3;
+
 export interface MonsterRowSpec {
   halfWidth: number;
   fill: string;
@@ -308,10 +313,11 @@ const CUSTOM_MONSTER_FRAMES: Record<string, MonsterFrameData> = {
 
 export function getMonsterFrame(id: string): MonsterFrameData {
   const custom = CUSTOM_MONSTER_FRAMES[id];
-  if (custom) return custom;
+  if (custom) return { frame: upscaleFrame(custom.frame, SCALE), palette: custom.palette };
   const spec = MONSTER_VISUALS[id];
   if (!spec) throw new Error(`No monster visual defined for id: ${id}`);
-  return buildMonsterFrame(spec);
+  const built = buildMonsterFrame(spec);
+  return { frame: upscaleFrame(built.frame, SCALE), palette: built.palette };
 }
 
 export function hasMonsterVisual(id: string): boolean {

@@ -1,8 +1,12 @@
 // 寵物/坐騎像素美術:跟怪物不同,這裡每種(pet/mount)共用同一個剪影,
 // 稀有度只影響尺寸(越稀有越大隻)和顏色(沿用事件圖示的稀有度色階),不是每隻都畫獨立造型——
 // 8 隻寵物+坐騎全部手工畫獨立剪影的美術成本跟目前架構驗證階段不成比例,先用這個簡化版。
+// 配合勇者本體密度提升,輸出時放大3倍(SCALE),形狀本身不重新設計。
 import { Rarity } from '../trigger';
 import { CompanionKind } from '../companions';
+import { upscaleFrame } from './spriteScale';
+
+const SCALE = 3;
 
 const RARITY_COLOR: Record<Rarity, string> = {
   common: '#8b8698',
@@ -76,5 +80,5 @@ export function getCompanionFrame(kind: CompanionKind, rarity: Rarity): Companio
   const color = RARITY_COLOR[rarity];
   const scale = RARITY_SCALE[rarity];
   const frame = kind === 'pet' ? buildPetFrame(scale, 'F') : buildMountFrame(scale, 'F');
-  return { frame, palette: { K: '#3a3542', F: color } };
+  return { frame: upscaleFrame(frame, SCALE), palette: { K: '#3a3542', F: color } };
 }

@@ -16,10 +16,12 @@ import { PixelSprite } from './PixelSprite';
 // 這裡維持透明,只負責角色/怪物/特效的定位。
 const SCENE_HEIGHT = 130;
 const SCENE_MAX_WIDTH = 320;
-// 勇者本體畫布從 20x24 拉高密度到 64x56(約3倍),pixelSize 對應縮小,
-// 讓角色在戰鬥場景裡的物理尺寸跟拉密度之前差不多,不會把畫面撐爆。
+// 勇者本體畫布從 20x24 拉高密度到 64x56(約3倍),寵物坐騎/怪物的畫布也跟著放大3倍,
+// pixelSize 對應縮小,讓角色/怪物在戰鬥場景裡的物理尺寸跟拉密度之前差不多,不會把畫面撐爆。
+// 特效(attackEffects.ts)沒有跟著拉密度,維持原本 pixelSize={3}。
 const HERO_PIXEL_SIZE = 1.75;
-const MONSTER_PIXEL_SIZE = 4;
+const MONSTER_PIXEL_SIZE = 4 / 3;
+const COMPANION_PIXEL_SIZE = 1;
 const GROUND_PATTERN_WIDTH = 40;
 const GROUND_SCROLL_DURATION = 1400;
 
@@ -78,7 +80,7 @@ export function BattleScene() {
 
       {mount && (
         <View style={styles.mountSlot}>
-          <PixelSprite {...getCompanionFrame('mount', mount.rarity)} pixelSize={3} />
+          <PixelSprite {...getCompanionFrame('mount', mount.rarity)} pixelSize={COMPANION_PIXEL_SIZE} />
         </View>
       )}
 
@@ -88,7 +90,7 @@ export function BattleScene() {
 
       {pet && (
         <View style={styles.petSlot}>
-          <PixelSprite {...getCompanionFrame('pet', pet.rarity)} pixelSize={3} />
+          <PixelSprite {...getCompanionFrame('pet', pet.rarity)} pixelSize={COMPANION_PIXEL_SIZE} />
         </View>
       )}
 
