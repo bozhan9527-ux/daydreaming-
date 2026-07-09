@@ -2,7 +2,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype } from '../game/combat';
 import { canUpgradeSkill, skillUpgradeCoinCost, skillUpgradeCost, SKILL_IDS } from '../game/skills';
+import { getSkillIcon } from '../game/sprites/skillIcons';
 import { useGameState } from '../hooks/useGameState';
+import { PixelSprite } from './PixelSprite';
 
 const SKILL_LABELS: Record<Archetype, string> = {
   physicalMelee: '爆擊一擊',
@@ -29,6 +31,7 @@ export function SkillPanel() {
         const coinCost = skillUpgradeCoinCost(skillLevel);
         const canUpgrade = canUpgradeSkill(skillLevel, bankedExp, coins);
         const isActive = archetype === activeArchetype;
+        const icon = getSkillIcon(archetype);
         return (
           <Pressable
             key={archetype}
@@ -36,12 +39,17 @@ export function SkillPanel() {
             onPress={() => upgradeSkill(archetype)}
             disabled={!canUpgrade}
           >
-            <Text style={styles.label}>
-              {SKILL_LABELS[archetype]} Lv.{skillLevel}
-            </Text>
-            <Text style={styles.cost}>
-              {cost} 經驗 / {coinCost} 金幣
-            </Text>
+            <View style={styles.iconWrap}>
+              <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={2} />
+            </View>
+            <View style={styles.textCol}>
+              <Text style={styles.label}>
+                {SKILL_LABELS[archetype]} Lv.{skillLevel}
+              </Text>
+              <Text style={styles.cost}>
+                {cost} 經驗 / {coinCost} 金幣
+              </Text>
+            </View>
           </Pressable>
         );
       })}
@@ -63,7 +71,8 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 6,
@@ -71,6 +80,17 @@ const styles = StyleSheet.create({
   },
   rowActive: {
     backgroundColor: '#4a4456',
+  },
+  iconWrap: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textCol: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   label: {
     color: '#f2f2f2',
