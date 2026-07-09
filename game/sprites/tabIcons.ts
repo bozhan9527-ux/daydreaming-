@@ -1,6 +1,6 @@
 // 分頁導覽用的小圖示,跟 game/sprites/eventIcons.ts 同一套「純程式產生像素格」原則。
 // 新增分頁時只要在這裡多加一個 icon frame + 對應的 TabIconId,不用動 UI 元件本身。
-export type TabIconId = 'job' | 'equipment' | 'skill' | 'companion' | 'enhance' | 'socket';
+export type TabIconId = 'job' | 'equipment' | 'skill' | 'companion' | 'enhance' | 'socket' | 'codex';
 
 const ICON_COLOR = '#f2f2f2';
 
@@ -96,6 +96,22 @@ const SOCKET_ICON_FRAME = [
   '............',
 ];
 
+// 圖鑑:書本造型,中央一條書脊線。
+const CODEX_ICON_FRAME = [
+  '............',
+  '.XXXXXXXXXX.',
+  '.X........X.',
+  '.X...XX...X.',
+  '.X...XX...X.',
+  '.X...XX...X.',
+  '.X...XX...X.',
+  '.X...XX...X.',
+  '.X...XX...X.',
+  '.X........X.',
+  '.XXXXXXXXXX.',
+  '............',
+];
+
 const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   job: JOB_ICON_FRAME,
   equipment: EQUIPMENT_ICON_FRAME,
@@ -103,6 +119,7 @@ const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   companion: COMPANION_ICON_FRAME,
   enhance: ENHANCE_ICON_FRAME,
   socket: SOCKET_ICON_FRAME,
+  codex: CODEX_ICON_FRAME,
 };
 
 export interface TabIconData {

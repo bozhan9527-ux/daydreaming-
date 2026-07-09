@@ -3,6 +3,7 @@ import { ComponentType } from 'react';
 import { TabIconId } from '../game/sprites/tabIcons';
 import { CompanionPanel } from './CompanionPanel';
 import { EnhancementPanel } from './EnhancementPanel';
+import { EquipmentCodexPanel } from './EquipmentCodexPanel';
 import { EquipmentPanel } from './EquipmentPanel';
 import { JobSelector } from './JobSelector';
 import { SkillPanel } from './SkillPanel';
@@ -24,4 +25,5 @@ export const PANEL_TABS: PanelTab[] = [
   { id: 'companion', label: '寵物坐騎', icon: 'companion', Component: CompanionPanel },
   { id: 'enhance', label: '強化', icon: 'enhance', Component: EnhancementPanel },
   { id: 'socket', label: '鑲嵌', icon: 'socket', Component: SocketPanel },
+  { id: 'codex', label: '圖鑑', icon: 'codex', Component: EquipmentCodexPanel },
 ];

@@ -9,22 +9,36 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { EquipmentLoadout, getEquippedOverlays } from '../game/equipment';
+import { EquipmentLoadout, EquipmentSlot, getEquippedOverlays, SLOT_ANCHORS } from '../game/equipment';
 import { BodyType, buildHeroFrames, HERO_PALETTE } from '../game/sprites/heroSilhouette';
 import { getWeaponFrame } from '../game/sprites/weapons';
 import { playClick } from '../lib/sounds';
 import { PixelSprite } from './PixelSprite';
+
+const ALL_SLOTS: EquipmentSlot[] = ['back', 'bottom', 'top', 'belt', 'headwear', 'face', 'gloves', 'offhand', 'mainhand'];
 
 interface HeroSpriteProps {
   bodyType?: BodyType;
   equipment?: EquipmentLoadout;
   pixelSize?: number;
   onPress?: () => void;
+  // 裝備圖鑑用:在空插槽的位置畫虛線框,讓玩家看得出「這個位置可以裝什麼」,跟一般戰鬥場景無關。
+  showEmptySlotHints?: boolean;
 }
 
-export function HeroSprite({ bodyType = 'normal', equipment, pixelSize = 6, onPress }: HeroSpriteProps) {
+export function HeroSprite({
+  bodyType = 'normal',
+  equipment,
+  pixelSize = 6,
+  onPress,
+  showEmptySlotHints = false,
+}: HeroSpriteProps) {
   const frames = useMemo(() => buildHeroFrames(bodyType), [bodyType]);
   const overlays = useMemo(() => getEquippedOverlays(equipment ?? {}), [equipment]);
+  const emptySlots = useMemo(
+    () => (showEmptySlotHints ? ALL_SLOTS.filter((slot) => !equipment?.[slot]) : []),
+    [showEmptySlotHints, equipment]
+  );
   const [blinking, setBlinking] = useState(false);
 
   useEffect(() => {
@@ -98,6 +112,23 @@ export function HeroSprite({ bodyType = 'normal', equipment, pixelSize = 6, onPr
               />
             );
           })}
+          {emptySlots.flatMap((slot) =>
+            SLOT_ANCHORS[slot].map((rect, index) => (
+              <View
+                key={`${slot}-${index}`}
+                style={{
+                  position: 'absolute' as const,
+                  left: rect.x * pixelSize,
+                  top: rect.y * pixelSize,
+                  width: rect.w * pixelSize,
+                  height: rect.h * pixelSize,
+                  borderWidth: 1,
+                  borderStyle: 'dashed' as const,
+                  borderColor: '#9a94b8',
+                }}
+              />
+            ))
+          )}
         </View>
       </Animated.View>
     </Pressable>
