@@ -380,7 +380,7 @@ export const useGameState = create<GameState>((set, get) => ({
     persist(get());
   },
 
-  // Lv250(3 階)解鎖雙職兼修,副職不能跟主職同一個archetype;傳 null 可以清空副職。
+  // 3 階解鎖雙職兼修,副職不能跟主職同一個archetype;傳 null 可以清空副職。
   setSecondaryJob: (archetype) => {
     const { job, level } = get();
     if (archetype !== null) {

@@ -20,7 +20,7 @@ const ARCHETYPE_COMPOSITION: Record<Archetype, { subtype: Subtype; damageType: D
   magicSupport: { subtype: 'support', damageType: 'magic' },
 };
 
-// 5 階轉職的基準倍率,解鎖等級對齊 game/leveling.ts 的分段點(Lv1/120/250/360/450)。
+// 5 階轉職的基準倍率。
 // 6 條路線在滿階(5 階)時完全一致,路線差異只影響 1~4 階的節奏。
 const BASE_MULTIPLIER: Record<JobTier, number> = { 1: 1.0, 2: 1.1, 3: 1.2, 4: 1.35, 5: 1.5 };
 
@@ -37,14 +37,14 @@ const DAMAGE_TYPE_BONUS: Record<DamageType, Record<JobTier, number>> = {
   magic: { 1: -0.02, 2: -0.01, 3: 0.01, 4: 0.02, 5: 0 },
 };
 
-export const TIER_UNLOCK_LEVELS: Record<JobTier, number> = { 1: 1, 2: 120, 3: 250, 4: 360, 5: 450 };
+export const TIER_UNLOCK_LEVELS: Record<JobTier, number> = { 1: 1, 2: 30, 3: 80, 4: 200, 5: 350 };
 
 export function calcCombatMultiplier(archetype: Archetype, tier: JobTier): number {
   const { subtype, damageType } = ARCHETYPE_COMPOSITION[archetype];
   return BASE_MULTIPLIER[tier] + SUBTYPE_BONUS[subtype][tier] + DAMAGE_TYPE_BONUS[damageType][tier];
 }
 
-// 雙職兼修:3 階(Lv250)解鎖,可另選一個副職archetype。副職只吃自己那份倍率「超出 1.0 的部分」
+// 雙職兼修:3 階解鎖,可另選一個副職archetype。副職只吃自己那份倍率「超出 1.0 的部分」
 // 的一半,不會整個疊上去,維持主職才是數值主力的定位。
 export const DUAL_CLASS_UNLOCK_LEVEL = TIER_UNLOCK_LEVELS[3];
 const SECONDARY_JOB_WEIGHT = 0.5;
