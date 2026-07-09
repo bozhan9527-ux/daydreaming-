@@ -1,11 +1,13 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   EquipmentBonusStat,
+  EquipmentItem,
   EquipmentSlot,
   getEquipmentBonusTotals,
+  getEquippableItemsForSlot,
   getItemById,
-  getItemsForSlot,
   isItemUnlocked,
 } from '../game/equipment';
 import { useGameState } from '../hooks/useGameState';
@@ -37,22 +39,28 @@ function formatBonus(stat: EquipmentBonusStat, value: number): string {
 export function EquipmentPanel() {
   const equipment = useGameState((state) => state.equipment);
   const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
+  const job = useGameState((state) => state.job);
+  const level = useGameState((state) => state.level);
+  const equip = useGameState((state) => state.equip);
   const unequip = useGameState((state) => state.unequip);
   const purchaseItem = useGameState((state) => state.purchaseItem);
 
-  function cycle(slot: EquipmentSlot) {
-    const items = getItemsForSlot(slot);
-    const currentId = equipment[slot];
-    const currentIndex = items.findIndex((item) => item.id === currentId);
-    const nextIndex = currentIndex + 1;
-    if (nextIndex >= items.length) {
-      unequip(slot);
-    } else {
-      purchaseItem(items[nextIndex].id);
-    }
-  }
+  const [expandedSlot, setExpandedSlot] = useState<EquipmentSlot | null>(null);
 
   const totals = getEquipmentBonusTotals(equipment);
+
+  function toggleSlot(slot: EquipmentSlot) {
+    setExpandedSlot((current) => (current === slot ? null : slot));
+  }
+
+  function pickItem(item: EquipmentItem) {
+    if (item.requiredLevel !== undefined && level.level < item.requiredLevel) return;
+    if (isItemUnlocked(unlockedItemIds, item.id)) {
+      equip(item.id);
+    } else {
+      purchaseItem(item.id);
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -63,18 +71,50 @@ export function EquipmentPanel() {
       {SLOTS.map((slot) => {
         const currentId = equipment[slot];
         const currentItem = currentId !== undefined ? getItemById(currentId) : undefined;
-        const items = getItemsForSlot(slot);
-        const currentIndex = items.findIndex((item) => item.id === currentId);
-        const nextItem = items[currentIndex + 1];
-        const nextLocked = nextItem !== undefined && !isItemUnlocked(unlockedItemIds, nextItem.id);
+        const isExpanded = expandedSlot === slot;
+        // 職業鎖裝目錄依等級門檻排序,由低到高;不限職業的起始款排在最前面。
+        const items = [...getEquippableItemsForSlot(slot, job.archetype)].sort(
+          (a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0)
+        );
+
         return (
-          <Pressable key={slot} style={styles.row} onPress={() => cycle(slot)}>
-            <Text style={styles.slotLabel}>{SLOT_LABELS[slot]}</Text>
-            <Text style={styles.itemLabel}>
-              {currentItem ? `${currentItem.name} (${formatBonus(currentItem.bonus.stat, currentItem.bonus.value)})` : '空'}
-              {nextLocked ? `(下一項 ${nextItem.price} 金幣)` : ''}
-            </Text>
-          </Pressable>
+          <View key={slot}>
+            <Pressable style={styles.row} onPress={() => toggleSlot(slot)}>
+              <Text style={styles.slotLabel}>{SLOT_LABELS[slot]}</Text>
+              <Text style={styles.itemLabel}>
+                {currentItem ? `${currentItem.name} (${formatBonus(currentItem.bonus.stat, currentItem.bonus.value)})` : '空'}
+              </Text>
+            </Pressable>
+            {isExpanded && (
+              <View style={styles.itemList}>
+                {currentItem && (
+                  <Pressable style={styles.itemRow} onPress={() => unequip(slot)}>
+                    <Text style={styles.itemRowLabel}>卸下</Text>
+                  </Pressable>
+                )}
+                {items.map((item) => {
+                  const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
+                  const unlocked = isItemUnlocked(unlockedItemIds, item.id);
+                  const isEquipped = currentId === item.id;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      style={[styles.itemRow, isEquipped && styles.itemRowActive, locked && styles.itemRowLocked]}
+                      onPress={() => pickItem(item)}
+                      disabled={locked}
+                    >
+                      <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
+                        {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
+                      </Text>
+                      <Text style={styles.itemRowMeta}>
+                        {locked ? `Lv${item.requiredLevel} 解鎖` : unlocked ? (isEquipped ? '裝備中' : '點擊裝備') : `${item.price} 金幣`}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
         );
       })}
     </View>
@@ -108,5 +148,37 @@ const styles = StyleSheet.create({
   itemLabel: {
     color: '#f2f2f2',
     fontSize: 12,
+  },
+  itemList: {
+    marginTop: 4,
+    marginBottom: 4,
+    paddingLeft: 8,
+    gap: 3,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#1c1c24',
+  },
+  itemRowActive: {
+    backgroundColor: '#4a4456',
+  },
+  itemRowLocked: {
+    opacity: 0.45,
+  },
+  itemRowLabel: {
+    color: '#f2f2f2',
+    fontSize: 11,
+    flexShrink: 1,
+  },
+  itemRowLabelLocked: {
+    color: '#8a8a95',
+  },
+  itemRowMeta: {
+    color: '#8a8a95',
+    fontSize: 11,
   },
 });

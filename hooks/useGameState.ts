@@ -16,10 +16,12 @@ import {
 import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDualClass, getCurrentTier, JobBranch } from '../game/combat';
 import {
   applyGenderDefault,
+  canEquipItem,
   createEmptyLoadout,
   createEmptyUnlockedItems,
   equipItem,
   EquipmentLoadout,
+  filterLoadoutForArchetype,
   Gender,
   getEquipmentBonusTotals,
   getGenderUnlockItems,
@@ -372,11 +374,16 @@ export const useGameState = create<GameState>((set, get) => ({
     set({ fightStartedAt: fightStartedAt - BOOST_MS });
   },
 
-  // 主職換成跟目前副職一樣的話,副職自動清空(不能兩職都選同一個)。
+  // 主職換成跟目前副職一樣的話,副職自動清空(不能兩職都選同一個);
+  // 身上原本裝的職業鎖裝如果不符新主職,直接卸下(不限職業的款式不受影響)。
   setJob: (archetype, branch) => {
-    const { secondaryJob } = get();
+    const { secondaryJob, equipment } = get();
     const nextSecondaryJob = secondaryJob === archetype ? null : secondaryJob;
-    set({ job: { archetype, branch }, secondaryJob: nextSecondaryJob });
+    set({
+      job: { archetype, branch },
+      secondaryJob: nextSecondaryJob,
+      equipment: filterLoadoutForArchetype(equipment, archetype),
+    });
     persist(get());
   },
 
@@ -392,7 +399,9 @@ export const useGameState = create<GameState>((set, get) => ({
   },
 
   equip: (itemId) => {
-    const { equipment, unlockedItemIds } = get();
+    const { equipment, unlockedItemIds, job, level } = get();
+    const item = getItemById(itemId);
+    if (!item || !canEquipItem(item, job.archetype, level.level)) return;
     if (!isItemUnlocked(unlockedItemIds, itemId)) return;
     set({ equipment: equipItem(equipment, itemId) });
     persist(get());
@@ -405,10 +414,12 @@ export const useGameState = create<GameState>((set, get) => ({
   },
 
   // 未解鎖的裝備第一次點擊會先扣貨幣解鎖並直接穿上;貨幣不夠就靜默不做事(跟技能升級一致)。
+  // 職業鎖裝/等級不足一律靜默擋下,UI 本身也只會列出目前職業+已達等級的款式。
   purchaseItem: (itemId) => {
-    const { equipment, coins, unlockedItemIds } = get();
+    const { equipment, coins, unlockedItemIds, job, level } = get();
     const item = getItemById(itemId);
     if (!item) return;
+    if (!canEquipItem(item, job.archetype, level.level)) return;
 
     if (isItemUnlocked(unlockedItemIds, itemId)) {
       set({ equipment: equipItem(equipment, itemId) });

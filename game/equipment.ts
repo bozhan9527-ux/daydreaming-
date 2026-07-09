@@ -1,3 +1,5 @@
+import { Archetype, getCurrentTier, getJobTitle } from './combat';
+
 export type EquipmentSlot =
   | 'back'
   | 'bottom'
@@ -24,12 +26,18 @@ export interface EquipmentItem {
   price: number;
   bonus: EquipmentBonus;
   twoHanded?: boolean;
+  // undefined = 不限職業(起始/性別預設款);有值 = 職業鎖裝,只有該職業能裝備。
+  archetype?: Archetype;
+  // undefined = 無等級限制;有值 = 要練到這個等級才能購買/裝備。
+  requiredLevel?: number;
 }
 
 // 每插槽固定一種加成類型(此插槽兩款只差數值),數值 = 百分比加成(0.02 = +2%):
 // 免費款(-01)給小加成,付費款(-02)給大加成,呼應現有定價邏輯。
 // back/bottom/face/mainhand = speed(縮短戰鬥時間);top/headwear/gloves = exp;belt/offhand = coins。
-export const EQUIPMENT_ITEMS: EquipmentItem[] = [
+// 這 18 款不限職業、不限等級,主要作為起始裝備跟性別預設外觀(見 GENDER_DEFAULT_LOADOUT),
+// 在下方生成式的職業鎖裝目錄開放之前(Lv10 起)先讓角色有基礎樣貌跟些微加成。
+const LEGACY_EQUIPMENT_ITEMS: EquipmentItem[] = [
   { id: 'back-01', slot: 'back', name: '素色披風', color: '#6b6678', price: 0, bonus: { stat: 'speed', value: 0.02 } },
   { id: 'back-02', slot: 'back', name: '厚重斗篷', color: '#4a4456', price: 60, bonus: { stat: 'speed', value: 0.05 } },
   { id: 'bottom-01', slot: 'bottom', name: '粗布長褲', color: '#5c5468', price: 0, bonus: { stat: 'speed', value: 0.02 } },
@@ -58,18 +66,245 @@ export const EQUIPMENT_ITEMS: EquipmentItem[] = [
   },
 ];
 
+// ---- 職業鎖裝生成式目錄 ----
+// 9 個槽位(主手拆成單手/雙手兩條線)各自 50 個等級檔(Lv10~500,每 10 等一檔) × 6 職業,
+// 單一槽位剛好 300 款,主手單手 300 款 + 雙手 300 款。用生成而非手打,避免 3000 筆物件字面量。
+const ARCHETYPES: Archetype[] = [
+  'physicalMelee',
+  'physicalRanged',
+  'physicalSupport',
+  'magicMelee',
+  'magicRanged',
+  'magicSupport',
+];
+
+const BRACKET_COUNT = 50;
+const LEVELS_PER_BRACKET = 10;
+
+function bracketRequiredLevel(bracket: number): number {
+  return bracket * LEVELS_PER_BRACKET;
+}
+
+// 前快後慢(對數收斂):bracket=1(Lv10)貼近舊制免費款的 2%,bracket=50(Lv500)收斂到上限 30%。
+const MIN_BONUS = 0.02;
+const MAX_BONUS = 0.3;
+
+// log(bracket)/log(50) 讓 bracket=1 精準落在 0(=MIN_BONUS)、bracket=50 精準落在 1(=MAX_BONUS),
+// 不會像 log(1+bracket) 那樣在 bracket=1 就已經吃掉一大截成長量。
+function bracketBonusValue(bracket: number): number {
+  const t = Math.log(bracket) / Math.log(BRACKET_COUNT);
+  const raw = MIN_BONUS + t * (MAX_BONUS - MIN_BONUS);
+  return Math.round(raw * 1000) / 1000;
+}
+
+// 雙手武器犧牲副手格,單件加成用倍率補償,呼應「雙手武器賭大加成」的取捨。
+const TWO_HANDED_BONUS_MULTIPLIER = 1.8;
+const TWO_HANDED_PRICE_MULTIPLIER = 1.6;
+
+const PRICE_BASE = 20;
+const PRICE_EXPONENT = 1.6;
+
+function bracketPrice(bracket: number): number {
+  return Math.round(PRICE_BASE * Math.pow(bracket, PRICE_EXPONENT));
+}
+
+const SLOT_STAT: Record<EquipmentSlot, EquipmentBonusStat> = {
+  back: 'speed',
+  bottom: 'speed',
+  face: 'speed',
+  mainhand: 'speed',
+  top: 'exp',
+  headwear: 'exp',
+  gloves: 'exp',
+  belt: 'coins',
+  offhand: 'coins',
+};
+
+const SLOT_BASE_NOUN: Partial<Record<EquipmentSlot, string>> = {
+  back: '披風',
+  bottom: '護腿',
+  top: '戰袍',
+  belt: '腰帶',
+  headwear: '頭飾',
+  face: '面罩',
+  gloves: '護手',
+  offhand: '副手飾品',
+};
+
+// 主手武器名稱呼應各職業既有的稱號世界觀(見 game/combat.ts 的 JOB_TITLES)。
+const WEAPON_NOUNS: Record<Archetype, { oneHanded: string; twoHanded: string }> = {
+  physicalMelee: { oneHanded: '工作手套', twoHanded: '鐵鎚' },
+  physicalRanged: { oneHanded: '飛鏢', twoHanded: '長弓' },
+  physicalSupport: { oneHanded: '急救箱', twoHanded: '擔架' },
+  magicMelee: { oneHanded: '符咒短刀', twoHanded: '降魔大劍' },
+  magicRanged: { oneHanded: '法術鍵盤', twoHanded: '法杖' },
+  magicSupport: { oneHanded: '藥瓶', twoHanded: '藥箱權杖' },
+};
+
+const ARCHETYPE_BASE_COLOR: Record<Archetype, string> = {
+  physicalMelee: '#8b8698',
+  physicalRanged: '#7a9e7e',
+  physicalSupport: '#c9a94f',
+  magicMelee: '#b389e0',
+  magicRanged: '#6ab0e0',
+  magicSupport: '#e0a0c0',
+};
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return '#' + [r, g, b].map((v) => clamp(v).toString(16).padStart(2, '0')).join('');
+}
+
+// 等級檔越高,顏色越往亮部靠(視覺上暗示「越後期越華麗」),幅度封頂在 35%。
+function shiftColorForBracket(baseHex: string, bracket: number): string {
+  const [r, g, b] = hexToRgb(baseHex);
+  const t = (bracket - 1) / (BRACKET_COUNT - 1);
+  const brighten = t * 0.35;
+  return rgbToHex(r + (255 - r) * brighten, g + (255 - g) * brighten, b + (255 - b) * brighten);
+}
+
+function jobTitleAtLevel(archetype: Archetype, level: number): string {
+  return getJobTitle(archetype, 'A', getCurrentTier(level));
+}
+
+function generateRegularSlotItems(slot: EquipmentSlot): EquipmentItem[] {
+  const baseNoun = SLOT_BASE_NOUN[slot];
+  if (!baseNoun) return [];
+  const stat = SLOT_STAT[slot];
+  const items: EquipmentItem[] = [];
+  for (const archetype of ARCHETYPES) {
+    const baseColor = ARCHETYPE_BASE_COLOR[archetype];
+    for (let bracket = 1; bracket <= BRACKET_COUNT; bracket++) {
+      const requiredLevel = bracketRequiredLevel(bracket);
+      const title = jobTitleAtLevel(archetype, requiredLevel);
+      items.push({
+        id: `${slot}-${archetype}-${bracket}`,
+        slot,
+        name: `${title}${baseNoun}·Lv${requiredLevel}`,
+        color: shiftColorForBracket(baseColor, bracket),
+        price: bracketPrice(bracket),
+        bonus: { stat, value: bracketBonusValue(bracket) },
+        archetype,
+        requiredLevel,
+      });
+    }
+  }
+  return items;
+}
+
+function generateMainhandItems(): EquipmentItem[] {
+  const stat = SLOT_STAT.mainhand;
+  const items: EquipmentItem[] = [];
+  for (const archetype of ARCHETYPES) {
+    const baseColor = ARCHETYPE_BASE_COLOR[archetype];
+    const nouns = WEAPON_NOUNS[archetype];
+    for (let bracket = 1; bracket <= BRACKET_COUNT; bracket++) {
+      const requiredLevel = bracketRequiredLevel(bracket);
+      const title = jobTitleAtLevel(archetype, requiredLevel);
+      const color = shiftColorForBracket(baseColor, bracket);
+      const oneHandedBonus = bracketBonusValue(bracket);
+      const price = bracketPrice(bracket);
+
+      items.push({
+        id: `mainhand-1h-${archetype}-${bracket}`,
+        slot: 'mainhand',
+        name: `${title}${nouns.oneHanded}·Lv${requiredLevel}`,
+        color,
+        price,
+        bonus: { stat, value: oneHandedBonus },
+        archetype,
+        requiredLevel,
+      });
+
+      items.push({
+        id: `mainhand-2h-${archetype}-${bracket}`,
+        slot: 'mainhand',
+        name: `${title}${nouns.twoHanded}·Lv${requiredLevel}(雙手)`,
+        color,
+        price: Math.round(price * TWO_HANDED_PRICE_MULTIPLIER),
+        bonus: { stat, value: Math.round(oneHandedBonus * TWO_HANDED_BONUS_MULTIPLIER * 1000) / 1000 },
+        archetype,
+        requiredLevel,
+        twoHanded: true,
+      });
+    }
+  }
+  return items;
+}
+
+const GENERATED_REGULAR_SLOTS: EquipmentSlot[] = [
+  'back',
+  'bottom',
+  'top',
+  'belt',
+  'headwear',
+  'face',
+  'gloves',
+  'offhand',
+];
+
+const GENERATED_EQUIPMENT_ITEMS: EquipmentItem[] = [
+  ...GENERATED_REGULAR_SLOTS.flatMap((slot) => generateRegularSlotItems(slot)),
+  ...generateMainhandItems(),
+];
+
+export const EQUIPMENT_ITEMS: EquipmentItem[] = [...LEGACY_EQUIPMENT_ITEMS, ...GENERATED_EQUIPMENT_ITEMS];
+
 export type EquipmentLoadout = Partial<Record<EquipmentSlot, string>>;
 
 export function createEmptyLoadout(): EquipmentLoadout {
   return {};
 }
 
+// 目錄有 3000+ 筆,查找一律走 Map,避免每次都線性掃描整個陣列。
+const EQUIPMENT_ITEMS_BY_ID = new Map(EQUIPMENT_ITEMS.map((item) => [item.id, item]));
+const EQUIPMENT_ITEMS_BY_SLOT = new Map<EquipmentSlot, EquipmentItem[]>();
+for (const item of EQUIPMENT_ITEMS) {
+  const list = EQUIPMENT_ITEMS_BY_SLOT.get(item.slot);
+  if (list) list.push(item);
+  else EQUIPMENT_ITEMS_BY_SLOT.set(item.slot, [item]);
+}
+
 export function getItemById(id: string): EquipmentItem | undefined {
-  return EQUIPMENT_ITEMS.find((item) => item.id === id);
+  return EQUIPMENT_ITEMS_BY_ID.get(id);
 }
 
 export function getItemsForSlot(slot: EquipmentSlot): EquipmentItem[] {
-  return EQUIPMENT_ITEMS.filter((item) => item.slot === slot);
+  return EQUIPMENT_ITEMS_BY_SLOT.get(slot) ?? [];
+}
+
+export function isArchetypeCompatible(item: EquipmentItem, archetype: Archetype): boolean {
+  return item.archetype === undefined || item.archetype === archetype;
+}
+
+export function isLevelSufficient(item: EquipmentItem, level: number): boolean {
+  return item.requiredLevel === undefined || level >= item.requiredLevel;
+}
+
+export function canEquipItem(item: EquipmentItem, archetype: Archetype, level: number): boolean {
+  return isArchetypeCompatible(item, archetype) && isLevelSufficient(item, level);
+}
+
+// 只回傳目前職業能穿的款式(不限職業的舊起始款 + 對應職業的鎖裝款),給 UI 篩選用。
+export function getEquippableItemsForSlot(slot: EquipmentSlot, archetype: Archetype): EquipmentItem[] {
+  return getItemsForSlot(slot).filter((item) => isArchetypeCompatible(item, archetype));
+}
+
+// 切職業後,原本裝備的職業鎖裝若跟新職業不符就直接卸下,不限職業的款式不受影響。
+export function filterLoadoutForArchetype(loadout: EquipmentLoadout, archetype: Archetype): EquipmentLoadout {
+  const next: EquipmentLoadout = {};
+  for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
+    const itemId = loadout[slot];
+    if (!itemId) continue;
+    const item = getItemById(itemId);
+    if (item && isArchetypeCompatible(item, archetype)) next[slot] = itemId;
+  }
+  return next;
 }
 
 // 雙手武器裝備時副手鎖死清空;反過來裝備副手時,若目前主手是雙手武器也一併清空。
