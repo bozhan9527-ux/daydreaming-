@@ -57,6 +57,17 @@ export default function HomeScreen() {
   const showOfflineModal = lastOfflineKills > 0 && !offlineModalDismissed;
   const equipmentDropItem = lastEquipmentDropId ? getItemById(lastEquipmentDropId) : undefined;
 
+  // 三種掉落通知(裝備/寵物/金幣)同一時間最多只顯示一則,固定高度的區塊,
+  // 不會因為運氣好連續觸發就疊出好幾行、把下面的經驗條跟分頁按鈕往下推。
+  // 優先序:裝備 > 寵物 > 金幣(裝備/寵物是解鎖類的稀有事件,比金幣windfall更值得被看到)。
+  const dropBannerText = equipmentDropItem
+    ? `撿到裝備掉落:${equipmentDropItem.name}!已自動解鎖,可以到「裝備」分頁裝備`
+    : lastCompanionDropId
+      ? `意外獲得了新夥伴:${getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備`
+      : lastCoinWindfall !== null
+        ? `意外之財!多撿到 ${lastCoinWindfall} 金幣`
+        : null;
+
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
@@ -82,17 +93,13 @@ export default function HomeScreen() {
 
         <Text style={styles.killCountText}>已擊敗 {killCount} 隻怪</Text>
 
-        {lastCompanionDropId && (
-          <Text style={styles.companionDropText}>
-            意外獲得了新夥伴:{getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備
-          </Text>
-        )}
-
-        {equipmentDropItem && (
-          <Text style={styles.companionDropText}>撿到裝備掉落:{equipmentDropItem.name}!已自動解鎖,可以到「裝備」分頁裝備</Text>
-        )}
-
-        {lastCoinWindfall !== null && <Text style={styles.companionDropText}>意外之財!多撿到 {lastCoinWindfall} 金幣</Text>}
+        <View style={styles.dropBannerBox}>
+          {dropBannerText && (
+            <Text style={styles.companionDropText} numberOfLines={2}>
+              {dropBannerText}
+            </Text>
+          )}
+        </View>
 
         <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} />
 
@@ -189,6 +196,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
+  // 固定高度:三種掉落通知(裝備/寵物/金幣)同一時間只顯示一則,不管有沒有內容都佔用
+  // 同樣的空間,避免連續觸發時疊出好幾行、把下面的經驗條跟分頁按鈕往下推。
+  dropBannerBox: {
+    height: 44,
+    width: '100%',
+    maxWidth: 280,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // 固定高度+置中,不管有沒有觸發到事件、文案長短,這個區塊佔的空間都一樣,
   // 不會因為內容不同把下面的遊戲畫面往下推。
