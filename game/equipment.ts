@@ -37,29 +37,32 @@ export interface EquipmentItem {
 // back/bottom/face/mainhand = speed(縮短戰鬥時間);top/headwear/gloves = exp;belt/offhand = coins。
 // 這 18 款不限職業、不限等級,主要作為起始裝備跟性別預設外觀(見 GENDER_DEFAULT_LOADOUT),
 // 在下方生成式的職業鎖裝目錄開放之前(Lv10 起)先讓角色有基礎樣貌跟些微加成。
+// 顏色刻意避開 HERO_PALETTE(K/H/S/T/D/B/P/O,見 heroSilhouette.ts)裡的每一個色碼——
+// 舊版這裡直接複製了角色本體的顏色(例如亞麻上衣 #8b8698 精準對上角色上衣的 T 色),
+// 疊上去等於跟身體本色完全相同,裝備看起來像沒穿一樣,是「吃色」最嚴重的一批。
 const LEGACY_EQUIPMENT_ITEMS: EquipmentItem[] = [
-  { id: 'back-01', slot: 'back', name: '素色披風', color: '#6b6678', price: 0, bonus: { stat: 'speed', value: 0.02 } },
-  { id: 'back-02', slot: 'back', name: '厚重斗篷', color: '#4a4456', price: 60, bonus: { stat: 'speed', value: 0.05 } },
-  { id: 'bottom-01', slot: 'bottom', name: '粗布長褲', color: '#5c5468', price: 0, bonus: { stat: 'speed', value: 0.02 } },
-  { id: 'bottom-02', slot: 'bottom', name: '皮革護腿', color: '#3a3542', price: 60, bonus: { stat: 'speed', value: 0.05 } },
-  { id: 'top-01', slot: 'top', name: '亞麻上衣', color: '#8b8698', price: 0, bonus: { stat: 'exp', value: 0.02 } },
-  { id: 'top-02', slot: 'top', name: '皮甲背心', color: '#7a7488', price: 60, bonus: { stat: 'exp', value: 0.05 } },
+  { id: 'back-01', slot: 'back', name: '素色披風', color: '#5a6a7a', price: 0, bonus: { stat: 'speed', value: 0.02 } },
+  { id: 'back-02', slot: 'back', name: '厚重斗篷', color: '#4a3528', price: 60, bonus: { stat: 'speed', value: 0.05 } },
+  { id: 'bottom-01', slot: 'bottom', name: '粗布長褲', color: '#8a7550', price: 0, bonus: { stat: 'speed', value: 0.02 } },
+  { id: 'bottom-02', slot: 'bottom', name: '皮革護腿', color: '#6b4a30', price: 60, bonus: { stat: 'speed', value: 0.05 } },
+  { id: 'top-01', slot: 'top', name: '亞麻上衣', color: '#d8c8a0', price: 0, bonus: { stat: 'exp', value: 0.02 } },
+  { id: 'top-02', slot: 'top', name: '皮甲背心', color: '#7a4a2a', price: 60, bonus: { stat: 'exp', value: 0.05 } },
   { id: 'belt-01', slot: 'belt', name: '麻繩腰帶', color: '#c9a94f', price: 0, bonus: { stat: 'coins', value: 0.02 } },
   { id: 'belt-02', slot: 'belt', name: '鉚釘皮帶', color: '#9c8a3f', price: 60, bonus: { stat: 'coins', value: 0.05 } },
-  { id: 'headwear-01', slot: 'headwear', name: '布帽', color: '#8b8698', price: 0, bonus: { stat: 'exp', value: 0.02 } },
-  { id: 'headwear-02', slot: 'headwear', name: '鐵盔', color: '#7a7488', price: 60, bonus: { stat: 'exp', value: 0.05 } },
-  { id: 'face-01', slot: 'face', name: '眼罩', color: '#3a3542', price: 0, bonus: { stat: 'speed', value: 0.02 } },
+  { id: 'headwear-01', slot: 'headwear', name: '布帽', color: '#c8b088', price: 0, bonus: { stat: 'exp', value: 0.02 } },
+  { id: 'headwear-02', slot: 'headwear', name: '鐵盔', color: '#6a7078', price: 60, bonus: { stat: 'exp', value: 0.05 } },
+  { id: 'face-01', slot: 'face', name: '眼罩', color: '#1a1a1a', price: 0, bonus: { stat: 'speed', value: 0.02 } },
   { id: 'face-02', slot: 'face', name: '護目鏡', color: '#6ab0e0', price: 60, bonus: { stat: 'speed', value: 0.05 } },
-  { id: 'gloves-01', slot: 'gloves', name: '布手套', color: '#8b8698', price: 0, bonus: { stat: 'exp', value: 0.02 } },
-  { id: 'gloves-02', slot: 'gloves', name: '皮革手套', color: '#6b6678', price: 60, bonus: { stat: 'exp', value: 0.05 } },
-  { id: 'offhand-01', slot: 'offhand', name: '木盾', color: '#8b8698', price: 0, bonus: { stat: 'coins', value: 0.02 } },
+  { id: 'gloves-01', slot: 'gloves', name: '布手套', color: '#c8b088', price: 0, bonus: { stat: 'exp', value: 0.02 } },
+  { id: 'gloves-02', slot: 'gloves', name: '皮革手套', color: '#7a4a2a', price: 60, bonus: { stat: 'exp', value: 0.05 } },
+  { id: 'offhand-01', slot: 'offhand', name: '木盾', color: '#8a6030', price: 0, bonus: { stat: 'coins', value: 0.02 } },
   { id: 'offhand-02', slot: 'offhand', name: '厚重書冊', color: '#b389e0', price: 60, bonus: { stat: 'coins', value: 0.05 } },
-  { id: 'mainhand-01', slot: 'mainhand', name: '短劍', color: '#d9c9b8', price: 0, bonus: { stat: 'speed', value: 0.02 } },
+  { id: 'mainhand-01', slot: 'mainhand', name: '短劍', color: '#b8b8c0', price: 0, bonus: { stat: 'speed', value: 0.02 } },
   {
     id: 'mainhand-02',
     slot: 'mainhand',
     name: '雙手大劍',
-    color: '#d9c9b8',
+    color: '#b8b8c0',
     price: 60,
     bonus: { stat: 'speed', value: 0.05 },
     twoHanded: true,
@@ -446,6 +449,325 @@ const SLOT_BASE_NOUN_BY_ARCHETYPE_TIER: Record<Archetype, SlotNounsByTier> = {
   },
 };
 
+// 每個裝備的顏色對應「現實中這件東西真正的顏色」,不是整個職業共用一種色相再調亮——
+// 舊版做法會讓同職業所有部位都是同一色系(還可能剛好撞到 HERO_PALETTE 的身體色,例如
+// physicalMelee 舊底色 #8b8698 直接等於角色上衣色,疊上去等於「吃色」看不見),
+// 依現實物品配色之後,不同部位天生就會有足夠色相差異,不會互相吃色。
+const SLOT_COLOR_BY_ARCHETYPE_TIER: Record<Archetype, SlotNounsByTier> = {
+  physicalMelee: {
+    1: {
+      back: '#a89060',
+      bottom: '#5a6b42',
+      top: '#ff7518',
+      belt: '#7a5030',
+      headwear: '#f2c230',
+      face: '#e8e2d0',
+      gloves: '#d9c9a0',
+      offhand: '#c0392b',
+    },
+    2: {
+      back: '#3a3a3a',
+      bottom: '#6b5a3a',
+      top: '#d4e157',
+      belt: '#e8b93a',
+      headwear: '#2a3a5a',
+      face: '#5a5a5a',
+      gloves: '#2a2a2a',
+      offhand: '#b0401a',
+    },
+    3: {
+      back: '#ff5500',
+      bottom: '#8a7040',
+      top: '#f0e030',
+      belt: '#2a2a2a',
+      headwear: '#e8e8e0',
+      face: '#1a1a1a',
+      gloves: '#a87a4a',
+      offhand: '#3a3a3a',
+    },
+    4: {
+      back: '#e8c020',
+      bottom: '#2a2a3a',
+      top: '#c0281a',
+      belt: '#1a1a1a',
+      headwear: '#b02020',
+      face: '#1a1a1a',
+      gloves: '#3a3a2a',
+      offhand: '#c0281a',
+    },
+    5: {
+      back: '#5a5040',
+      bottom: '#6b5a3a',
+      top: '#2a2a28',
+      belt: '#1a1a1a',
+      headwear: '#4a4530',
+      face: '#1a2a1a',
+      gloves: '#1a1a1a',
+      offhand: '#4a4a2a',
+    },
+  },
+  physicalRanged: {
+    1: {
+      back: '#e91e63',
+      bottom: '#2a2a2a',
+      top: '#ff7518',
+      belt: '#2a2a2a',
+      headwear: '#1a1a1a',
+      face: '#6ab0e0',
+      gloves: '#2a2a2a',
+      offhand: '#3a3a3a',
+    },
+    2: {
+      back: '#f2c230',
+      bottom: '#2a2a2a',
+      top: '#f2c230',
+      belt: '#7a5030',
+      headwear: '#2a2a2a',
+      face: '#1a1a1a',
+      gloves: '#2a2a2a',
+      offhand: '#4a4a4a',
+    },
+    3: {
+      back: '#1a2a4a',
+      bottom: '#1a2a4a',
+      top: '#1a2a4a',
+      belt: '#1a1a1a',
+      headwear: '#1a2a4a',
+      face: '#2a2a2a',
+      gloves: '#1a1a1a',
+      offhand: '#2a2a2a',
+    },
+    4: {
+      back: '#4a5a30',
+      bottom: '#4a5a30',
+      top: '#4a5a30',
+      belt: '#6b4a2a',
+      headwear: '#4a5a30',
+      face: '#3a4a28',
+      gloves: '#6b4a2a',
+      offhand: '#8a6a3a',
+    },
+    5: {
+      back: '#4a4530',
+      bottom: '#4a4a2a',
+      top: '#4a4a2a',
+      belt: '#1a1a1a',
+      headwear: '#3a3a20',
+      face: '#1a2a1a',
+      gloves: '#1a1a1a',
+      offhand: '#6a6a6a',
+    },
+  },
+  physicalSupport: {
+    1: {
+      back: '#6a6a6a',
+      bottom: '#2a2a2a',
+      top: '#2e7d32',
+      belt: '#2a2a2a',
+      headwear: '#2e7d32',
+      face: '#a8d0e8',
+      gloves: '#e8e8e0',
+      offhand: '#2a2a2a',
+    },
+    2: {
+      back: '#2a2a2a',
+      bottom: '#2a2a2a',
+      top: '#6a1a2a',
+      belt: '#2a2a2a',
+      headwear: '#1a1a1a',
+      face: '#e8e8e0',
+      gloves: '#e8e2d0',
+      offhand: '#a8a8a8',
+    },
+    3: {
+      back: '#e8e2d0',
+      bottom: '#a8c8e0',
+      top: '#a8c8e0',
+      belt: '#e8e2d0',
+      headwear: '#f0f0e8',
+      face: '#a8d0e8',
+      gloves: '#a8d0e0',
+      offhand: '#d8d8d0',
+    },
+    4: {
+      back: '#2a2a2a',
+      bottom: '#c0281a',
+      top: '#c0281a',
+      belt: '#2a2a2a',
+      headwear: '#c0281a',
+      face: '#1a1a1a',
+      gloves: '#2a2a2a',
+      offhand: '#3a3a3a',
+    },
+    5: {
+      back: '#1a3a5a',
+      bottom: '#2a6a5a',
+      top: '#2a6a5a',
+      belt: '#e8e2d0',
+      headwear: '#2a6a5a',
+      face: '#d0e8f0',
+      gloves: '#c0dce8',
+      offhand: '#f0a020',
+    },
+  },
+  magicMelee: {
+    1: {
+      back: '#2a2a2a',
+      bottom: '#1a2a4a',
+      top: '#e8e8e0',
+      belt: '#6a5a3a',
+      headwear: '#1a1a1a',
+      face: '#8a1a1a',
+      gloves: '#e0d8c8',
+      offhand: '#2a1a1a',
+    },
+    2: {
+      back: '#a01818',
+      bottom: '#8a1818',
+      top: '#c02020',
+      belt: '#e8c020',
+      headwear: '#a01818',
+      face: '#c02020',
+      gloves: '#f0f0e8',
+      offhand: '#c9a030',
+    },
+    3: {
+      back: '#e0c030',
+      bottom: '#1a2030',
+      top: '#1a2a4a',
+      belt: '#2a2a2a',
+      headwear: '#1a1a1a',
+      face: '#e0c030',
+      gloves: '#e8e2d0',
+      offhand: '#7a5a30',
+    },
+    4: {
+      back: '#8a1a2a',
+      bottom: '#1a1a1a',
+      top: '#8a1a2a',
+      belt: '#c9a030',
+      headwear: '#1a1a1a',
+      face: '#c9a030',
+      gloves: '#e8e2d0',
+      offhand: '#8a6a3a',
+    },
+    5: {
+      back: '#f0e8d0',
+      bottom: '#f0ece0',
+      top: '#f0ece0',
+      belt: '#7ab088',
+      headwear: '#d4af37',
+      face: '#e8e0d0',
+      gloves: '#e0e8d8',
+      offhand: '#e8e2d0',
+    },
+  },
+  magicRanged: {
+    1: {
+      back: '#39ff14',
+      bottom: '#2a2a2a',
+      top: '#2a2a2a',
+      belt: '#2a2a2a',
+      headwear: '#00e5ff',
+      face: '#e8d840',
+      gloves: '#2a2a2a',
+      offhand: '#d8d8d0',
+    },
+    2: {
+      back: '#4a4a4a',
+      bottom: '#a0885a',
+      top: '#4a6a9a',
+      belt: '#3a5a8a',
+      headwear: '#2a2a2a',
+      face: '#6a6a6a',
+      gloves: '#7a7a7a',
+      offhand: '#a8a8a8',
+    },
+    3: {
+      back: '#6a6a6a',
+      bottom: '#4a4a4a',
+      top: '#f0f0e8',
+      belt: '#6a6a6a',
+      headwear: '#2a2a2a',
+      face: '#6ab0e0',
+      gloves: '#6a5a9a',
+      offhand: '#6ab0e0',
+    },
+    4: {
+      back: '#1a1a1a',
+      bottom: '#1a1a1a',
+      top: '#1a1a1a',
+      belt: '#1a1a1a',
+      headwear: '#1a1a1a',
+      face: '#e8e8e0',
+      gloves: '#1a1a1a',
+      offhand: '#1a2a1a',
+    },
+    5: {
+      back: '#d0d8e0',
+      bottom: '#a0a8b0',
+      top: '#40e0d0',
+      belt: '#40e0d0',
+      headwear: '#a0e8e0',
+      face: '#80d8d0',
+      gloves: '#c0e8e0',
+      offhand: '#40a0e0',
+    },
+  },
+  magicSupport: {
+    1: {
+      back: '#d0e0e8',
+      bottom: '#e8e8e0',
+      top: '#f0f0e8',
+      belt: '#c0d8c0',
+      headwear: '#f0f0e8',
+      face: '#a8d0e8',
+      gloves: '#a8d0e0',
+      offhand: '#d8c8a8',
+    },
+    2: {
+      back: '#2a3a5a',
+      bottom: '#2a2a2a',
+      top: '#f0f0e8',
+      belt: '#4a4a4a',
+      headwear: '#a8c8e0',
+      face: '#a8d0e8',
+      gloves: '#e0c8a8',
+      offhand: '#d8d8d0',
+    },
+    3: {
+      back: '#c0a880',
+      bottom: '#4a4a4a',
+      top: '#a8b090',
+      belt: '#7a5a3a',
+      headwear: '#b0a0c8',
+      face: '#6a4a2a',
+      gloves: '#8a8a80',
+      offhand: '#d0b888',
+    },
+    4: {
+      back: '#6a4a2a',
+      bottom: '#2a3a5a',
+      top: '#2a3a5a',
+      belt: '#7a5a3a',
+      headwear: '#1a1a1a',
+      face: '#c9a030',
+      gloves: '#e8e2d0',
+      offhand: '#5a4a3a',
+    },
+    5: {
+      back: '#8a6a30',
+      bottom: '#2a6a5a',
+      top: '#2a6a5a',
+      belt: '#d4af37',
+      headwear: '#d4af37',
+      face: '#e8e0c0',
+      gloves: '#e8dcc0',
+      offhand: '#e04030',
+    },
+  },
+};
+
 // 武器一樣按 5 階換款,呼應各階現實身分(見上方 SLOT_BASE_NOUN_BY_ARCHETYPE_TIER 的職業世界觀)。
 type WeaponNounsByTier = Record<JobTier, { oneHanded: string; twoHanded: string }>;
 
@@ -494,6 +816,17 @@ const WEAPON_NOUNS_BY_TIER: Record<Archetype, WeaponNounsByTier> = {
   },
 };
 
+// 武器同一階(單手+雙手)共用一個對應現實材質的顏色,例如鐵鎚/電鋸是鋼鐵灰、七星劍是青銅金,
+// 不是整個職業共用一種色相。
+const WEAPON_COLOR_BY_TIER: Record<Archetype, Record<JobTier, string>> = {
+  physicalMelee: { 1: '#7a7a7a', 2: '#e8a020', 3: '#f2c230', 4: '#c0281a', 5: '#2a2a2a' },
+  physicalRanged: { 1: '#9a9a9a', 2: '#c0281a', 3: '#2a2a2a', 4: '#6a5030', 5: '#1a1a1a' },
+  physicalSupport: { 1: '#a8a8a8', 2: '#b8b8b8', 3: '#d8d8d0', 4: '#2a2a2a', 5: '#e04030' },
+  magicMelee: { 1: '#8a6a3a', 2: '#c9a030', 3: '#a88050', 4: '#d4af37', 5: '#d4af37' },
+  magicRanged: { 1: '#00e5ff', 2: '#3a3a3a', 3: '#a8a8a8', 4: '#1a2a1a', 5: '#40e0d0' },
+  magicSupport: { 1: '#a86a20', 2: '#c0281a', 3: '#a0c0d8', 4: '#c0c0c0', 5: '#d4af37' },
+};
+
 const ARCHETYPE_BASE_COLOR: Record<Archetype, string> = {
   physicalMelee: '#8b8698',
   physicalRanged: '#7a9e7e',
@@ -530,17 +863,17 @@ function generateRegularSlotItems(slot: EquipmentSlot): EquipmentItem[] {
   const stat = SLOT_STAT[slot];
   const items: EquipmentItem[] = [];
   for (const archetype of ARCHETYPES) {
-    const baseColor = ARCHETYPE_BASE_COLOR[archetype];
     for (let bracket = 1; bracket <= BRACKET_COUNT; bracket++) {
       const requiredLevel = bracketRequiredLevel(bracket);
       const { tier, title } = jobTierAndTitleAtLevel(archetype, requiredLevel);
       const baseNoun = SLOT_BASE_NOUN_BY_ARCHETYPE_TIER[archetype][tier][slot];
       if (!baseNoun) continue;
+      const tierColor = SLOT_COLOR_BY_ARCHETYPE_TIER[archetype][tier][slot] ?? ARCHETYPE_BASE_COLOR[archetype];
       items.push({
         id: `${slot}-${archetype}-${bracket}`,
         slot,
         name: `${title}${baseNoun}·Lv${requiredLevel}`,
-        color: shiftColorForBracket(baseColor, bracket),
+        color: shiftColorForBracket(tierColor, bracket),
         price: bracketPrice(bracket),
         bonus: { stat, value: bracketBonusValue(bracket) },
         archetype,
@@ -555,12 +888,11 @@ function generateMainhandItems(): EquipmentItem[] {
   const stat = SLOT_STAT.mainhand;
   const items: EquipmentItem[] = [];
   for (const archetype of ARCHETYPES) {
-    const baseColor = ARCHETYPE_BASE_COLOR[archetype];
     for (let bracket = 1; bracket <= BRACKET_COUNT; bracket++) {
       const requiredLevel = bracketRequiredLevel(bracket);
       const { tier, title } = jobTierAndTitleAtLevel(archetype, requiredLevel);
       const nouns = WEAPON_NOUNS_BY_TIER[archetype][tier];
-      const color = shiftColorForBracket(baseColor, bracket);
+      const color = shiftColorForBracket(WEAPON_COLOR_BY_TIER[archetype][tier], bracket);
       const oneHandedBonus = bracketBonusValue(bracket);
       const price = bracketPrice(bracket);
 

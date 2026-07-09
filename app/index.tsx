@@ -54,13 +54,19 @@ export default function HomeScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.title}>勇者發呆中</Text>
 
-      {lastEvent !== null && (
-        <View style={styles.resultBox}>
-          <EventIcon rarity={lastEvent.rarity} />
-          <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
-          <Text style={styles.resultText}>{lastEvent.payload}</Text>
-        </View>
-      )}
+      <View style={styles.resultBox}>
+        {lastEvent !== null ? (
+          <>
+            <EventIcon rarity={lastEvent.rarity} />
+            <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
+            <Text style={styles.resultText} numberOfLines={3} ellipsizeMode="tail">
+              {lastEvent.payload}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
+        )}
+      </View>
 
       {lastOfflineKills > 0 && (
         <Text style={styles.offlineGainText}>
@@ -168,10 +174,16 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
+  // 固定高度+置中,不管有沒有觸發到事件、文案長短,這個區塊佔的空間都一樣,
+  // 不會因為內容不同把下面的遊戲畫面往下推。
   resultBox: {
+    width: '100%',
     maxWidth: 280,
+    height: 140,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
+    overflow: 'hidden',
   },
   resultRarity: {
     color: '#8a8a95',
