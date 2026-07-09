@@ -16,7 +16,9 @@ import { PixelSprite } from './PixelSprite';
 // 這裡維持透明,只負責角色/怪物/特效的定位。
 const SCENE_HEIGHT = 130;
 const SCENE_MAX_WIDTH = 320;
-const HERO_PIXEL_SIZE = 4;
+// 勇者本體畫布從 20x24 拉高密度到 64x56(約3倍),pixelSize 對應縮小,
+// 讓角色在戰鬥場景裡的物理尺寸跟拉密度之前差不多,不會把畫面撐爆。
+const HERO_PIXEL_SIZE = 1.75;
 const MONSTER_PIXEL_SIZE = 4;
 const GROUND_PATTERN_WIDTH = 40;
 const GROUND_SCROLL_DURATION = 1400;

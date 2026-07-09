@@ -1054,9 +1054,9 @@ export function getGenderUnlockItems(gender: Gender): string[] {
   return Object.values(GENDER_DEFAULT_LOADOUT[gender]);
 }
 
-// 座標系對應 game/sprites/heroSilhouette.ts 的原生 20 欄 x 24 列網格,
-// 僅以「normal」體型的輪廓比例校準;thin/fat 選擇時疊圖會有些微不貼合,
-// 屬於這個架構驗證階段可接受的簡化,尚未做到依體型即時縮放錨點。
+// 座標系對應 game/sprites/heroSilhouette.ts 的原生 64 欄 x 56 列網格(密度提升後的版本,
+// 原本是 20x24,座標依 x*3.2/y*2.33 等比例換算),僅以「normal」體型的輪廓比例校準;
+// thin/fat 選擇時疊圖會有些微不貼合,屬於這個架構驗證階段可接受的簡化,尚未做到依體型即時縮放錨點。
 export interface Rect {
   x: number;
   y: number;
@@ -1065,19 +1065,19 @@ export interface Rect {
 }
 
 export const SLOT_ANCHORS: Record<EquipmentSlot, Rect[]> = {
-  back: [{ x: 3, y: 9, w: 14, h: 6 }],
-  bottom: [{ x: 6, y: 15, w: 8, h: 5 }],
-  top: [{ x: 5, y: 9, w: 10, h: 5 }],
-  belt: [{ x: 5, y: 14, w: 10, h: 1 }],
-  headwear: [{ x: 5, y: 1, w: 10, h: 3 }],
-  face: [{ x: 6, y: 4, w: 8, h: 2 }],
+  back: [{ x: 10, y: 21, w: 45, h: 14 }],
+  bottom: [{ x: 19, y: 35, w: 26, h: 12 }],
+  top: [{ x: 16, y: 21, w: 32, h: 12 }],
+  belt: [{ x: 16, y: 33, w: 32, h: 2 }],
+  headwear: [{ x: 16, y: 2, w: 32, h: 7 }],
+  face: [{ x: 19, y: 9, w: 26, h: 5 }],
   gloves: [
-    { x: 4, y: 11, w: 1, h: 2 },
-    { x: 15, y: 11, w: 1, h: 2 },
+    { x: 13, y: 26, w: 3, h: 5 },
+    { x: 48, y: 26, w: 3, h: 5 },
   ],
-  offhand: [{ x: 1, y: 10, w: 3, h: 4 }],
-  // 比其他槽位大,給武器外型(game/sprites/weapons.ts)足夠的像素空間畫出可辨識的形狀。
-  mainhand: [{ x: 14, y: 8, w: 6, h: 10 }],
+  offhand: [{ x: 3, y: 23, w: 10, h: 9 }],
+  // 跟武器外型(game/sprites/weapons.ts,放大3倍後 18x30)完全對齊,不拉伸變形。
+  mainhand: [{ x: 45, y: 19, w: 18, h: 30 }],
 };
 
 // 疊圖繪製順序,對應 CLAUDE.md 文件的 z-order:背飾→下身→上身→腰帶→頭飾→面飾→手套→副手→主手武器。

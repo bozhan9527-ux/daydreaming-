@@ -1,15 +1,19 @@
 import { Archetype } from '../combat';
+import { upscaleFrame } from './spriteScale';
 
 // 武器外型只吃「職業 + 是否雙手」,50 個等級檔共用同一個外型(呼應 game/equipment.ts 的
 // WEAPON_NOUNS,一個職業一款單手、一款雙手),顏色仍吃該裝備自己的 item.color(隨等級檔漸亮),
 // 呼叫端(HeroSprite)會把 W 換成該裝備當下的顏色,這裡只負責形狀。
-const WEAPON_WIDTH = 6;
-const WEAPON_HEIGHT = 10;
+// 形狀在 6x10 基礎網格畫,配合勇者本體密度提升(64x56,約原本3倍),輸出時整張放大3倍
+// (SCALE 常數),不重新設計形狀——這些造型已經驗證過辨識度沒問題,放大只是配合新密度。
+const BASE_WIDTH = 6;
+const BASE_HEIGHT = 10;
+const SCALE = 3;
 
 function assertFrameShape(frame: string[], label: string): string[] {
-  if (frame.length !== WEAPON_HEIGHT) throw new Error(`${label}: expected ${WEAPON_HEIGHT} rows, got ${frame.length}`);
+  if (frame.length !== BASE_HEIGHT) throw new Error(`${label}: expected ${BASE_HEIGHT} rows, got ${frame.length}`);
   for (const row of frame) {
-    if (row.length !== WEAPON_WIDTH) throw new Error(`${label}: expected row width ${WEAPON_WIDTH}, got "${row}"`);
+    if (row.length !== BASE_WIDTH) throw new Error(`${label}: expected row width ${BASE_WIDTH}, got "${row}"`);
   }
   return frame;
 }
@@ -116,8 +120,8 @@ export interface WeaponFrameData {
 // archetype 是 undefined 時代表舊有不限職業的起始武器,給通用外型。
 export function getWeaponFrame(archetype: Archetype | undefined, twoHanded: boolean | undefined): WeaponFrameData {
   if (archetype === undefined) {
-    return { frame: twoHanded ? GENERIC_2H : GENERIC_1H, fillKey: WEAPON_FILL_KEY };
+    return { frame: upscaleFrame(twoHanded ? GENERIC_2H : GENERIC_1H, SCALE), fillKey: WEAPON_FILL_KEY };
   }
   const set = WEAPON_FRAMES[archetype];
-  return { frame: twoHanded ? set.twoHanded : set.oneHanded, fillKey: WEAPON_FILL_KEY };
+  return { frame: upscaleFrame(twoHanded ? set.twoHanded : set.oneHanded, SCALE), fillKey: WEAPON_FILL_KEY };
 }

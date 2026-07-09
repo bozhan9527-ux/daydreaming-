@@ -59,6 +59,9 @@ const LEFT_COLUMN: EquipmentSlot[] = ['offhand', 'headwear', 'top', 'belt', 'bot
 const RIGHT_COLUMN: EquipmentSlot[] = ['mainhand', 'face', 'back', 'gloves'];
 
 const EMPTY_ICON_COLOR = '#4a4456';
+// 圖示來源(equipmentIcons.ts/weapons.ts)配合勇者本體密度提升,整張放大了3倍,
+// 這裡用 2/3 抵銷回來,維持清單/選槽按鈕原本的物理尺寸不變。
+const ICON_PIXEL_SIZE = 2 / 3;
 
 type SubView = 'worn' | 'bag' | 'shop';
 
@@ -159,7 +162,7 @@ export function EquipmentPanel() {
         style={[styles.slotButton, slotItem && styles.slotButtonFilled, active && styles.slotButtonActive]}
         onPress={() => setSelectedSlot(slot)}
       >
-        <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: iconColor }} pixelSize={2} />
+        <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
       </Pressable>
     );
   }
@@ -174,7 +177,7 @@ export function EquipmentPanel() {
         <Pressable style={[styles.itemRow, locked && styles.itemRowLocked]} onPress={() => pickItem(item)} disabled={locked}>
           <View style={styles.rowLeft}>
             <View style={styles.iconWrap}>
-              <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={2} />
+              <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={ICON_PIXEL_SIZE} />
             </View>
             <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
               {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
@@ -198,7 +201,7 @@ export function EquipmentPanel() {
       <View style={styles.paperdollRow}>
         <View style={styles.slotColumn}>{LEFT_COLUMN.map(renderSlotButton)}</View>
         <View style={styles.heroWrap}>
-          <HeroSprite bodyType={bodyType} equipment={equipment} pixelSize={6} />
+          <HeroSprite bodyType={bodyType} equipment={equipment} pixelSize={2.5} />
         </View>
         <View style={styles.slotColumn}>{RIGHT_COLUMN.map(renderSlotButton)}</View>
       </View>

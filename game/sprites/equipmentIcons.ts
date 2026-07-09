@@ -1,10 +1,13 @@
 import { EquipmentItem, EquipmentSlot } from '../equipment';
+import { upscaleFrame } from './spriteScale';
 import { getWeaponFrame } from './weapons';
 
 // 非武器 8 槽位的通用圖示,12x12 跟 tabIcons/skillIcons 同一套畫布尺寸。武器(mainhand)另外
 // 用 game/sprites/weapons.ts 依職業給專屬造型;這裡的 8 個槽位圖示是「這個槽位類型長什麼樣」,
 // 同一槽位所有職業/等級檔共用同一個外型,顏色仍吃該裝備自己的 item.color。
+// 配合勇者本體密度提升,輸出時放大3倍(SCALE),形狀本身不重新設計。
 const CANVAS = 12;
+const SCALE = 3;
 
 interface Mark {
   x: number;
@@ -101,7 +104,7 @@ export interface EquipmentIconData {
 
 export function getEquipmentSlotIcon(slot: EquipmentSlot): EquipmentIconData {
   const marks = SLOT_ICON_MARKS[slot] ?? [];
-  return { frame: buildFrame(marks), fillKey: FILL };
+  return { frame: upscaleFrame(buildFrame(marks), SCALE), fillKey: FILL };
 }
 
 // 給裝備清單用的統一入口:主手武器吃 game/sprites/weapons.ts 的職業造型,其餘槽位吃這裡的通用圖示。

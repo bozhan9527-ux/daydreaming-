@@ -15,6 +15,9 @@ import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { PixelSprite } from './PixelSprite';
 
+// 圖示來源放大了3倍(配合勇者本體密度提升),用 2/3 抵銷回來維持原本物理尺寸。
+const ICON_PIXEL_SIZE = 2 / 3;
+
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   back: '背飾',
   bottom: '下身',
@@ -84,7 +87,7 @@ export function EnhancementPanel() {
           <View key={itemId} style={styles.itemCard}>
             <View style={styles.itemHeader}>
               <View style={styles.iconWrap}>
-                <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={2} />
+                <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={ICON_PIXEL_SIZE} />
               </View>
               <View style={styles.itemHeaderText}>
                 <Text style={styles.itemName}>
