@@ -120,15 +120,71 @@ const SLOT_STAT: Record<EquipmentSlot, EquipmentBonusStat> = {
   offhand: 'coins',
 };
 
-const SLOT_BASE_NOUN: Partial<Record<EquipmentSlot, string>> = {
-  back: '披風',
-  bottom: '護腿',
-  top: '戰袍',
-  belt: '腰帶',
-  headwear: '頭飾',
-  face: '面罩',
-  gloves: '護手',
-  offhand: '副手飾品',
+// 每個職業的裝備名稱都對應該職業現實中真的會用到的物品(不再是「頭飾/戰袍」這種通用詞),
+// 呼應 game/combat.ts JOB_TITLES 分支 A 的世界觀:physicalMelee=工地勞力、
+// physicalRanged=外送/駕駛/警務、physicalSupport=服務/護理、magicMelee=道士/玄學、
+// magicRanged=電競/科技、magicSupport=醫療/藥學。
+const SLOT_BASE_NOUN_BY_ARCHETYPE: Record<Archetype, Partial<Record<EquipmentSlot, string>>> = {
+  physicalMelee: {
+    back: '工作背帶',
+    bottom: '工作褲',
+    top: '反光背心',
+    belt: '工具腰帶',
+    headwear: '工地安全帽',
+    face: '防塵口罩',
+    gloves: '棉紗手套',
+    offhand: '工具箱',
+  },
+  physicalRanged: {
+    back: '外送保溫箱',
+    bottom: '機車雨褲',
+    top: '反光外送背心',
+    belt: '證件腰包',
+    headwear: '全罩安全帽',
+    face: '防風鏡',
+    gloves: '騎士手套',
+    offhand: '對講機',
+  },
+  physicalSupport: {
+    back: '急救後背包',
+    bottom: '護理長褲',
+    top: '護理師制服',
+    belt: '工作圍裙',
+    headwear: '護理帽',
+    face: '醫療口罩',
+    gloves: '拋棄式手套',
+    offhand: '保溫餐盤',
+  },
+  magicMelee: {
+    back: '符咒披風',
+    bottom: '道士褲',
+    top: '道袍',
+    belt: '八卦腰帶',
+    headwear: '頭巾',
+    face: '護身符',
+    gloves: '白棉手套',
+    offhand: '桃木劍鞘',
+  },
+  magicRanged: {
+    back: '戰隊背包',
+    bottom: '電競長褲',
+    top: '連帽衛衣',
+    belt: '隨身碟腰包',
+    headwear: '電競耳機',
+    face: '藍光眼鏡',
+    gloves: '電競手套',
+    offhand: '行動電源',
+  },
+  magicSupport: {
+    back: '醫師後背包',
+    bottom: '白袍長褲',
+    top: '白袍',
+    belt: '聽診器',
+    headwear: '手術髮帽',
+    face: '醫療口罩',
+    gloves: '乳膠手套',
+    offhand: '血壓計',
+  },
 };
 
 // 主手武器名稱呼應各職業既有的稱號世界觀(見 game/combat.ts 的 JOB_TITLES)。
@@ -173,11 +229,11 @@ function jobTitleAtLevel(archetype: Archetype, level: number): string {
 }
 
 function generateRegularSlotItems(slot: EquipmentSlot): EquipmentItem[] {
-  const baseNoun = SLOT_BASE_NOUN[slot];
-  if (!baseNoun) return [];
   const stat = SLOT_STAT[slot];
   const items: EquipmentItem[] = [];
   for (const archetype of ARCHETYPES) {
+    const baseNoun = SLOT_BASE_NOUN_BY_ARCHETYPE[archetype][slot];
+    if (!baseNoun) continue;
     const baseColor = ARCHETYPE_BASE_COLOR[archetype];
     for (let bracket = 1; bracket <= BRACKET_COUNT; bracket++) {
       const requiredLevel = bracketRequiredLevel(bracket);
