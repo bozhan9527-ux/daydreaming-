@@ -1318,6 +1318,25 @@ export function rollGemDrop(rng: () => number = Math.random): GemType | null {
   return GEM_TYPES[Math.floor(rng() * GEM_TYPES.length)];
 }
 
+// 裝備掉落:跟上面幾種掉落同一套獨立判定模式,中了直接免費解鎖一件目前職業/等級穿得下的
+// 付費款(不含 price=0 的起始款,那些本來就已解鎖),優先掉還沒解鎖過的款式讓抽到的東西
+// 對玩家有意義;真的全部解鎖完了(邊緣情況)才會允許重複掉落,純粹避免回傳 null。
+const EQUIPMENT_DROP_CHANCE = 0.05;
+
+export function rollEquipmentDrop(
+  archetype: Archetype,
+  level: number,
+  unlockedItemIds: UnlockedItemIds,
+  rng: () => number = Math.random
+): EquipmentItem | null {
+  if (rng() >= EQUIPMENT_DROP_CHANCE) return null;
+  const eligible = EQUIPMENT_ITEMS.filter((item) => item.price > 0 && canEquipItem(item, archetype, level));
+  if (eligible.length === 0) return null;
+  const notYetUnlocked = eligible.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
+  const pool = notYetUnlocked.length > 0 ? notYetUnlocked : eligible;
+  return pool[Math.floor(rng() * pool.length)];
+}
+
 export function getSocketCount(item: EquipmentItem): number {
   const tier = getCurrentTier(item.requiredLevel ?? 1);
   return Math.ceil(tier / 2);

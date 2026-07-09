@@ -10,6 +10,7 @@ import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
 import { getCompanionById } from '../game/companions';
+import { getItemById } from '../game/equipment';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { Rarity } from '../game/trigger';
 import { useBattleLoop } from '../hooks/useBattleLoop';
@@ -33,9 +34,13 @@ export default function HomeScreen() {
   const killCount = useGameState((state) => state.killCount);
   const lastEvent = useGameState((state) => state.lastEvent);
   const lastCompanionDropId = useGameState((state) => state.lastCompanionDropId);
+  const lastEquipmentDropId = useGameState((state) => state.lastEquipmentDropId);
+  const lastCoinWindfall = useGameState((state) => state.lastCoinWindfall);
 
   const [openTabId, setOpenTabId] = useState<string | null>(null);
   const openTab = PANEL_TABS.find((tab) => tab.id === openTabId) ?? null;
+  // 離線收益改成彈出視窗,關掉之後這次 session 就不再自動彈出(下次 load()重新設定 lastOfflineKills 時才會再跳)。
+  const [offlineModalDismissed, setOfflineModalDismissed] = useState(false);
 
   useBattleLoop();
 
@@ -49,6 +54,8 @@ export default function HomeScreen() {
 
   const isMaxLevel = level.level >= MAX_LEVEL;
   const needed = isMaxLevel ? 0 : expToNext(level.level);
+  const showOfflineModal = lastOfflineKills > 0 && !offlineModalDismissed;
+  const equipmentDropItem = lastEquipmentDropId ? getItemById(lastEquipmentDropId) : undefined;
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
@@ -68,12 +75,6 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {lastOfflineKills > 0 && (
-        <Text style={styles.offlineGainText}>
-          離線期間擊敗了 {lastOfflineKills} 隻怪,獲得 {lastOfflineGain} 經驗 {lastOfflineCoins} 金幣
-        </Text>
-      )}
-
       <MainVisual>
         <BattleScene />
 
@@ -87,10 +88,31 @@ export default function HomeScreen() {
           </Text>
         )}
 
+        {equipmentDropItem && (
+          <Text style={styles.companionDropText}>撿到裝備掉落:{equipmentDropItem.name}!已自動解鎖,可以到「裝備」分頁裝備</Text>
+        )}
+
+        {lastCoinWindfall !== null && <Text style={styles.companionDropText}>意外之財!多撿到 {lastCoinWindfall} 金幣</Text>}
+
         <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} />
 
         <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} onSelect={setOpenTabId} />
       </MainVisual>
+
+      <Modal visible={showOfflineModal} animationType="fade" transparent onRequestClose={() => setOfflineModalDismissed(true)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setOfflineModalDismissed(true)} />
+        <View style={styles.offlineModalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>離線收益</Text>
+            <Pressable style={styles.modalCloseButton} onPress={() => setOfflineModalDismissed(true)}>
+              <Text style={styles.modalCloseLabel}>✕</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.offlineModalText}>
+            離線期間擊敗了 {lastOfflineKills} 隻怪,{'\n'}獲得 {lastOfflineGain} 經驗、{lastOfflineCoins} 金幣
+          </Text>
+        </View>
+      </Modal>
 
       <Modal
         visible={openTab !== null}
@@ -149,12 +171,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     color: '#f2f2f2',
-  },
-  offlineGainText: {
-    color: '#c9a94f',
-    fontSize: 13,
-    textAlign: 'center',
-    maxWidth: 280,
   },
   killCountText: {
     color: '#f2f2f2',
@@ -252,5 +268,26 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  // 離線收益改成置中卡片式彈窗(不是從下滑入的分頁 Modal 樣式),關掉就不佔用版面空間。
+  offlineModalCard: {
+    position: 'absolute',
+    top: '50%',
+    left: 16,
+    right: 16,
+    transform: [{ translateY: -80 }],
+    maxWidth: 320,
+    alignSelf: 'center',
+    backgroundColor: '#17171f',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#3a3a45',
+  },
+  offlineModalText: {
+    color: '#c9a94f',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
 });

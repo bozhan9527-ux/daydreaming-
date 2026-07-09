@@ -43,6 +43,7 @@ import {
   ItemInstances,
   rollEnhanceOutcome,
   rollEnhanceStoneDrop,
+  rollEquipmentDrop,
   rollGemDrop,
   rollItemInstance,
   unequipSlot,
@@ -50,6 +51,7 @@ import {
   EquipmentSlot,
   UnlockedItemIds,
 } from '../game/equipment';
+import { rollCoinWindfall } from '../game/currency';
 import { getRandomEvent, GameEvent } from '../game/events';
 import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
 import {
@@ -164,6 +166,8 @@ interface GameState {
   killCount: number;
   lastEvent: GameEvent | null;
   lastCompanionDropId: string | null;
+  lastEquipmentDropId: string | null;
+  lastCoinWindfall: number | null;
   skillKillsSinceTrigger: number;
   secondarySkillKillsSinceTrigger: number;
   // 技能剛觸發的時間戳,不存檔,只給 UI 顯示「剛發動」的短暫閃光用,跟 lastEnhanceOutcome 同一套模式。
@@ -260,6 +264,8 @@ export const useGameState = create<GameState>((set, get) => ({
   killCount: 0,
   lastEvent: null,
   lastCompanionDropId: null,
+  lastEquipmentDropId: null,
+  lastCoinWindfall: null,
   skillKillsSinceTrigger: 0,
   secondarySkillKillsSinceTrigger: 0,
   lastSkillTriggerAt: null,
@@ -451,8 +457,24 @@ export const useGameState = create<GameState>((set, get) => ({
     const gemDrop = rollGemDrop();
     const nextGemCounts = gemDrop ? { ...state.gemCounts, [gemDrop]: state.gemCounts[gemDrop] + 1 } : state.gemCounts;
 
+    // 裝備掉落:免費直接解鎖一件當前職業/等級穿得下的付費款,豐富擊殺獎勵種類,
+    // 跟上面幾種掉落一樣各自獨立判定、互不影響。
+    const equipmentDrop = rollEquipmentDrop(state.job.archetype, state.level.level, state.unlockedItemIds);
+    let nextUnlockedItemIds = state.unlockedItemIds;
+    let nextItemInstances = state.itemInstances;
+    let lastEquipmentDropId: string | null = null;
+    if (equipmentDrop) {
+      nextUnlockedItemIds = unlockItem(nextUnlockedItemIds, equipmentDrop.id);
+      nextItemInstances = ensureItemInstance(equipmentDrop.id, nextItemInstances);
+      lastEquipmentDropId = equipmentDrop.id;
+    }
+
+    // 金幣意外之財:獨立判定,中了直接加一筆這次擊殺基礎金幣的倍數。
+    const coinWindfall = rollCoinWindfall(coins);
+    const lastCoinWindfall = coinWindfall > 0 ? coinWindfall : null;
+
     const nextLevel = accumulateExp(state.level, exp);
-    const nextCoins = state.coins + coins;
+    const nextCoins = state.coins + coins + coinWindfall;
 
     set({
       level: nextLevel,
@@ -460,10 +482,14 @@ export const useGameState = create<GameState>((set, get) => ({
       companions: nextCompanions,
       enhanceStones: nextEnhanceStones,
       gemCounts: nextGemCounts,
+      unlockedItemIds: nextUnlockedItemIds,
+      itemInstances: nextItemInstances,
       stageProgress: nextStageProgress,
       killCount: state.killCount + 1,
       lastEvent: event,
       lastCompanionDropId,
+      lastEquipmentDropId,
+      lastCoinWindfall,
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,
