@@ -1,19 +1,9 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Archetype } from '../game/combat';
-import { canUpgradeSkill, skillUpgradeCoinCost, skillUpgradeCost, SKILL_IDS } from '../game/skills';
+import { canUpgradeSkill, SKILL_IDS, SKILL_LABELS, skillUpgradeCoinCost, skillUpgradeCost } from '../game/skills';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
-
-const SKILL_LABELS: Record<Archetype, string> = {
-  physicalMelee: '爆擊一擊',
-  physicalRanged: '連續多重射擊',
-  physicalSupport: '治療光環',
-  magicMelee: '能量爆發斬',
-  magicRanged: '法術齊射',
-  magicSupport: '增幅祝福',
-};
 
 export function SkillPanel() {
   const skills = useGameState((state) => state.skills);

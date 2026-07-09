@@ -157,6 +157,9 @@ interface GameState {
   lastCompanionDropId: string | null;
   skillKillsSinceTrigger: number;
   secondarySkillKillsSinceTrigger: number;
+  // 技能剛觸發的時間戳,不存檔,只給 UI 顯示「剛發動」的短暫閃光用,跟 lastEnhanceOutcome 同一套模式。
+  lastSkillTriggerAt: number | null;
+  lastSecondarySkillTriggerAt: number | null;
   forceInstantNextFight: boolean;
   load: () => Promise<void>;
   levelUp: (times: 1 | 5 | 10) => void;
@@ -247,6 +250,8 @@ export const useGameState = create<GameState>((set, get) => ({
   lastCompanionDropId: null,
   skillKillsSinceTrigger: 0,
   secondarySkillKillsSinceTrigger: 0,
+  lastSkillTriggerAt: null,
+  lastSecondarySkillTriggerAt: null,
   forceInstantNextFight: false,
 
   load: async () => {
@@ -368,6 +373,7 @@ export const useGameState = create<GameState>((set, get) => ({
     let exp = reward.exp;
     let coins = reward.coins;
     let forceInstantNextFight = state.forceInstantNextFight;
+    let lastSkillTriggerAt = state.lastSkillTriggerAt;
     if (skillTriggered) {
       const effect = getSkillEffectKind(state.job.archetype);
       if (effect === 'doubleReward') {
@@ -378,10 +384,12 @@ export const useGameState = create<GameState>((set, get) => ({
       } else if (effect === 'instantFinish') {
         forceInstantNextFight = true;
       }
+      lastSkillTriggerAt = Date.now();
     }
 
     // 副職的技能也會觸發,間隔是本職的兩倍,跟主職技能各自獨立計數、可以同一擊同時觸發。
     let nextSecondaryKillsSinceTrigger = state.secondarySkillKillsSinceTrigger;
+    let lastSecondarySkillTriggerAt = state.lastSecondarySkillTriggerAt;
     if (state.secondaryJob) {
       const secondarySkillLevel = state.skills[state.secondaryJob];
       const secondaryKillsSinceTrigger = state.secondarySkillKillsSinceTrigger + 1;
@@ -398,6 +406,7 @@ export const useGameState = create<GameState>((set, get) => ({
         } else if (secondaryEffect === 'instantFinish') {
           forceInstantNextFight = true;
         }
+        lastSecondarySkillTriggerAt = Date.now();
       }
     }
 
@@ -439,6 +448,8 @@ export const useGameState = create<GameState>((set, get) => ({
       fightElapsedMs: 0,
       skillKillsSinceTrigger: nextKillsSinceTrigger,
       secondarySkillKillsSinceTrigger: nextSecondaryKillsSinceTrigger,
+      lastSkillTriggerAt,
+      lastSecondarySkillTriggerAt,
       forceInstantNextFight,
     });
     persist(get());
@@ -473,7 +484,7 @@ export const useGameState = create<GameState>((set, get) => ({
       if (!canUnlockDualClass(level.level)) return;
       if (archetype === job.archetype) return;
     }
-    set({ secondaryJob: archetype, secondarySkillKillsSinceTrigger: 0 });
+    set({ secondaryJob: archetype, secondarySkillKillsSinceTrigger: 0, lastSecondarySkillTriggerAt: null });
     persist(get());
   },
 

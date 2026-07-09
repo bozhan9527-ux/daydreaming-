@@ -14,6 +14,16 @@ export const SKILL_IDS: Archetype[] = [
 
 export type SkillLevels = Record<Archetype, number>;
 
+// 六個職業技能的顯示名稱,單一真相來源,技能面板跟戰鬥畫面的技能追蹤條共用同一份。
+export const SKILL_LABELS: Record<Archetype, string> = {
+  physicalMelee: '爆擊一擊',
+  physicalRanged: '連續多重射擊',
+  physicalSupport: '治療光環',
+  magicMelee: '能量爆發斬',
+  magicRanged: '法術齊射',
+  magicSupport: '增幅祝福',
+};
+
 export function createInitialSkillLevels(): SkillLevels {
   return {
     physicalMelee: 1,

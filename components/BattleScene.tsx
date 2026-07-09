@@ -54,8 +54,8 @@ export function BattleScene() {
   const fightElapsedMs = useGameState((state) => state.fightElapsedMs);
   const boostCurrentFight = useGameState((state) => state.boostCurrentFight);
 
-  const { subtype, damageType } = getArchetypeComposition(job.archetype);
-  const effect = getAttackEffect(subtype, damageType);
+  const { subtype } = getArchetypeComposition(job.archetype);
+  const effect = getAttackEffect(job.archetype);
 
   const progress = currentEncounter ? Math.min(1, fightElapsedMs / currentEncounter.fightDurationMs) : 0;
 

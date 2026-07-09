@@ -5,6 +5,7 @@ import { BattleScene } from '../components/BattleScene';
 import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
 import { PANEL_TABS } from '../components/panelTabs';
+import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
 import { getCompanionById } from '../game/companions';
@@ -59,6 +60,8 @@ export default function HomeScreen() {
       )}
 
       <BattleScene />
+
+      <SkillTracker />
 
       <Text style={styles.killCountText}>已擊敗 {killCount} 隻怪</Text>
 
