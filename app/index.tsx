@@ -49,6 +49,7 @@ export default function HomeScreen() {
   const dailyKillCount = useGameState((state) => state.dailyKillCount);
   const dailyQuestClaimed = useGameState((state) => state.dailyQuestClaimed);
   const claimDailyQuest = useGameState((state) => state.claimDailyQuest);
+  const hasChosenJob = useGameState((state) => state.hasChosenJob);
 
   const [openTabId, setOpenTabId] = useState<string | null>(null);
   const openTab = PANEL_TABS.find((tab) => tab.id === openTabId) ?? null;
@@ -180,7 +181,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} level={level.level} onSelect={setOpenTabId} />
+        <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} level={level.level} hasChosenJob={hasChosenJob} onSelect={setOpenTabId} />
       </MainVisual>
 
       <Modal visible={showOfflineModal} animationType="fade" transparent onRequestClose={() => setOfflineModalDismissed(true)}>

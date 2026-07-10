@@ -25,7 +25,7 @@ import { createInitialStageProgress, StageProgress } from '../game/stages';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -70,6 +70,10 @@ export interface SaveData {
   // 轉職碎片/證明(見 game/transfer.ts):缺少的 key 一律視為 0,不需要在存檔裡預先塞滿 6 個key。
   transferFragments: Partial<Record<Archetype, number>>;
   transferProofs: Partial<Record<Archetype, number>>;
+  // 「學生」身份(見 game/leveling.ts 的練等曲線註解):false=Lv1-29學生期,尚未真正選定
+  // 主職,職業樹只能瀏覽/預覽,不套用任何職業戰鬥加成;true=已在Lv30畢業選定主職。
+  // 這個功能上線前建立的存檔一律視為 true(老玩家本來就已經有主職,直接視為畢業)。
+  hasChosenJob: boolean;
   lastActiveAt: number;
 }
 
@@ -96,6 +100,7 @@ export function createInitialSaveData(): SaveData {
     dailyQuestClaimed: false,
     transferFragments: {},
     transferProofs: {},
+    hasChosenJob: false,
     lastActiveAt: Date.now(),
   };
 }
@@ -727,11 +732,36 @@ function isTransferCounts(value: unknown): value is Partial<Record<Archetype, nu
   return Object.values(value as Record<string, unknown>).every((v) => typeof v === 'number');
 }
 
-function isSaveDataV17(value: unknown): value is SaveData {
+interface SaveDataV17 {
+  version: 17;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  stageProgress: StageProgress;
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
+  lastActiveAt: number;
+}
+
+function isSaveDataV17(value: unknown): value is SaveDataV17 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 17 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -756,6 +786,36 @@ function isSaveDataV17(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV18(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    isStageProgress(record.stageProgress) &&
+    typeof record.lastDailyResetAt === 'string' &&
+    typeof record.dailyKillCount === 'number' &&
+    typeof record.dailyQuestClaimed === 'boolean' &&
+    isTransferCounts(record.transferFragments) &&
+    isTransferCounts(record.transferProofs) &&
+    typeof record.hasChosenJob === 'boolean'
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
@@ -769,10 +829,15 @@ function isSaveDataV17(value: unknown): value is SaveData {
 // v14 的 skills 是「每職業一個等級」的舊形狀,跟新版「每職業 6 個技能欄位(2被動+4主動)」對不上,
 // 一律重置成 createInitialSkillTreeLevels()(技能點數重來,職業/裝備/等級等其餘進度不受影響);
 // v15 沒有每日內容欄位,補空字串日期(下次 load() 會自然觸發第一次每日重置+登入獎勵);
-// v16 沒有轉職碎片/證明欄位,補空物件(缺 key 一律視為 0,舊玩家從零開始蒐集,不影響既有進度)。
+// v16 沒有轉職碎片/證明欄位,補空物件(缺 key 一律視為 0,舊玩家從零開始蒐集,不影響既有進度);
+// v17 沒有 hasChosenJob,補 true(這個功能上線前的存檔本來就已經有主職,直接視為已畢業,
+// 不會平白把老玩家打回「學生」狀態鎖技能分頁)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV17(value)) return value;
+  if (isSaveDataV18(value)) return value;
+  if (isSaveDataV17(value)) {
+    return { ...value, version: SCHEMA_VERSION, hasChosenJob: true };
+  }
   if (isSaveDataV16(value)) {
     return {
       version: SCHEMA_VERSION,
@@ -796,6 +861,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: value.dailyQuestClaimed,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -822,6 +888,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -848,6 +915,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -874,6 +942,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -900,6 +969,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -926,6 +996,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -952,6 +1023,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -978,6 +1050,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1004,6 +1077,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1030,6 +1104,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1056,6 +1131,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1082,6 +1158,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1108,6 +1185,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1134,6 +1212,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1160,6 +1239,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1186,6 +1266,7 @@ function migrate(value: unknown): SaveData {
       dailyQuestClaimed: false,
       transferFragments: {},
       transferProofs: {},
+      hasChosenJob: true,
       lastActiveAt: value.lastActiveAt,
     };
   }

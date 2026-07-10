@@ -10,10 +10,11 @@ interface TabBarProps {
   tabs: PanelTab[];
   activeId: string;
   level: number;
+  hasChosenJob: boolean;
   onSelect: (id: string) => void;
 }
 
-export function TabBar({ tabs, activeId, level, onSelect }: TabBarProps) {
+export function TabBar({ tabs, activeId, level, hasChosenJob, onSelect }: TabBarProps) {
   const showToast = useToast((state) => state.show);
 
   return (
@@ -22,14 +23,18 @@ export function TabBar({ tabs, activeId, level, onSelect }: TabBarProps) {
         const { frame, palette } = getTabIcon(tab.icon);
         const active = tab.id === activeId;
         const unlockLevel = tabUnlockLevel(tab.id);
-        const unlocked = isTabUnlocked(tab.id, level);
+        const unlocked = isTabUnlocked(tab.id, level, hasChosenJob);
+        // 技能分頁在學生期就算等級已經到了 Lv5(TAB_UNLOCK_LEVELS.skill),還是被 hasChosenJob
+        // 多擋一層,這時候顯示「Lv5」會誤導(看起來應該解鎖了卻沒有),改顯示畢業門檻。
+        const lockedBySkillGraduation = tab.id === 'skill' && level >= unlockLevel && !hasChosenJob;
+        const lockedLabel = lockedBySkillGraduation ? '畢業解鎖' : `Lv${unlockLevel}`;
         return (
           <Pressable
             key={tab.id}
             style={[styles.tab, active && styles.tabActive, !unlocked && styles.tabLocked]}
             onPress={() => {
               if (!unlocked) {
-                showToast(`Lv${unlockLevel} 解鎖「${tab.label}」`);
+                showToast(lockedBySkillGraduation ? `選定主職畢業後才能解鎖「${tab.label}」` : `Lv${unlockLevel} 解鎖「${tab.label}」`);
                 return;
               }
               onSelect(tab.id);
@@ -38,7 +43,7 @@ export function TabBar({ tabs, activeId, level, onSelect }: TabBarProps) {
             <View style={styles.iconBox}>
               <PixelSprite frame={frame} palette={palette} pixelSize={tab.iconPixelSize ?? 3} />
             </View>
-            <Text style={styles.label}>{unlocked ? tab.label : `Lv${unlockLevel}`}</Text>
+            <Text style={styles.label}>{unlocked ? tab.label : lockedLabel}</Text>
           </Pressable>
         );
       })}

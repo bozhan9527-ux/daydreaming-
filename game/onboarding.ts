@@ -14,8 +14,13 @@ export function tabUnlockLevel(tabId: string): number {
   return TAB_UNLOCK_LEVELS[tabId] ?? 1;
 }
 
-export function isTabUnlocked(tabId: string, level: number): boolean {
-  return level >= tabUnlockLevel(tabId);
+// 技能分頁額外多一道「學生畢業」門檻(見 hasChosenJob,game/leveling.ts 練等曲線註解旁的說明):
+// 學生期間就算等級已經過了 TAB_UNLOCK_LEVELS.skill,也還不能真的進去技能分頁操作,
+// 因為根本還沒有主職可以升技能。其餘分頁不受這個額外條件影響。
+export function isTabUnlocked(tabId: string, level: number, hasChosenJob: boolean): boolean {
+  if (level < tabUnlockLevel(tabId)) return false;
+  if (tabId === 'skill' && !hasChosenJob) return false;
+  return true;
 }
 
 // 這次升級有沒有剛好跨過某個分頁的解鎖門檻,回傳新解鎖的 tab id 清單,用來觸發「解鎖新分頁」提示。

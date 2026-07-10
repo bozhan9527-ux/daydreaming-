@@ -13,6 +13,11 @@ const EXP_PER_MIN_LEVEL_FACTOR = 0.05;
 // Lv120 前的早期節奏(~3.5 週到 Lv120)維持不變。全程節奏仍遠低於「20 等/週」上限。
 const BASE_EXP_TO_NEXT = 100;
 
+// Lv120 起的 4 段成長率整體再放大 GROWTH_SCALE 倍(對 growth-1 的超額部分放大,不是對 growth
+// 本身放大),把「學生」畢業後(Lv30起)到封頂的節奏拉長。Lv1-119(tier 1)這段不受影響,
+// 所以 Lv120 這個既有里程碑的累積時間幾乎不變(~24天,誤差幾小時內)。
+const GROWTH_SCALE = 3.2277;
+
 const EXP_TIERS: { startLevel: number; growth: number }[] = [
   { startLevel: 1, growth: 1.0615672364184165 },
   { startLevel: 120, growth: 1.0020178739248546 },
@@ -29,14 +34,15 @@ interface ResolvedExpTier {
 }
 
 const RESOLVED_EXP_TIERS: ResolvedExpTier[] = EXP_TIERS.reduce<ResolvedExpTier[]>((resolved, tier, i) => {
+  const growth = i === 0 ? tier.growth : 1 + (tier.growth - 1) * GROWTH_SCALE;
   if (i === 0) {
-    resolved.push({ ...tier, referenceLevel: 0, baseCost: BASE_EXP_TO_NEXT });
+    resolved.push({ startLevel: tier.startLevel, growth, referenceLevel: 0, baseCost: BASE_EXP_TO_NEXT });
     return resolved;
   }
   const prev = resolved[i - 1];
   const referenceLevel = tier.startLevel - 1;
   const baseCost = Math.floor(prev.baseCost * Math.pow(prev.growth, referenceLevel - prev.referenceLevel));
-  resolved.push({ ...tier, referenceLevel, baseCost });
+  resolved.push({ startLevel: tier.startLevel, growth, referenceLevel, baseCost });
   return resolved;
 }, []);
 
@@ -57,13 +63,19 @@ export function expPerMin(level: number): number {
 const FAST_START_LEVEL_CAP = 50;
 const FAST_START_MULTIPLIER = 0.5;
 
+// 「學生」期(Lv1-29,見 hasChosenJob)疊加在 FAST_START 之上的額外折扣,兩者相乘生效
+// (0.5 * 0.1430 ≈ 0.0715),把 Lv30 畢業點壓到 ~30 分鐘。
+const EARLY_LEVEL_CAP = 30;
+const EARLY_MULT = 0.143;
+
 export function expToNext(level: number): number {
   let tier = RESOLVED_EXP_TIERS[0];
   for (const t of RESOLVED_EXP_TIERS) {
     if (level >= t.startLevel) tier = t;
   }
-  const cost = tier.baseCost * Math.pow(tier.growth, level - tier.referenceLevel);
-  const scaled = level < FAST_START_LEVEL_CAP ? cost * FAST_START_MULTIPLIER : cost;
+  let scaled = tier.baseCost * Math.pow(tier.growth, level - tier.referenceLevel);
+  if (level < EARLY_LEVEL_CAP) scaled *= EARLY_MULT;
+  if (level < FAST_START_LEVEL_CAP) scaled *= FAST_START_MULTIPLIER;
   return Math.floor(scaled);
 }
 

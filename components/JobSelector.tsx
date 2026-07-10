@@ -12,6 +12,7 @@ import {
   getJobTitle,
   JobBranch,
   Subtype,
+  TIER_UNLOCK_LEVELS,
 } from '../game/combat';
 import {
   ACTIVE_SLOT_IDS,
@@ -92,6 +93,9 @@ interface JobDetailCardProps {
   isSecondary: boolean;
   branch: JobBranch;
   tier: ReturnType<typeof getCurrentTier>;
+  hasChosenJob: boolean;
+  graduateLevel: number;
+  currentLevel: number;
   dualClassUnlocked: boolean;
   skillLevels: SkillTreeLevels[Archetype];
   transferFragmentCount: number;
@@ -107,6 +111,9 @@ function JobDetailCard({
   isSecondary,
   branch,
   tier,
+  hasChosenJob,
+  graduateLevel,
+  currentLevel,
   dualClassUnlocked,
   skillLevels,
   transferFragmentCount,
@@ -117,6 +124,7 @@ function JobDetailCard({
 }: JobDetailCardProps) {
   const icon = getSkillIcon(archetype, 'active1', 0);
   const combatBonusPct = Math.round((calcCombatMultiplier(archetype, tier) - 1) * 100);
+  const canGraduate = currentLevel >= graduateLevel;
 
   return (
     <View style={styles.detailCard}>
@@ -139,12 +147,23 @@ function JobDetailCard({
         )}
       </View>
 
-      <Text style={styles.detailCombatBonus}>職業戰鬥加成:+{combatBonusPct}%</Text>
+      <Text style={styles.detailCombatBonus}>
+        職業戰鬥加成:+{combatBonusPct}%{!hasChosenJob && '(畢業後生效)'}
+      </Text>
       <Text style={styles.detailDesc}>點技能格可以直接預覽介紹跟目前等級;要升級的話,設為主職後到「技能」分頁操作。</Text>
 
       <SkillPreviewGrid archetype={archetype} skillLevels={skillLevels} />
 
-      {isPrimary && (
+      {!hasChosenJob ? (
+        // 學生期:6個職業都還沒有人是「主職」,不管點哪一個都是同一套「畢業選定」流程,
+        // 不套用轉職證明門票(見 hooks/useGameState.ts 的 setJob,那套只管已畢業後的轉職)。
+        <View style={styles.detailActions}>
+          <Pressable style={[styles.actionButton, !canGraduate && styles.actionButtonDisabled]} onPress={onSetPrimary}>
+            <Text style={styles.actionLabel}>設為主職(畢業)</Text>
+          </Pressable>
+          {!canGraduate && <Text style={styles.secondaryLocked}>Lv{graduateLevel} 畢業後才能選定主職</Text>}
+        </View>
+      ) : isPrimary ? (
         <View style={styles.branchRow}>
           {BRANCHES.map((b) => (
             <Pressable
@@ -156,9 +175,7 @@ function JobDetailCard({
             </Pressable>
           ))}
         </View>
-      )}
-
-      {!isPrimary && (
+      ) : (
         <>
           {/* 轉職門票進度:證明不夠 1 個就換不了主職(見 hooks/useGameState.ts 的 setJob),
               「設為主職」按鈕維持可點但畫成 disabled 樣式,實際擋下+跳提示的邏輯都在 setJob 裡處理。 */}
@@ -194,16 +211,19 @@ export function JobSelector() {
   const skillTree = useGameState((state) => state.skillTree);
   const transferFragments = useGameState((state) => state.transferFragments);
   const transferProofs = useGameState((state) => state.transferProofs);
+  const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const setJob = useGameState((state) => state.setJob);
   const setSecondaryJob = useGameState((state) => state.setSecondaryJob);
 
   const [viewingArchetype, setViewingArchetype] = useState<Archetype>(job.archetype);
 
   const tier = getCurrentTier(level.level);
-  const title = getJobTitle(job.archetype, job.branch, tier);
-  const dualClassUnlocked = canUnlockDualClass(level.level);
-  const isViewingPrimary = viewingArchetype === job.archetype;
-  const isViewingSecondary = viewingArchetype === secondaryJob;
+  // 學生期(!hasChosenJob)稱號固定顯示「學生」,job.archetype 目前存的只是畢業前的佔位值,
+  // 不是玩家真的選過的職業,不能拿去查真正的職業稱號。
+  const title = hasChosenJob ? getJobTitle(job.archetype, job.branch, tier) : '學生';
+  const dualClassUnlocked = canUnlockDualClass(level.level) && hasChosenJob;
+  const isViewingPrimary = hasChosenJob && viewingArchetype === job.archetype;
+  const isViewingSecondary = hasChosenJob && viewingArchetype === secondaryJob;
 
   return (
     <View style={styles.container}>
@@ -215,8 +235,8 @@ export function JobSelector() {
             <Text style={styles.treeBranchLabel}>{DAMAGE_TYPE_LABELS[damageType]}</Text>
             {SUBTYPES.map((subtype) => {
               const archetype = getArchetypeByComposition(damageType, subtype);
-              const isPrimary = job.archetype === archetype;
-              const isSecondary = secondaryJob === archetype;
+              const isPrimary = hasChosenJob && job.archetype === archetype;
+              const isSecondary = hasChosenJob && secondaryJob === archetype;
               const isViewing = viewingArchetype === archetype;
               return (
                 <Pressable
@@ -240,6 +260,9 @@ export function JobSelector() {
         isSecondary={isViewingSecondary}
         branch={job.branch}
         tier={tier}
+        hasChosenJob={hasChosenJob}
+        graduateLevel={TIER_UNLOCK_LEVELS[2]}
+        currentLevel={level.level}
         dualClassUnlocked={dualClassUnlocked}
         skillLevels={skillTree[viewingArchetype]}
         transferFragmentCount={transferFragments[viewingArchetype] ?? 0}

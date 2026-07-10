@@ -13,7 +13,7 @@ import {
   unequipCompanion,
   unlockCompanion,
 } from '../game/companions';
-import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDualClass, getCurrentTier, JobBranch } from '../game/combat';
+import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDualClass, getCurrentTier, JobBranch, TIER_UNLOCK_LEVELS } from '../game/combat';
 import {
   applyGenderDefault,
   canEquipItem,
@@ -108,7 +108,10 @@ function unlockedItemsForGender(gender: Gender): UnlockedItemIds {
 }
 
 // 副職(雙職兼修)只吃自己那份倍率超出 1.0 的一半,主職才是數值主力。
-function currentJobMultiplier(job: JobSelection, level: number, secondaryJob: Archetype | null): number {
+// 「學生」期(!hasChosenJob)固定 1.0 倍,不套用 job 目前存的預設職業(那只是畢業前的佔位值,
+// 不代表玩家真的選了它)的任何加成。
+function currentJobMultiplier(job: JobSelection, level: number, secondaryJob: Archetype | null, hasChosenJob: boolean): number {
+  if (!hasChosenJob) return 1.0;
   const tier = getCurrentTier(level);
   const primary = calcCombatMultiplier(job.archetype, tier);
   const secondaryBonus = secondaryJob ? calcSecondaryCombatBonus(secondaryJob, tier) : 0;
@@ -138,9 +141,10 @@ function computeRewardMultipliers(
   companions: CompanionState,
   secondaryJob: Archetype | null,
   itemInstances: ItemInstances,
-  skillTree: SkillTreeLevels
+  skillTree: SkillTreeLevels,
+  hasChosenJob: boolean
 ): RewardMultipliers {
-  const jobMultiplier = currentJobMultiplier(job, level, secondaryJob);
+  const jobMultiplier = currentJobMultiplier(job, level, secondaryJob, hasChosenJob);
   const equipmentBonus = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const companionBonus = getCompanionBonusTotals(companions);
   const passiveBonus = computePassiveSkillBonus(job, skillTree);
@@ -190,6 +194,9 @@ interface GameState {
   // 掉落通知用,跟 lastCompanionDropId/lastEquipmentDropId/lastCoinWindfall 同一套模式。
   transferFragments: Partial<Record<Archetype, number>>;
   transferProofs: Partial<Record<Archetype, number>>;
+  // 學生身份(見 game/leveling.ts):false=Lv1-29學生期,尚未套用任何職業戰鬥加成、技能分頁
+  // 鎖定;true=Lv30畢業已選定主職。
+  hasChosenJob: boolean;
   lastDailyLoginBonus: { coins: number; exp: number } | null;
   lastEnhanceOutcome: string | null;
   lastOfflineGain: number;
@@ -258,6 +265,7 @@ type PersistableState = Pick<
   | 'dailyQuestClaimed'
   | 'transferFragments'
   | 'transferProofs'
+  | 'hasChosenJob'
 >;
 
 function persist(state: PersistableState): void {
@@ -283,6 +291,7 @@ function persist(state: PersistableState): void {
     dailyQuestClaimed: state.dailyQuestClaimed,
     transferFragments: state.transferFragments,
     transferProofs: state.transferProofs,
+    hasChosenJob: state.hasChosenJob,
     lastActiveAt: Date.now(),
   });
 }
@@ -309,6 +318,7 @@ export const useGameState = create<GameState>((set, get) => ({
   dailyQuestClaimed: false,
   transferFragments: {},
   transferProofs: {},
+  hasChosenJob: false,
   lastDailyLoginBonus: null,
   lastEnhanceOutcome: null,
   lastOfflineGain: 0,
@@ -347,7 +357,8 @@ export const useGameState = create<GameState>((set, get) => ({
       save.companions,
       save.secondaryJob,
       itemInstances,
-      save.skillTree
+      save.skillTree,
+      save.hasChosenJob
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
 
@@ -383,6 +394,7 @@ export const useGameState = create<GameState>((set, get) => ({
       dailyQuestClaimed: newDay ? false : save.dailyQuestClaimed,
       transferFragments: save.transferFragments,
       transferProofs: save.transferProofs,
+      hasChosenJob: save.hasChosenJob,
       lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,
@@ -420,7 +432,8 @@ export const useGameState = create<GameState>((set, get) => ({
         state.companions,
         state.secondaryJob,
         state.itemInstances,
-        state.skillTree
+        state.skillTree,
+        state.hasChosenJob
       );
       const isBoss = isBossSubStage(state.stageProgress.subStage);
       const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
@@ -454,7 +467,8 @@ export const useGameState = create<GameState>((set, get) => ({
       state.companions,
       state.secondaryJob,
       state.itemInstances,
-      state.skillTree
+      state.skillTree,
+      state.hasChosenJob
     );
     // 關卡難度倍率:跟這隻怪生成當下用的是同一份 stageProgress(這次擊殺才會讓它晉級,
     // 所以算獎勵的當下它還沒變),疊加在等級/裝備既有的獎勵倍率之上,是完全獨立的另一條軸線。
@@ -624,7 +638,25 @@ export const useGameState = create<GameState>((set, get) => ({
   // 主職換成跟目前副職一樣的話,副職自動清空(不能兩職都選同一個);
   // 身上原本裝的職業鎖裝如果不符新主職,直接卸下(不限職業的款式不受影響)。
   setJob: (archetype, branch) => {
-    const { job, secondaryJob, equipment, transferProofs, transferFragments } = get();
+    const { job, secondaryJob, equipment, transferProofs, transferFragments, hasChosenJob, level } = get();
+
+    // 「學生」畢業:第一次真正選定主職,對齊 TIER_UNLOCK_LEVELS[2](Lv30)這個既有里程碑,
+    // 免費、不受轉職證明限制——job 目前存的值只是畢業前的佔位預設,不是玩家真的選過的職業,
+    // 不能套用 #57 那套「換到不同 archetype 要道具」的邏輯,否則畢業選職業會被誤判成「轉職」。
+    if (!hasChosenJob) {
+      if (level.level < TIER_UNLOCK_LEVELS[2]) {
+        useToast.getState().show(`Lv${TIER_UNLOCK_LEVELS[2]} 畢業後才能選定主職`);
+        return;
+      }
+      set({
+        job: { archetype, branch },
+        hasChosenJob: true,
+        equipment: filterLoadoutForArchetype(equipment, archetype),
+      });
+      persist(get());
+      return;
+    }
+
     const isJobChange = archetype !== job.archetype;
 
     if (isJobChange) {
