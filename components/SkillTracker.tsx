@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 
 import { Archetype } from '../game/combat';
 import {
@@ -31,24 +32,43 @@ interface SkillTileProps {
   now: number;
 }
 
-// 外框倒數:4 段從左上角開始順時針填滿(上→右→下→左),progress 0 表示剛觸發、1 表示即將發動。
-function BorderCountdown({ progress }: { progress: number }) {
-  const clamped = Math.max(0, Math.min(1, progress));
-  const segment = Math.min(3, Math.floor(clamped * 4));
-  const segmentProgress = Math.min(1, clamped * 4 - segment);
+const RING_SIZE = TILE_SIZE + BORDER_THICKNESS * 2;
+const RING_RADIUS = (RING_SIZE - BORDER_THICKNESS) / 2;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-  const topPct = segment > 0 ? 100 : segmentProgress * 100;
-  const rightPct = segment > 1 ? 100 : segment === 1 ? segmentProgress * 100 : 0;
-  const bottomPct = segment > 2 ? 100 : segment === 2 ? segmentProgress * 100 : 0;
-  const leftPct = segment === 3 ? segmentProgress * 100 : segment > 3 ? 100 : 0;
+// 圓形倒數環:繞著技能圖示轉一圈,progress 0 表示剛觸發(環是空的)、1 表示即將發動(環滿了)。
+// 用 react-native-svg 畫真正的圓弧,不是之前那種「4段矩形邊框裁成圓角」的近似做法。
+// 從12點鐘方向(-90度)順時針掃描,呼應原本邊框倒數的方向感。
+function CircularCountdown({ progress }: { progress: number }) {
+  const clamped = Math.max(0, Math.min(1, progress));
+  const dashOffset = RING_CIRCUMFERENCE * (1 - clamped);
 
   return (
-    <>
-      <View style={[styles.borderTop, { width: `${topPct}%` }]} />
-      <View style={[styles.borderRight, { height: `${rightPct}%` }]} />
-      <View style={[styles.borderBottom, { width: `${bottomPct}%` }]} />
-      <View style={[styles.borderLeft, { height: `${leftPct}%` }]} />
-    </>
+    <Svg width={RING_SIZE} height={RING_SIZE} style={styles.ringSvg}>
+      <Circle
+        cx={RING_SIZE / 2}
+        cy={RING_SIZE / 2}
+        r={RING_RADIUS}
+        stroke="#3a3a45"
+        strokeWidth={BORDER_THICKNESS}
+        fill="none"
+      />
+      <Circle
+        cx={RING_SIZE / 2}
+        cy={RING_SIZE / 2}
+        r={RING_RADIUS}
+        stroke="#c9a94f"
+        strokeWidth={BORDER_THICKNESS}
+        strokeDasharray={`${RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+        strokeDashoffset={dashOffset}
+        strokeLinecap="round"
+        fill="none"
+        // 用原生 SVG transform 字串轉 -90 度(12點鐘方向起算),不用 rotation/originX/originY
+        // 那組 react-native-svg 專屬 prop——在 react-native-web 上會被轉譯成不合法的 DOM
+        // 屬性(transform-XXX),跳出開發模式警告框。原生 SVG transform 屬性所有平台都吃。
+        transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+      />
+    </Svg>
   );
 }
 
@@ -63,7 +83,7 @@ function SkillTile({ tag, archetype, slot, label, level, timerStartedAt, interva
   return (
     <View style={styles.tileGroup}>
       <View style={styles.tileWrapper}>
-        <BorderCountdown progress={justTriggered ? 1 : progress} />
+        <CircularCountdown progress={justTriggered ? 1 : progress} />
         <View style={[styles.tile, justTriggered && styles.tileFlash]}>
           <View style={styles.iconWrap}>
             <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={3} />
@@ -171,17 +191,18 @@ const styles = StyleSheet.create({
     gap: 4,
     width: TILE_SIZE + BORDER_THICKNESS * 2 + 8,
   },
-  // 圓形圖示,呼應手遊常見的技能圓餅樣式;外框(倒數段)跟內圈都設成完整圓角,
-  // wrapper 加 overflow hidden 讓4段矩形倒數框被裁成圓弧,不用另外刻SVG圓環。
+  // 圓形圖示,呼應手遊常見的技能圓餅樣式;倒數環改用 react-native-svg 畫真正的圓弧
+  // (見 CircularCountdown),wrapper 不再需要 borderWidth/overflow hidden 那套裁切技巧。
   tileWrapper: {
     width: TILE_SIZE + BORDER_THICKNESS * 2,
     height: TILE_SIZE + BORDER_THICKNESS * 2,
     position: 'relative',
-    borderWidth: BORDER_THICKNESS,
-    borderColor: '#3a3a45',
-    borderRadius: (TILE_SIZE + BORDER_THICKNESS * 2) / 2,
-    overflow: 'hidden',
     alignSelf: 'center',
+  },
+  ringSvg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   tile: {
     position: 'absolute',
@@ -197,35 +218,6 @@ const styles = StyleSheet.create({
   },
   tileFlash: {
     backgroundColor: '#4a4456',
-  },
-  // 外框倒數:4 段從左上角開始順時針填滿,金色段位越長代表離發動越近,比純數字/內部遮罩更一眼看出進度。
-  borderTop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    height: BORDER_THICKNESS,
-    backgroundColor: '#c9a94f',
-  },
-  borderRight: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: BORDER_THICKNESS,
-    backgroundColor: '#c9a94f',
-  },
-  borderBottom: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    height: BORDER_THICKNESS,
-    backgroundColor: '#c9a94f',
-  },
-  borderLeft: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: BORDER_THICKNESS,
-    backgroundColor: '#c9a94f',
   },
   iconWrap: {
     width: TILE_SIZE,
