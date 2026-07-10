@@ -1,7 +1,8 @@
 import { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { getStageBackdropColor, getStageBackground } from '../game/sprites/backgrounds';
+import { getCurrentTier } from '../game/combat';
+import { getJobBackdropColor, getJobBackground } from '../game/sprites/backgrounds';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
 
@@ -18,10 +19,12 @@ interface MainVisualProps {
 
 export function MainVisual({ children }: MainVisualProps) {
   const job = useGameState((state) => state.job);
+  const level = useGameState((state) => state.level);
   const stageProgress = useGameState((state) => state.stageProgress);
 
-  const background = getStageBackground(job.archetype, stageProgress.stage, EXTENDED_ROWS);
-  const backdropColor = getStageBackdropColor(job.archetype);
+  const tier = getCurrentTier(level.level);
+  const background = getJobBackground(job.archetype, job.branch, tier, EXTENDED_ROWS);
+  const backdropColor = getJobBackdropColor(job.archetype, job.branch, tier);
 
   return (
     <View style={[styles.wrap, { backgroundColor: backdropColor }]}>
