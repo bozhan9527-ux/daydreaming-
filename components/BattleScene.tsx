@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -13,6 +13,8 @@ import Animated, {
 import { getCompanionById } from '../game/companions';
 import { getAttackEffect } from '../game/sprites/attackEffects';
 import { getCompanionFrame } from '../game/sprites/companions';
+import { getItemById } from '../game/equipment';
+import { getItemIcon } from '../game/sprites/equipmentIcons';
 import { getMonsterFrame } from '../game/sprites/monsters';
 import { useGameState } from '../hooks/useGameState';
 import { HeroSprite } from './HeroSprite';
@@ -32,9 +34,9 @@ const COMPANION_PIXEL_SIZE = 1;
 const GROUND_PATTERN_WIDTH = 40;
 const GROUND_SCROLL_DURATION = 1400;
 
-// 特效從勇者側往怪物側移動的來回循環:去程 EFFECT_TRAVEL_MS、停留在怪物旁邊 EFFECT_HOLD_MS
-// 後瞬間收回原位再等 EFFECT_REST_MS,呼應「攻擊要往怪物方向打過去」而不是原地播放。
-// 怪物受擊反應(HIT_REACT_DELAY_MS)刻意卡在特效差不多「打到」的時間點才觸發,兩邊對得上。
+// 技能特效從勇者側往怪物側移動一趟再收回:去程 EFFECT_TRAVEL_MS、停留在怪物旁邊 EFFECT_HOLD_MS
+// 後瞬間收回原位。跟 SkillTracker 的技能格倒數綁同一個 lastSkillTriggerAt 時間戳,只在
+// 技能真的觸發那一刻播一次,不是整場戰鬥從頭到尾一直循環——普通攻擊改由 WeaponSwingEffect 負責。
 const EFFECT_TRAVEL_MS = 420;
 const EFFECT_HOLD_MS = 120;
 const EFFECT_REST_MS = 460;
@@ -43,6 +45,17 @@ const HIT_REACT_DELAY_MS = EFFECT_TRAVEL_MS - 60;
 const HIT_REACT_PUNCH_MS = 90;
 const HIT_REACT_SETTLE_MS = 160;
 const HIT_REACT_CYCLE_MS = EFFECT_TRAVEL_MS + EFFECT_HOLD_MS + EFFECT_REST_MS;
+// 技能特效觸發後畫面上要「亮」多久,跟 SkillTracker.tsx 的 FLASH_WINDOW_MS 用同一個數字,
+// 兩邊各自維護一份是延續本專案「小型常數依 per-file 慣例各自複製」的既有作法。
+const SKILL_FLASH_WINDOW_MS = 900;
+// 普通攻擊:武器揮動的短循環,不等技能觸發,只要還在戰鬥中就會一直揮,呈現「持續輸出」的基礎攻擊。
+const SWING_CYCLE_MS = 700;
+const SWING_OUT_MS = 160;
+const SWING_BACK_MS = 220;
+// 主手還沒裝備任何武器時(新玩家開局常見狀態)沒有武器圖示可以揮,退回一個赤手空拳的
+// 揮擊小圖示,普通攻擊的揮動動作才不會在還沒買武器前直接整個消失不見。
+const FIST_FRAME = ['.X.', 'XXX', '.X.'];
+const FIST_PALETTE: Record<string, string> = { X: '#d8c9a8' };
 
 // 底下持續往左捲動的地面刻度線,製造「勇者往右前進」的錯覺,跟戰鬥狀態無關,一直跑。
 function GroundScroll() {
@@ -77,25 +90,18 @@ interface AttackTravelEffectProps {
   active: boolean;
 }
 
-// 統一的技能特效插槽:不管職業(近戰/遠程/輔助)長怎樣,一律從勇者旁邊往怪物方向移動再收回,
-// 取代原本近戰/遠程/輔助各自寫死一個靜態位置的做法——那樣看起來只是特效疊在旁邊,沒有「打過去」的感覺。
+// 技能特效插槽:只在技能真的觸發的那一刻(active 從 false 翻成 true 的900ms閃爍窗)
+// 從勇者旁邊往怪物方向衝一趟再收回,平常戰鬥中不會一直播放——不然玩家分不出來
+// 「現在是技能發動」還是「單純還在打」。持續輸出的普通攻擊改由 WeaponSwingEffect 負責。
 function AttackTravelEffect({ frame, palette, active }: AttackTravelEffectProps) {
   const travel = useSharedValue(0);
 
   useEffect(() => {
-    if (!active) {
-      travel.value = 0;
-      return;
-    }
-    travel.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: EFFECT_TRAVEL_MS, easing: Easing.out(Easing.quad) }),
-        withTiming(1, { duration: EFFECT_HOLD_MS }),
-        withTiming(0, { duration: 0 }),
-        withTiming(0, { duration: EFFECT_REST_MS })
-      ),
-      -1,
-      false
+    if (!active) return;
+    travel.value = withSequence(
+      withTiming(1, { duration: EFFECT_TRAVEL_MS, easing: Easing.out(Easing.quad) }),
+      withTiming(1, { duration: EFFECT_HOLD_MS }),
+      withTiming(0, { duration: EFFECT_REST_MS, easing: Easing.in(Easing.quad) })
     );
   }, [active, travel]);
 
@@ -107,6 +113,47 @@ function AttackTravelEffect({ frame, palette, active }: AttackTravelEffectProps)
   return (
     <Animated.View style={[styles.effectSlot, animatedStyle]}>
       <PixelSprite frame={frame} palette={palette} pixelSize={3} />
+    </Animated.View>
+  );
+}
+
+interface WeaponSwingEffectProps {
+  frame: string[];
+  palette: Record<string, string>;
+  active: boolean;
+}
+
+// 普通攻擊:武器圖示在勇者手邊短促揮動(旋轉來回),不像技能特效那樣衝去怪物那邊——
+// 呼應「近身揮武器造成傷害」而不是「發招打過去」的視覺差異。只要還在戰鬥中就會持續循環,
+// 代表基礎攻擊一直在打,不需要對到 useBattleLoop 裡任何離散的攻擊時間點(戰鬥本來就是
+// 連續進度條模型,沒有逐次的攻擊時間戳)。
+function WeaponSwingEffect({ frame, palette, active }: WeaponSwingEffectProps) {
+  const swing = useSharedValue(0);
+
+  useEffect(() => {
+    if (!active) {
+      swing.value = 0;
+      return;
+    }
+    swing.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: SWING_OUT_MS, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: SWING_BACK_MS, easing: Easing.in(Easing.quad) }),
+        withTiming(0, { duration: SWING_CYCLE_MS - SWING_OUT_MS - SWING_BACK_MS })
+      ),
+      -1,
+      false
+    );
+  }, [active, swing]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${swing.value * -50}deg` }],
+    opacity: active ? 1 : 0,
+  }));
+
+  return (
+    <Animated.View style={[styles.swingSlot, animatedStyle]}>
+      <PixelSprite frame={frame} palette={palette} pixelSize={1.5} />
     </Animated.View>
   );
 }
@@ -145,6 +192,10 @@ function MonsterHitReaction({ active, children }: MonsterHitReactionProps) {
 }
 
 export function BattleScene() {
+  // 技能觸發閃爍窗要讀 Date.now() 這種 impure 值判斷「剛剛」,同 SkillTracker.tsx 的做法,
+  // 這個 component 要跳出 React Compiler 的自動記憶化,不然 forceTick 不會觸發重算。
+  'use no memo';
+
   const bodyType = useGameState((state) => state.bodyType);
   const equipment = useGameState((state) => state.equipment);
   const job = useGameState((state) => state.job);
@@ -153,8 +204,26 @@ export function BattleScene() {
   const fightStartedAt = useGameState((state) => state.fightStartedAt);
   const fightElapsedMs = useGameState((state) => state.fightElapsedMs);
   const boostCurrentFight = useGameState((state) => state.boostCurrentFight);
+  const lastSkillTriggerAt = useGameState((state) => state.lastSkillTriggerAt);
+  const lastSecondarySkillTriggerAt = useGameState((state) => state.lastSecondarySkillTriggerAt);
+
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => forceTick((t) => t + 1), 250);
+    return () => clearInterval(id);
+  }, []);
 
   const effect = getAttackEffect(job.archetype);
+  const now = Date.now();
+  const skillJustTriggered =
+    (lastSkillTriggerAt !== null && now - lastSkillTriggerAt < SKILL_FLASH_WINDOW_MS) ||
+    (lastSecondarySkillTriggerAt !== null && now - lastSecondarySkillTriggerAt < SKILL_FLASH_WINDOW_MS);
+
+  const mainhandId = equipment.mainhand;
+  const mainhandItem = mainhandId !== undefined ? getItemById(mainhandId) : undefined;
+  const weaponIcon = mainhandItem ? getItemIcon(mainhandItem) : undefined;
+  const swingFrame = weaponIcon ? weaponIcon.frame : FIST_FRAME;
+  const swingPalette = weaponIcon && mainhandItem ? { [weaponIcon.fillKey]: mainhandItem.color } : FIST_PALETTE;
 
   const progress = currentEncounter ? Math.min(1, fightElapsedMs / currentEncounter.fightDurationMs) : 0;
 
@@ -186,7 +255,9 @@ export function BattleScene() {
         </View>
       )}
 
-      <AttackTravelEffect frame={effect.frame} palette={effect.palette} active={!!currentEncounter} />
+      <WeaponSwingEffect frame={swingFrame} palette={swingPalette} active={!!currentEncounter} />
+
+      <AttackTravelEffect frame={effect.frame} palette={effect.palette} active={skillJustTriggered} />
 
       {currentEncounter && (
         <View key={fightStartedAt ?? 'none'} style={styles.monsterSlot}>
@@ -249,6 +320,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 8,
     bottom: 20,
+  },
+  // 武器揮動插槽:貼在勇者手邊(heroSlot 右側),用旋轉呈現「近身揮擊」,跟中段那個
+  // 衝去怪物旁邊再收回的技能特效插槽(effectSlot)刻意分開位置,兩種攻擊視覺不會疊在一起混淆。
+  swingSlot: {
+    position: 'absolute',
+    left: 44,
+    bottom: 34,
   },
   mountSlot: {
     position: 'absolute',
