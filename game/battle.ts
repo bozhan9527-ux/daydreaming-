@@ -1,6 +1,7 @@
+import { JobTier } from './combat';
 import { coinsForRarity } from './currency';
 import { expPerMin } from './leveling';
-import { BOSS_MONSTER, FINAL_BOSS_MONSTER, getMonstersByRarity, MonsterSpec, pickMonster } from './monsters';
+import { FINAL_BOSS_MONSTER, getMonstersByRarity, getStageBossMonster, MonsterSpec, pickMonster } from './monsters';
 import { Rarity, rollTrigger, TriggerState } from './trigger';
 
 // 每個稀有度的「基準」戰鬥時長,換算擊殺經驗值的基準,也是 speedMultiplier 縮放的基礎值。
@@ -32,6 +33,8 @@ export interface Encounter {
 // speedMultiplier 來自裝備/坐騎的加成(1 = 無加成),縮短實際戰鬥時長,設下限避免變成 0 或負數。
 // isBoss/isFinalBoss 由呼叫端依 game/stages.ts 的 StageProgress 算好再傳進來(battle.ts 不需要
 // 認識關卡系統的內部結構),true 時強制生成關卡魔王/大魔王,跳過稀有度亂數、不影響保底計數器。
+// bossTier 決定關卡魔王要用哪一款造型(見 game/monsters.ts 的 STAGE_BOSS_MONSTERS),
+// 呼叫端傳玩家目前的職業階級(getCurrentTier),魔王造型才會跟主畫面背景主題對上。
 // difficultyMultiplier 同樣由呼叫端算好(見 getStageDifficultyMultiplier),疊加在戰鬥時長上。
 export function generateEncounter(
   triggerState: TriggerState,
@@ -39,10 +42,11 @@ export function generateEncounter(
   rng: () => number = Math.random,
   isBoss: boolean = false,
   isFinalBoss: boolean = false,
-  difficultyMultiplier: number = 1
+  difficultyMultiplier: number = 1,
+  bossTier: JobTier = 1
 ): Encounter {
   if (isBoss || isFinalBoss) {
-    const monster = isFinalBoss ? FINAL_BOSS_MONSTER : BOSS_MONSTER;
+    const monster = isFinalBoss ? FINAL_BOSS_MONSTER : getStageBossMonster(bossTier);
     const fightDurationMs = Math.max(
       MIN_FIGHT_DURATION_MS,
       Math.round((BASE_FIGHT_DURATION_MS.legendary * difficultyMultiplier) / speedMultiplier)

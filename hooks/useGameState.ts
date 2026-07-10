@@ -540,7 +540,16 @@ export const useGameState = create<GameState>((set, get) => ({
       const isBoss = isBossSubStage(state.stageProgress.subStage);
       const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
       const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress);
-      const encounter = generateEncounter(state.trigger, speedMultiplier, Math.random, isBoss, isFinalBoss, difficultyMultiplier);
+      const bossTier = getCurrentTier(state.level.level);
+      const encounter = generateEncounter(
+        state.trigger,
+        speedMultiplier,
+        Math.random,
+        isBoss,
+        isFinalBoss,
+        difficultyMultiplier,
+        bossTier
+      );
       if (state.forceInstantNextFight) {
         encounter.fightDurationMs = 0;
       }

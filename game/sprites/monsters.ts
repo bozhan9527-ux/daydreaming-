@@ -248,10 +248,14 @@ function rect(x0: number, y0: number, x1: number, y1: number, c: string): Mark[]
   return marks;
 }
 
-const BOSS_CANVAS = 20;
+// 5 款關卡魔王依玩家目前的職業階級(JobTier)分開造型,呼應主畫面背景(backgrounds.ts)本來就
+// 依階級由樸素到華麗遞進的視覺基調——不再是全部關卡共用同一隻「關卡魔王」。體型都比一般怪物
+// (最大 20 寬的幼龍)更壯碩醒目,但輪廓/配色各自設計出區別(角/獠牙/披風/翅膀/皇冠依序遞增)。
 
-// 魔王:雙角、寬肩斗篷、紅色發光雙眼,體型比一般怪物(最大 20 寬的幼龍)更壯碩醒目。
-const BOSS_MARKS: Mark[] = [
+const BOSS_TIER1_CANVAS = 20;
+
+// Tier1 荒地首領:雙角、寬肩斗篷、紅色發光雙眼——最初階、造型最簡樸的魔王。
+const BOSS_TIER1_MARKS: Mark[] = [
   ...rect(5, 0, 6, 1, 'K'),
   ...rect(13, 0, 14, 1, 'K'),
   ...rect(6, 2, 13, 6, 'H'),
@@ -267,12 +271,130 @@ const BOSS_MARKS: Mark[] = [
   ...rect(11, 18, 13, 19, 'K'),
 ];
 
-const BOSS_PALETTE: Record<string, string> = {
+const BOSS_TIER1_PALETTE: Record<string, string> = {
   K: '#2a1a1a',
   H: '#7a4a4a',
   R: '#e05050',
   C: '#4a2a3a',
   B: '#6b3a4a',
+};
+
+const BOSS_TIER2_CANVAS = 20;
+
+// Tier2 窖藏獸王:寬臉獠牙、毛皮肩甲,獸化路線,棕橙色調跟 tier1 的暗紅拉開差異。
+const BOSS_TIER2_MARKS: Mark[] = [
+  ...rect(4, 1, 5, 2, 'K'),
+  ...rect(14, 1, 15, 2, 'K'),
+  ...rect(5, 2, 14, 7, 'H'),
+  { x: 7, y: 5, c: 'R' },
+  { x: 12, y: 5, c: 'R' },
+  { x: 7, y: 7, c: 'W' },
+  { x: 12, y: 7, c: 'W' },
+  ...rect(3, 8, 16, 10, 'C'),
+  ...rect(5, 10, 14, 16, 'B'),
+  ...rect(5, 17, 8, 19, 'B'),
+  ...rect(11, 17, 14, 19, 'B'),
+  ...rect(5, 18, 8, 19, 'K'),
+  ...rect(11, 18, 14, 19, 'K'),
+];
+
+const BOSS_TIER2_PALETTE: Record<string, string> = {
+  K: '#241c14',
+  H: '#8a6a42',
+  R: '#e0a050',
+  C: '#4a3a24',
+  B: '#6b5230',
+  W: '#f2ead8',
+};
+
+const BOSS_TIER3_CANVAS = 22;
+
+// Tier3 鏽甲督軍:尖刺頭盔、方正護肩、鏽蝕金屬色,走「重裝軍將」路線。
+const BOSS_TIER3_MARKS: Mark[] = [
+  ...rect(9, 0, 12, 1, 'K'),
+  ...rect(7, 1, 14, 6, 'H'),
+  { x: 9, y: 4, c: 'R' },
+  { x: 12, y: 4, c: 'R' },
+  ...rect(8, 5, 13, 5, 'K'),
+  ...rect(2, 7, 19, 9, 'C'),
+  ...rect(4, 7, 7, 9, 'M'),
+  ...rect(14, 7, 17, 9, 'M'),
+  ...rect(7, 9, 14, 16, 'B'),
+  ...rect(9, 10, 12, 12, 'M'),
+  ...rect(7, 17, 10, 21, 'B'),
+  ...rect(11, 17, 14, 21, 'B'),
+  ...rect(7, 19, 10, 21, 'K'),
+  ...rect(11, 19, 14, 21, 'K'),
+];
+
+const BOSS_TIER3_PALETTE: Record<string, string> = {
+  K: '#1c1a18',
+  H: '#7a5a4a',
+  R: '#e07a40',
+  C: '#3a3632',
+  B: '#5a4438',
+  M: '#9a6a48',
+};
+
+const BOSS_TIER4_CANVAS = 22;
+
+// Tier4 幽夜魔君:雙翼展開、下半身化為虛影,深紫色調,走「幽冥系」路線。
+const BOSS_TIER4_MARKS: Mark[] = [
+  { x: 8, y: 0, c: 'K' },
+  { x: 13, y: 0, c: 'K' },
+  ...rect(8, 1, 13, 6, 'H'),
+  { x: 9, y: 4, c: 'R' },
+  { x: 12, y: 4, c: 'R' },
+  ...rect(0, 6, 6, 10, 'W'),
+  ...rect(15, 6, 21, 10, 'W'),
+  ...rect(7, 7, 14, 9, 'K'),
+  ...rect(6, 9, 15, 15, 'B'),
+  ...rect(8, 10, 13, 12, 'C'),
+  ...rect(8, 16, 13, 18, 'B'),
+  ...rect(9, 19, 12, 21, 'B'),
+];
+
+const BOSS_TIER4_PALETTE: Record<string, string> = {
+  K: '#140a1c',
+  H: '#3a1e4a',
+  R: '#c060f0',
+  W: '#241436',
+  B: '#2a1638',
+  C: '#4a2860',
+};
+
+const BOSS_TIER5_CANVAS = 24;
+
+// Tier5 巔峰宗師:皇冠、寬幅披風、金白配色,循環進度最頂端的魔王——比 tier1~4 更華麗,
+// 但走「聖騎士式的莊嚴」路線,跟大魔王(FINAL_BOSS_MARKS 的雙翼魔王路線)刻意做出區隔。
+const BOSS_TIER5_MARKS: Mark[] = [
+  ...rect(10, 0, 13, 1, 'Y'),
+  { x: 9, y: 1, c: 'Y' },
+  { x: 14, y: 1, c: 'Y' },
+  { x: 11, y: 0, c: 'W' },
+  { x: 12, y: 0, c: 'W' },
+  ...rect(9, 2, 14, 7, 'H'),
+  { x: 10, y: 4, c: 'R' },
+  { x: 13, y: 4, c: 'R' },
+  ...rect(1, 8, 22, 13, 'C'),
+  ...rect(4, 8, 19, 12, 'B'),
+  ...rect(9, 8, 14, 16, 'B'),
+  ...rect(10, 9, 13, 9, 'Y'),
+  ...rect(10, 14, 13, 14, 'Y'),
+  ...rect(8, 17, 11, 22, 'B'),
+  ...rect(12, 17, 15, 22, 'B'),
+  ...rect(8, 20, 11, 22, 'K'),
+  ...rect(12, 20, 15, 22, 'K'),
+];
+
+const BOSS_TIER5_PALETTE: Record<string, string> = {
+  K: '#241c10',
+  H: '#8a7248',
+  R: '#f2d675',
+  C: '#3a3020',
+  B: '#5a4a2a',
+  Y: '#c9a94f',
+  W: '#f2ead8',
 };
 
 const FINAL_BOSS_CANVAS = 24;
@@ -308,7 +430,11 @@ const FINAL_BOSS_PALETTE: Record<string, string> = {
 };
 
 const CUSTOM_MONSTER_FRAMES: Record<string, MonsterFrameData> = {
-  stage_boss: { frame: buildMarkFrame(BOSS_CANVAS, BOSS_MARKS), palette: BOSS_PALETTE },
+  stage_boss_tier1: { frame: buildMarkFrame(BOSS_TIER1_CANVAS, BOSS_TIER1_MARKS), palette: BOSS_TIER1_PALETTE },
+  stage_boss_tier2: { frame: buildMarkFrame(BOSS_TIER2_CANVAS, BOSS_TIER2_MARKS), palette: BOSS_TIER2_PALETTE },
+  stage_boss_tier3: { frame: buildMarkFrame(BOSS_TIER3_CANVAS, BOSS_TIER3_MARKS), palette: BOSS_TIER3_PALETTE },
+  stage_boss_tier4: { frame: buildMarkFrame(BOSS_TIER4_CANVAS, BOSS_TIER4_MARKS), palette: BOSS_TIER4_PALETTE },
+  stage_boss_tier5: { frame: buildMarkFrame(BOSS_TIER5_CANVAS, BOSS_TIER5_MARKS), palette: BOSS_TIER5_PALETTE },
   final_boss: { frame: buildMarkFrame(FINAL_BOSS_CANVAS, FINAL_BOSS_MARKS), palette: FINAL_BOSS_PALETTE },
 };
 

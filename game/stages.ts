@@ -25,9 +25,12 @@ export function isFinalBossStage(stage: number, subStage: number): boolean {
 
 // 每擊殺一隻怪呼叫一次:累計到 KILLS_PER_SUBSTAGE 就晉級小關;小關滿 SUBSTAGES_PER_STAGE
 // 就晉級大關;大關滿 STAGE_COUNT(等於剛打完大魔王)直接循環回第 1 關第 1 小關。
+// 魔王小關(第10小關)是例外:只需要擊敗那一隻魔王/大魔王本體就晉級,不像一般小關要湊滿
+// KILLS_PER_SUBSTAGE 隻——魔王關本來就該是「打贏這隻就過」的單場戰鬥,不是刷5隻同樣的魔王。
 export function advanceStageProgress(progress: StageProgress): StageProgress {
   const killsInSubStage = progress.killsInSubStage + 1;
-  if (killsInSubStage < KILLS_PER_SUBSTAGE) {
+  const killsNeeded = isBossSubStage(progress.subStage) ? 1 : KILLS_PER_SUBSTAGE;
+  if (killsInSubStage < killsNeeded) {
     return { ...progress, killsInSubStage };
   }
 
