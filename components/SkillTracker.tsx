@@ -8,6 +8,7 @@ import {
   activeSkillTriggerIntervalSeconds,
   secondaryActiveSkillTriggerIntervalSeconds,
   SKILL_SLOT_NAMES,
+  SkillSlotId,
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { useGameState } from '../hooks/useGameState';
@@ -21,6 +22,7 @@ const CLOCK_TICK_MS = 250;
 interface SkillTileProps {
   tag?: string;
   archetype: Archetype;
+  slot: SkillSlotId;
   label: string;
   level: number;
   timerStartedAt: number;
@@ -50,9 +52,9 @@ function BorderCountdown({ progress }: { progress: number }) {
   );
 }
 
-function SkillTile({ tag, archetype, label, level, timerStartedAt, intervalSeconds, justTriggered, now }: SkillTileProps) {
+function SkillTile({ tag, archetype, slot, label, level, timerStartedAt, intervalSeconds, justTriggered, now }: SkillTileProps) {
   'use no memo';
-  const icon = getSkillIcon(archetype);
+  const icon = getSkillIcon(archetype, slot, level);
   const intervalMs = intervalSeconds * 1000;
   const elapsedMs = Math.max(0, Math.min(intervalMs, now - timerStartedAt));
   const progress = intervalMs > 0 ? elapsedMs / intervalMs : 1;
@@ -113,6 +115,7 @@ export function SkillTracker() {
           <SkillTile
             key={slot}
             archetype={job.archetype}
+            slot={slot}
             label={SKILL_SLOT_NAMES[job.archetype][slot]}
             level={skillTree[job.archetype][slot]}
             timerStartedAt={activeSkillTimers[slot]}
@@ -130,6 +133,7 @@ export function SkillTracker() {
           <SkillTile
             tag="副職"
             archetype={secondaryJob}
+            slot="active1"
             label={SKILL_SLOT_NAMES[secondaryJob].active1}
             level={skillTree[secondaryJob].active1}
             timerStartedAt={secondarySkillTimerStartedAt}

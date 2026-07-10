@@ -31,7 +31,6 @@ export function SkillPanel() {
   const [selectedSlot, setSelectedSlot] = useState<SkillSlotId>('active1');
 
   const tier = getCurrentTier(level.level);
-  const icon = getSkillIcon(archetype);
   const slotLevels = skillTree[archetype];
   const cap = skillSlotLevelCap(tier);
 
@@ -49,6 +48,7 @@ export function SkillPanel() {
         {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
           const slotLevel = slotLevels[slot];
           const isSelected = slot === selectedSlot;
+          const icon = getSkillIcon(archetype, slot, slotLevel);
           return (
             <Pressable
               key={slot}

@@ -10,5 +10,5 @@ export interface AttackEffectData {
 }
 
 export function getAttackEffect(archetype: Archetype): AttackEffectData {
-  return getSkillIcon(archetype);
+  return getSkillIcon(archetype, 'active1', 0);
 }
