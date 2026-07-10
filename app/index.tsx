@@ -126,17 +126,22 @@ export default function HomeScreen() {
       {/* 頂部資源列放最上面,一眼就看得到等級/金幣,不用往下找。 */}
       <TopResourceBar level={level.level} coins={coins} />
 
-      {/* 彩蛋反應框縮小+加外框,不再是又高又空的區塊——原本100px高、沒有邊框,現在收窄
-          高度並加一圈卡片邊框,呼應整頁不能滾動的版面限制,騰出來的高度給下面的內容。
-          標題「勇者發呆中」拿掉,頂部資源列+彩蛋框已經足夠表明這是首頁,不需要額外重複。 */}
+      {/* 彩蛋反應框縮小+加外框+改橫向排版——原本100px高、直向堆疊圖示+兩行文字,縮到46px高
+          時圖示本身(48px)就已經比整個框還高,彩蛋內容直接被裁掉看不見。改成「圖示在左、
+          文字在右」橫向排版,把省下來的高度預算換成寬度(這裡不缺寬度),圖示縮小一點但
+          完整露出來,文字維持看得到。 */}
       <View style={styles.resultBox}>
         {lastEvent !== null ? (
           <>
-            <EventIcon rarity={lastEvent.rarity} />
-            <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
-            <Text style={styles.resultText} numberOfLines={1} ellipsizeMode="tail">
-              {lastEvent.payload}
-            </Text>
+            <View style={styles.resultIconWrap}>
+              <EventIcon rarity={lastEvent.rarity} pixelSize={3} />
+            </View>
+            <View style={styles.resultTextCol}>
+              <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
+              <Text style={styles.resultText} numberOfLines={1} ellipsizeMode="tail">
+                {lastEvent.payload}
+              </Text>
+            </View>
           </>
         ) : (
           <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
@@ -275,15 +280,26 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 280,
     height: 46,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 1,
+    gap: 8,
     overflow: 'hidden',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#3a3a45',
     backgroundColor: 'rgba(28, 28, 36, 0.6)',
     paddingHorizontal: 10,
+  },
+  resultIconWrap: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultTextCol: {
+    flexShrink: 1,
+    gap: 1,
   },
   resultRarity: {
     color: '#8a8a95',
