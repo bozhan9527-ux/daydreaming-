@@ -105,27 +105,26 @@ export default function HomeScreen() {
   return (
     <View style={styles.root}>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+      {/* 彩蛋反應放最上面,一進畫面就看得到觸發結果。 */}
+      <View style={styles.resultBox}>
+        {lastEvent !== null ? (
+          <>
+            <EventIcon rarity={lastEvent.rarity} />
+            <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
+            <Text style={styles.resultText} numberOfLines={2} ellipsizeMode="tail">
+              {lastEvent.payload}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
+        )}
+      </View>
+
       <TopResourceBar level={level.level} coins={coins} />
       <Text style={styles.title}>勇者發呆中</Text>
 
       <MainVisual>
         <BattleScene />
-
-        {/* 彩蛋反應是點擊觸發的flavor內容,不是核心玩法,版面優先權要低於戰鬥主視覺——
-            移到BattleScene下方,不再搶在遊戲畫面之前佔據第一眼的視覺焦點。 */}
-        <View style={styles.resultBox}>
-          {lastEvent !== null ? (
-            <>
-              <EventIcon rarity={lastEvent.rarity} />
-              <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
-              <Text style={styles.resultText} numberOfLines={2} ellipsizeMode="tail">
-                {lastEvent.payload}
-              </Text>
-            </>
-          ) : (
-            <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
-          )}
-        </View>
 
         <SkillTracker />
 
