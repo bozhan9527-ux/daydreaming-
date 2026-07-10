@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 
+import { ACHIEVEMENTS, AchievementProgress, evaluateUnlockedAchievementIds } from '../game/achievements';
 import { calcKillReward, Encounter, estimateOfflineBattleResult, generateEncounter } from '../game/battle';
 import {
+  COMPANIONS,
   CompanionKind,
   CompanionState,
   createEmptyCompanionState,
@@ -25,6 +27,7 @@ import {
   ENHANCE_STONE_PRICE,
   equipItem,
   EquipmentLoadout,
+  EQUIPMENT_ITEMS,
   filterLoadoutForArchetype,
   Gender,
   GEM_SPECS,
@@ -197,6 +200,12 @@ interface GameState {
   // 學生身份(見 game/leveling.ts):false=Lv1-29學生期,尚未套用任何職業戰鬥加成、技能分頁
   // 鎖定;true=Lv30畢業已選定主職。
   hasChosenJob: boolean;
+  // 成就系統(見 game/achievements.ts):unlockedAchievementIds 是已解鎖成就 id 的持久化清單。
+  // hasEverAssembledTransferProof/hasEverSwitchedJob 是給轉職類成就用的一次性旗標,設為 true
+  // 後永不重置(轉職證明會被 setJob 消耗,單看當下數值看不出「有沒有發生過」)。
+  unlockedAchievementIds: string[];
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
   lastDailyLoginBonus: { coins: number; exp: number } | null;
   lastEnhanceOutcome: string | null;
   lastOfflineGain: number;
@@ -266,6 +275,9 @@ type PersistableState = Pick<
   | 'transferFragments'
   | 'transferProofs'
   | 'hasChosenJob'
+  | 'unlockedAchievementIds'
+  | 'hasEverAssembledTransferProof'
+  | 'hasEverSwitchedJob'
 >;
 
 function persist(state: PersistableState): void {
@@ -292,8 +304,85 @@ function persist(state: PersistableState): void {
     transferFragments: state.transferFragments,
     transferProofs: state.transferProofs,
     hasChosenJob: state.hasChosenJob,
+    unlockedAchievementIds: state.unlockedAchievementIds,
+    hasEverAssembledTransferProof: state.hasEverAssembledTransferProof,
+    hasEverSwitchedJob: state.hasEverSwitchedJob,
     lastActiveAt: Date.now(),
   });
+}
+
+// 從即時遊戲狀態算出成就系統要的那份扁平快照(見 game/achievements.ts 的 AchievementProgress),
+// 純粹讀取不修改,方便 checkAndGrantAchievements 每次呼叫都重新算一份最新的;
+// 額外 export 出去給 components/AchievementPanel.tsx 算「locked 項目的進度條」用,同一套邏輯不重複。
+export function computeAchievementProgress(state: {
+  killCount: number;
+  level: LevelState;
+  unlockedItemIds: UnlockedItemIds;
+  itemInstances: ItemInstances;
+  companions: CompanionState;
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
+}): AchievementProgress {
+  const paidItems = EQUIPMENT_ITEMS.filter((item) => item.price > 0);
+  const unlockedPaidItemCount = paidItems.filter((item) => state.unlockedItemIds.includes(item.id)).length;
+  const maxEnhanceLevel = Math.max(0, ...Object.values(state.itemInstances).map((instance) => instance.enhanceLevel));
+  const hasFullySocketedItem = Object.values(state.itemInstances).some(
+    (instance) => instance.socketedGems.length > 0 && instance.socketedGems.every((gem) => gem !== null)
+  );
+
+  return {
+    killCount: state.killCount,
+    level: state.level.level,
+    unlockedPaidItemCount,
+    totalPaidItemCount: paidItems.length,
+    maxEnhanceLevel,
+    hasFullySocketedItem,
+    companionUnlockedCount: state.companions.unlockedIds.length,
+    totalCompanionCount: COMPANIONS.length,
+    hasAssembledTransferProof: state.hasEverAssembledTransferProof,
+    hasSwitchedJobOnce: state.hasEverSwitchedJob,
+  };
+}
+
+// 成就評估+發獎的共用入口:每次呼叫都是全量重新計算(見 evaluateUnlockedAchievementIds 的
+// 註解),跟已持久化的 unlockedAchievementIds 做 diff 找出「這次新解鎖」的項目,逐一發獎並
+// 一次性 set()。刻意不在這裡呼叫 persist(get())——呼叫端每個 mutation 本來就會在自己的
+// set() 後面接一次 persist(get()),這裡的 set() 只要發生在那之前,獎勵就會被一起存進去。
+function checkAndGrantAchievements(get: () => GameState, set: (partial: Partial<GameState>) => void): void {
+  const state = get();
+  const progress = computeAchievementProgress(state);
+  const unlockedNow = evaluateUnlockedAchievementIds(progress);
+  const newlyUnlocked = unlockedNow.filter((id) => !state.unlockedAchievementIds.includes(id));
+  if (newlyUnlocked.length === 0) return;
+
+  let coins = state.coins;
+  let enhanceStones = state.enhanceStones;
+  const gemCounts: GemCounts = { ...state.gemCounts };
+  for (const id of newlyUnlocked) {
+    const reward = ACHIEVEMENTS[id].reward;
+    coins += reward.coins;
+    enhanceStones += reward.enhanceStones ?? 0;
+    if (reward.gems) {
+      for (const gemType of GEM_TYPES) {
+        const amount = reward.gems[gemType];
+        if (amount) gemCounts[gemType] += amount;
+      }
+    }
+  }
+
+  set({
+    coins,
+    enhanceStones,
+    gemCounts,
+    unlockedAchievementIds: [...state.unlockedAchievementIds, ...newlyUnlocked],
+  });
+
+  if (newlyUnlocked.length > 1) {
+    useToast.getState().show(`解鎖了 ${newlyUnlocked.length} 個成就!`);
+  } else {
+    const def = ACHIEVEMENTS[newlyUnlocked[0]];
+    useToast.getState().show(`解鎖成就:${def.title}(+${def.reward.coins}金幣)`);
+  }
 }
 
 export const useGameState = create<GameState>((set, get) => ({
@@ -319,6 +408,9 @@ export const useGameState = create<GameState>((set, get) => ({
   transferFragments: {},
   transferProofs: {},
   hasChosenJob: false,
+  unlockedAchievementIds: [],
+  hasEverAssembledTransferProof: false,
+  hasEverSwitchedJob: false,
   lastDailyLoginBonus: null,
   lastEnhanceOutcome: null,
   lastOfflineGain: 0,
@@ -395,6 +487,9 @@ export const useGameState = create<GameState>((set, get) => ({
       transferFragments: save.transferFragments,
       transferProofs: save.transferProofs,
       hasChosenJob: save.hasChosenJob,
+      unlockedAchievementIds: save.unlockedAchievementIds,
+      hasEverAssembledTransferProof: save.hasEverAssembledTransferProof,
+      hasEverSwitchedJob: save.hasEverSwitchedJob,
       lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,
@@ -406,6 +501,9 @@ export const useGameState = create<GameState>((set, get) => ({
       activeSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
       secondarySkillTimerStartedAt: Date.now(),
     });
+    // 全量重新計算:讓存檔本身已經達標的成就(不論是老存檔在這個功能上線前就已經達成,
+    // 還是離線期間的升級/掉落剛好跨過門檻)在載入當下立刻被追溯性授予。
+    checkAndGrantAchievements(get, set);
     persist(get());
   },
 
@@ -414,6 +512,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const result = applyLevelUp(level, times);
 
     set({ level: result.state });
+    checkAndGrantAchievements(get, set);
     persist(get());
     if (result.state.level > level.level) playLevelUp();
   },
@@ -571,10 +670,16 @@ export const useGameState = create<GameState>((set, get) => ({
     const transferFragmentArchetype = state.currentEncounter.isFinalBoss ? rollTransferFragmentDrop() : null;
     let nextTransferFragments = state.transferFragments;
     let nextTransferProofs = state.transferProofs;
+    // 成就用的一次性旗標:在這裡(碎片湊滿、剛合成出證明的當下,消耗發生之前)判定最準——
+    // 比對合成後的證明數是否比合成前多,多了就代表這一擊真的湊出了第一個轉職證明。
+    let nextHasEverAssembledTransferProof = state.hasEverAssembledTransferProof;
     if (transferFragmentArchetype) {
       const gained = applyTransferFragmentGain(state.transferFragments, state.transferProofs, transferFragmentArchetype);
       nextTransferFragments = gained.fragments;
       nextTransferProofs = gained.proofs;
+      if ((gained.proofs[transferFragmentArchetype] ?? 0) !== (state.transferProofs[transferFragmentArchetype] ?? 0)) {
+        nextHasEverAssembledTransferProof = true;
+      }
     }
 
     // 金幣意外之財:獨立判定,中了直接加一筆這次擊殺基礎金幣的倍數。
@@ -601,6 +706,7 @@ export const useGameState = create<GameState>((set, get) => ({
       lastCoinWindfall,
       transferFragments: nextTransferFragments,
       transferProofs: nextTransferProofs,
+      hasEverAssembledTransferProof: nextHasEverAssembledTransferProof,
       lastTransferFragmentArchetype: transferFragmentArchetype,
       currentEncounter: null,
       fightStartedAt: null,
@@ -611,6 +717,9 @@ export const useGameState = create<GameState>((set, get) => ({
       lastSecondarySkillTriggerAt,
       forceInstantNextFight,
     });
+    // 這一擊可能同時動到擊殺數/等級/裝備解鎖(掉落)/寵物坐騎解鎖(掉落)/轉職證明,
+    // 全部收斂到這一個共用檢查點,不用在上面每個掉落判定各自插一次。
+    checkAndGrantAchievements(get, set);
     persist(get());
     playEvent(state.currentEncounter.rarity);
   },
@@ -653,6 +762,7 @@ export const useGameState = create<GameState>((set, get) => ({
         hasChosenJob: true,
         equipment: filterLoadoutForArchetype(equipment, archetype),
       });
+      checkAndGrantAchievements(get, set);
       persist(get());
       return;
     }
@@ -675,8 +785,16 @@ export const useGameState = create<GameState>((set, get) => ({
       job: { archetype, branch },
       secondaryJob: nextSecondaryJob,
       equipment: filterLoadoutForArchetype(equipment, archetype),
-      ...(isJobChange ? { transferProofs: { ...transferProofs, [archetype]: (transferProofs[archetype] ?? 0) - 1 } } : {}),
+      // 只有這條「真的換成不同 archetype、消耗證明」的分支代表玩家「改頭換面」過一次,
+      // 畢業選第一個主職(上面 !hasChosenJob 分支)不算——見 transfer_first_switch 成就。
+      ...(isJobChange
+        ? {
+            transferProofs: { ...transferProofs, [archetype]: (transferProofs[archetype] ?? 0) - 1 },
+            hasEverSwitchedJob: true,
+          }
+        : {}),
     });
+    checkAndGrantAchievements(get, set);
     persist(get());
   },
 
@@ -794,6 +912,7 @@ export const useGameState = create<GameState>((set, get) => ({
       unlockedItemIds: nextUnlockedItemIds,
       lastEnhanceOutcome: message,
     });
+    checkAndGrantAchievements(get, set);
     persist(get());
   },
 
@@ -828,6 +947,7 @@ export const useGameState = create<GameState>((set, get) => ({
       gemCounts: { ...gemCounts, [gemType]: gemCounts[gemType] - 1 },
       itemInstances: { ...itemInstances, [itemId]: { ...instance, socketedGems: nextSockets } },
     });
+    checkAndGrantAchievements(get, set);
     persist(get());
   },
 
@@ -899,6 +1019,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     const unlocked = unlockCompanion(companions, id);
     set({ coins: coins - companion.price, companions: equipCompanion(unlocked, id) });
+    checkAndGrantAchievements(get, set);
     persist(get());
   },
 

@@ -1,6 +1,6 @@
 // 分頁導覽用的小圖示,跟 game/sprites/eventIcons.ts 同一套「純程式產生像素格」原則。
 // 新增分頁時只要在這裡多加一個 icon frame + 對應的 TabIconId,不用動 UI 元件本身。
-export type TabIconId = 'job' | 'equipment' | 'skill' | 'companion' | 'enhance' | 'socket' | 'codex';
+export type TabIconId = 'job' | 'equipment' | 'skill' | 'companion' | 'enhance' | 'socket' | 'codex' | 'achievement';
 
 const ICON_COLOR = '#f2f2f2';
 
@@ -112,6 +112,22 @@ const CODEX_ICON_FRAME = [
   '............',
 ];
 
+// 成就:獎盃造型(杯身+雙耳把手+底座),呼應「達成目標」的意象。
+const ACHIEVEMENT_ICON_FRAME = [
+  '...XXXXXX...',
+  '.X.XXXXXX.X.',
+  '.X.XXXXXX.X.',
+  '...XXXXXX...',
+  '....XXXX....',
+  '.....XX.....',
+  '.....XX.....',
+  '....XXXX....',
+  '...XXXXXX...',
+  '............',
+  '............',
+  '............',
+];
+
 const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   job: JOB_ICON_FRAME,
   equipment: EQUIPMENT_ICON_FRAME,
@@ -120,6 +136,7 @@ const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   enhance: ENHANCE_ICON_FRAME,
   socket: SOCKET_ICON_FRAME,
   codex: CODEX_ICON_FRAME,
+  achievement: ACHIEVEMENT_ICON_FRAME,
 };
 
 export interface TabIconData {
