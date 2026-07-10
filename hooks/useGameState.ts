@@ -52,6 +52,7 @@ import {
   UnlockedItemIds,
 } from '../game/equipment';
 import { rollCoinWindfall } from '../game/currency';
+import { applyTransferFragmentGain, rollTransferFragmentDrop, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import {
   canClaimDailyQuest,
   DAILY_LOGIN_COIN_BONUS,
@@ -93,6 +94,7 @@ import {
 import { bumpPityFromClick, createInitialTriggerState, TriggerState } from '../game/trigger';
 import { JobSelection, loadSave, SCHEMA_VERSION, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
+import { useToast } from './useToast';
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
 const DEFAULT_BODY_TYPE: BodyType = 'normal';
@@ -184,6 +186,10 @@ interface GameState {
   lastDailyResetAt: string;
   dailyKillCount: number;
   dailyQuestClaimed: boolean;
+  // 轉職碎片/證明:見 game/transfer.ts。lastTransferFragmentArchetype 不存檔,只給 UI 顯示這次
+  // 掉落通知用,跟 lastCompanionDropId/lastEquipmentDropId/lastCoinWindfall 同一套模式。
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
   lastDailyLoginBonus: { coins: number; exp: number } | null;
   lastEnhanceOutcome: string | null;
   lastOfflineGain: number;
@@ -198,6 +204,7 @@ interface GameState {
   lastCompanionDropId: string | null;
   lastEquipmentDropId: string | null;
   lastCoinWindfall: number | null;
+  lastTransferFragmentArchetype: Archetype | null;
   // 4 個主動技能欄位各自的倒數計時器起始時間戳(不存檔,重開只是倒數重新開始算)——
   // 用 Date.now() - activeSkillTimers[slot] 對比 activeSkillTriggerIntervalSeconds() 的毫秒數判斷是否觸發。
   activeSkillTimers: Record<ActiveSkillSlotId, number>;
@@ -249,6 +256,8 @@ type PersistableState = Pick<
   | 'lastDailyResetAt'
   | 'dailyKillCount'
   | 'dailyQuestClaimed'
+  | 'transferFragments'
+  | 'transferProofs'
 >;
 
 function persist(state: PersistableState): void {
@@ -272,6 +281,8 @@ function persist(state: PersistableState): void {
     lastDailyResetAt: state.lastDailyResetAt,
     dailyKillCount: state.dailyKillCount,
     dailyQuestClaimed: state.dailyQuestClaimed,
+    transferFragments: state.transferFragments,
+    transferProofs: state.transferProofs,
     lastActiveAt: Date.now(),
   });
 }
@@ -296,6 +307,8 @@ export const useGameState = create<GameState>((set, get) => ({
   lastDailyResetAt: '',
   dailyKillCount: 0,
   dailyQuestClaimed: false,
+  transferFragments: {},
+  transferProofs: {},
   lastDailyLoginBonus: null,
   lastEnhanceOutcome: null,
   lastOfflineGain: 0,
@@ -310,6 +323,7 @@ export const useGameState = create<GameState>((set, get) => ({
   lastCompanionDropId: null,
   lastEquipmentDropId: null,
   lastCoinWindfall: null,
+  lastTransferFragmentArchetype: null,
   activeSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
   secondarySkillTimerStartedAt: Date.now(),
   lastSkillTriggerAt: null,
@@ -367,6 +381,8 @@ export const useGameState = create<GameState>((set, get) => ({
       lastDailyResetAt: newDay ? todayDateString() : save.lastDailyResetAt,
       dailyKillCount: newDay ? 0 : save.dailyKillCount,
       dailyQuestClaimed: newDay ? false : save.dailyQuestClaimed,
+      transferFragments: save.transferFragments,
+      transferProofs: save.transferProofs,
       lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,
@@ -535,6 +551,18 @@ export const useGameState = create<GameState>((set, get) => ({
       lastEquipmentDropId = equipmentDrop.id;
     }
 
+    // 轉職碎片掉落:跟上面幾種掉落不同,不是每隻怪都判定,只在打贏本輪 5 大關最終大魔王
+    // 的這一擊(state.currentEncounter.isFinalBoss)才會擲——見 game/stages.ts 的 isFinalBossStage。
+    // 中了不看目前主/副職,6 種 archetype 等機率隨機挑一種,湊滿 10 片自動兌換成 1 個轉職證明。
+    const transferFragmentArchetype = state.currentEncounter.isFinalBoss ? rollTransferFragmentDrop() : null;
+    let nextTransferFragments = state.transferFragments;
+    let nextTransferProofs = state.transferProofs;
+    if (transferFragmentArchetype) {
+      const gained = applyTransferFragmentGain(state.transferFragments, state.transferProofs, transferFragmentArchetype);
+      nextTransferFragments = gained.fragments;
+      nextTransferProofs = gained.proofs;
+    }
+
     // 金幣意外之財:獨立判定,中了直接加一筆這次擊殺基礎金幣的倍數。
     const coinWindfall = rollCoinWindfall(coins);
     const lastCoinWindfall = coinWindfall > 0 ? coinWindfall : null;
@@ -557,6 +585,9 @@ export const useGameState = create<GameState>((set, get) => ({
       lastCompanionDropId,
       lastEquipmentDropId,
       lastCoinWindfall,
+      transferFragments: nextTransferFragments,
+      transferProofs: nextTransferProofs,
+      lastTransferFragmentArchetype: transferFragmentArchetype,
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,
@@ -587,15 +618,32 @@ export const useGameState = create<GameState>((set, get) => ({
     });
   },
 
+  // 同一 archetype 內只是換分支(A/B)完全免費,行為跟過去一樣。真的換成不同 archetype 才是
+  // 「轉職」,需要先靠打大魔王蒐集到的轉職證明(見 game/transfer.ts)才能換,證明不夠就擋下這次
+  // 切換並跳提示,不會靜默失敗;換成功會直接消耗 1 個證明。
   // 主職換成跟目前副職一樣的話,副職自動清空(不能兩職都選同一個);
   // 身上原本裝的職業鎖裝如果不符新主職,直接卸下(不限職業的款式不受影響)。
   setJob: (archetype, branch) => {
-    const { secondaryJob, equipment } = get();
+    const { job, secondaryJob, equipment, transferProofs, transferFragments } = get();
+    const isJobChange = archetype !== job.archetype;
+
+    if (isJobChange) {
+      const proofCount = transferProofs[archetype] ?? 0;
+      if (proofCount < 1) {
+        const fragmentCount = transferFragments[archetype] ?? 0;
+        useToast.getState().show(
+          `尚未集齊${TRANSFER_PROOF_NAMES[archetype]}(需要1個,目前碎片${fragmentCount}/${TRANSFER_FRAGMENTS_PER_PROOF})`
+        );
+        return;
+      }
+    }
+
     const nextSecondaryJob = secondaryJob === archetype ? null : secondaryJob;
     set({
       job: { archetype, branch },
       secondaryJob: nextSecondaryJob,
       equipment: filterLoadoutForArchetype(equipment, archetype),
+      ...(isJobChange ? { transferProofs: { ...transferProofs, [archetype]: (transferProofs[archetype] ?? 0) - 1 } } : {}),
     });
     persist(get());
   },

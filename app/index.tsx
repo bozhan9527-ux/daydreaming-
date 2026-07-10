@@ -17,6 +17,7 @@ import { canClaimDailyQuest, DAILY_QUEST_KILL_TARGET } from '../game/daily';
 import { getItemById } from '../game/equipment';
 import { canLevelUp, expToNext, levelsAvailable, MAX_LEVEL } from '../game/leveling';
 import { newlyUnlockedTabs } from '../game/onboarding';
+import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF } from '../game/transfer';
 import { Rarity } from '../game/trigger';
 import { useBattleLoop } from '../hooks/useBattleLoop';
 import { useGameState } from '../hooks/useGameState';
@@ -42,6 +43,8 @@ export default function HomeScreen() {
   const lastCompanionDropId = useGameState((state) => state.lastCompanionDropId);
   const lastEquipmentDropId = useGameState((state) => state.lastEquipmentDropId);
   const lastCoinWindfall = useGameState((state) => state.lastCoinWindfall);
+  const lastTransferFragmentArchetype = useGameState((state) => state.lastTransferFragmentArchetype);
+  const transferFragments = useGameState((state) => state.transferFragments);
   const lastDailyLoginBonus = useGameState((state) => state.lastDailyLoginBonus);
   const dailyKillCount = useGameState((state) => state.dailyKillCount);
   const dailyQuestClaimed = useGameState((state) => state.dailyQuestClaimed);
@@ -91,16 +94,18 @@ export default function HomeScreen() {
   const canClaimQuest = canClaimDailyQuest(dailyKillCount, dailyQuestClaimed);
   const equipmentDropItem = lastEquipmentDropId ? getItemById(lastEquipmentDropId) : undefined;
 
-  // 三種掉落通知(裝備/寵物/金幣)同一時間最多只顯示一則,固定高度的區塊,
+  // 四種掉落通知(裝備/轉職碎片/寵物/金幣)同一時間最多只顯示一則,固定高度的區塊,
   // 不會因為運氣好連續觸發就疊出好幾行、把下面的經驗條跟分頁按鈕往下推。
-  // 優先序:裝備 > 寵物 > 金幣(裝備/寵物是解鎖類的稀有事件,比金幣windfall更值得被看到)。
+  // 優先序:裝備 > 轉職碎片 > 寵物 > 金幣(轉職碎片只在打贏大魔王才會掉,比寵物/金幣更值得被看到)。
   const dropBannerText = equipmentDropItem
     ? `撿到裝備掉落:${equipmentDropItem.name}!已自動解鎖,可以到「裝備」分頁裝備`
-    : lastCompanionDropId
-      ? `意外獲得了新夥伴:${getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備`
-      : lastCoinWindfall !== null
-        ? `意外之財!多撿到 ${lastCoinWindfall} 金幣`
-        : null;
+    : lastTransferFragmentArchetype
+      ? `撿到${TRANSFER_FRAGMENT_NAMES[lastTransferFragmentArchetype]}!(${transferFragments[lastTransferFragmentArchetype] ?? 0}/${TRANSFER_FRAGMENTS_PER_PROOF})`
+      : lastCompanionDropId
+        ? `意外獲得了新夥伴:${getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備`
+        : lastCoinWindfall !== null
+          ? `意外之財!多撿到 ${lastCoinWindfall} 金幣`
+          : null;
 
   return (
     <View style={styles.root}>
@@ -225,6 +230,12 @@ export default function HomeScreen() {
           <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
             {openTab && <openTab.Component />}
           </ScrollView>
+          {/* RN Web 的 Modal 是直接 portal 到 document.body 的獨立子樹,根層級那個 ToastHost
+              (在這個 Modal 開著的時候)疊圖疊不贏這個 portal,所以分頁內觸發的提示(例如轉職道具
+              不夠)在這裡再掛一份、當這個 Modal 自己子樹裡最後一個節點,才能真的疊在最上面。
+              全域狀態共用同一份 useToast,兩份 ToastHost 不會顯示不同內容,只是各自負責能疊贏
+              的那個層級。 */}
+          <ToastHost />
         </View>
       </Modal>
     </ScrollView>

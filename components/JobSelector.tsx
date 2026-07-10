@@ -24,6 +24,7 @@ import {
   SkillTreeLevels,
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
+import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
 
@@ -93,6 +94,8 @@ interface JobDetailCardProps {
   tier: ReturnType<typeof getCurrentTier>;
   dualClassUnlocked: boolean;
   skillLevels: SkillTreeLevels[Archetype];
+  transferFragmentCount: number;
+  transferProofCount: number;
   onSetPrimary: () => void;
   onSetBranch: (branch: JobBranch) => void;
   onToggleSecondary: () => void;
@@ -106,6 +109,8 @@ function JobDetailCard({
   tier,
   dualClassUnlocked,
   skillLevels,
+  transferFragmentCount,
+  transferProofCount,
   onSetPrimary,
   onSetBranch,
   onToggleSecondary,
@@ -154,18 +159,29 @@ function JobDetailCard({
       )}
 
       {!isPrimary && (
-        <View style={styles.detailActions}>
-          <Pressable style={styles.actionButton} onPress={onSetPrimary}>
-            <Text style={styles.actionLabel}>設為主職</Text>
-          </Pressable>
-          {dualClassUnlocked ? (
-            <Pressable style={styles.actionButton} onPress={onToggleSecondary}>
-              <Text style={styles.actionLabel}>{isSecondary ? '取消副職' : '設為副職'}</Text>
+        <>
+          {/* 轉職門票進度:證明不夠 1 個就換不了主職(見 hooks/useGameState.ts 的 setJob),
+              「設為主職」按鈕維持可點但畫成 disabled 樣式,實際擋下+跳提示的邏輯都在 setJob 裡處理。 */}
+          <Text style={styles.transferProgress}>
+            {TRANSFER_PROOF_NAMES[archetype]} x{transferProofCount}｜{TRANSFER_FRAGMENT_NAMES[archetype]} {transferFragmentCount}/
+            {TRANSFER_FRAGMENTS_PER_PROOF}
+          </Text>
+          <View style={styles.detailActions}>
+            <Pressable
+              style={[styles.actionButton, transferProofCount < 1 && styles.actionButtonDisabled]}
+              onPress={onSetPrimary}
+            >
+              <Text style={styles.actionLabel}>設為主職</Text>
             </Pressable>
-          ) : (
-            <Text style={styles.secondaryLocked}>Lv{DUAL_CLASS_UNLOCK_LEVEL} 解鎖雙職兼修</Text>
-          )}
-        </View>
+            {dualClassUnlocked ? (
+              <Pressable style={styles.actionButton} onPress={onToggleSecondary}>
+                <Text style={styles.actionLabel}>{isSecondary ? '取消副職' : '設為副職'}</Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.secondaryLocked}>Lv{DUAL_CLASS_UNLOCK_LEVEL} 解鎖雙職兼修</Text>
+            )}
+          </View>
+        </>
       )}
     </View>
   );
@@ -176,6 +192,8 @@ export function JobSelector() {
   const level = useGameState((state) => state.level);
   const secondaryJob = useGameState((state) => state.secondaryJob);
   const skillTree = useGameState((state) => state.skillTree);
+  const transferFragments = useGameState((state) => state.transferFragments);
+  const transferProofs = useGameState((state) => state.transferProofs);
   const setJob = useGameState((state) => state.setJob);
   const setSecondaryJob = useGameState((state) => state.setSecondaryJob);
 
@@ -224,6 +242,8 @@ export function JobSelector() {
         tier={tier}
         dualClassUnlocked={dualClassUnlocked}
         skillLevels={skillTree[viewingArchetype]}
+        transferFragmentCount={transferFragments[viewingArchetype] ?? 0}
+        transferProofCount={transferProofs[viewingArchetype] ?? 0}
         onSetPrimary={() => setJob(viewingArchetype, job.branch)}
         onSetBranch={(b) => setJob(job.archetype, b)}
         onToggleSecondary={() => setSecondaryJob(isViewingSecondary ? null : viewingArchetype)}
@@ -439,6 +459,14 @@ const styles = StyleSheet.create({
   actionLabel: {
     color: '#f2f2f2',
     fontSize: 12,
+  },
+  actionButtonDisabled: {
+    opacity: 0.45,
+  },
+  transferProgress: {
+    color: '#c9a94f',
+    fontSize: 11,
+    marginTop: 2,
   },
   secondaryLocked: {
     color: '#6a6a75',
