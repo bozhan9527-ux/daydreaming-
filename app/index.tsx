@@ -138,7 +138,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} coins={coins} levelsAvailable={availableLevels} />
+        <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} levelsAvailable={availableLevels} />
 
         {/* 升級按鈕緊跟在經驗條後面,看到「可升N級」可以馬上按,不用再滑到畫面最下面——
             原本放在Tab列之後、跨過整個分頁按鈕區,操作路徑被拉斷。 */}
