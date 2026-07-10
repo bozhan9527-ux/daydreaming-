@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { isTabUnlocked, tabUnlockLevel } from '../game/onboarding';
 import { getTabIcon } from '../game/sprites/tabIcons';
@@ -18,7 +18,12 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, onSelect }: TabBar
   const showToast = useToast((state) => state.show);
 
   return (
-    <View style={styles.row}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.row}
+      style={styles.scroll}
+    >
       {tabs.map((tab) => {
         const { frame, palette } = getTabIcon(tab.icon);
         const active = tab.id === activeId;
@@ -47,17 +52,24 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, onSelect }: TabBar
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  // 分頁數量已經長到7個(職業/裝備/技能/成就/寵物坐騎/強化/鑲嵌),固定不換行的一排在較窄的
+  // 手機螢幕上會直接被切掉、右邊幾個分頁點不到——改成可以左右滑動的 ScrollView,不管之後
+  // 再加幾個分頁都不會超出螢幕,用手勢滑過去就好。
+  scroll: {
+    width: '100%',
+  },
   row: {
     flexDirection: 'row',
     flexWrap: 'nowrap',
     justifyContent: 'center',
+    flexGrow: 1,
     gap: 3,
-    width: '100%',
+    paddingHorizontal: 4,
   },
   tab: {
     alignItems: 'center',
