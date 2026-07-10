@@ -38,57 +38,83 @@ function rect(x0: number, y0: number, x1: number, y1: number, c: string): Mark[]
 
 const FILL = 'E';
 
-// 背飾:背包本體 + 兩條肩帶。
+// 背飾:背包本體(挖出前袋接縫線)+ 寬頂蓋 + 提把 + 兩條肩帶。
 const BACK_MARKS: Mark[] = [
-  ...rect(3, 3, 8, 9, FILL),
-  { x: 4, y: 1, c: FILL },
-  { x: 4, y: 2, c: FILL },
-  { x: 7, y: 1, c: FILL },
-  { x: 7, y: 2, c: FILL },
+  ...rect(3, 4, 8, 10, FILL).filter((m) => !(m.x >= 4 && m.x <= 7 && m.y === 7)),
+  ...rect(2, 2, 9, 3, FILL),
+  { x: 5, y: 1, c: FILL },
+  { x: 6, y: 1, c: FILL },
+  { x: 3, y: 0, c: FILL },
+  { x: 3, y: 1, c: FILL },
+  { x: 8, y: 0, c: FILL },
+  { x: 8, y: 1, c: FILL },
 ];
 
-// 下身:腰頭 + 分岔兩條褲管。
+// 下身:寬腰頭(含皮帶環)+ 從胯下挖開叉,分出左右兩條褲管。
 const BOTTOM_MARKS: Mark[] = [
-  ...rect(3, 2, 8, 4, FILL),
-  ...rect(3, 5, 5, 9, FILL),
-  ...rect(6, 5, 8, 9, FILL),
+  ...rect(2, 1, 9, 3, FILL),
+  { x: 3, y: 0, c: FILL },
+  { x: 8, y: 0, c: FILL },
+  ...rect(2, 4, 9, 10, FILL).filter((m) => !(m.x >= 5 && m.x <= 6 && m.y >= 5)),
 ];
 
-// 上身:立領 + 軀幹 + 兩側短袖。
+// 上身:立領 + 軀幹(挖前襟釦孔,做出開襟感)+ 兩側短袖 + 袖口反摺。
 const TOP_MARKS: Mark[] = [
-  { x: 5, y: 1, c: FILL },
-  { x: 6, y: 1, c: FILL },
-  ...rect(4, 2, 7, 9, FILL),
-  ...rect(2, 3, 3, 5, FILL),
-  ...rect(8, 3, 9, 5, FILL),
+  { x: 5, y: 0, c: FILL },
+  { x: 6, y: 0, c: FILL },
+  ...rect(4, 1, 7, 9, FILL).filter((m) => !(m.x === 5 && (m.y === 3 || m.y === 5 || m.y === 7))),
+  ...rect(1, 2, 3, 5, FILL),
+  ...rect(8, 2, 10, 5, FILL),
+  { x: 1, y: 6, c: FILL },
+  { x: 2, y: 6, c: FILL },
+  { x: 9, y: 6, c: FILL },
+  { x: 10, y: 6, c: FILL },
 ];
 
-// 腰帶:一條橫帶 + 中間方形扣環。
-const BELT_MARKS: Mark[] = [...rect(1, 5, 10, 6, FILL), ...rect(5, 4, 6, 7, FILL)];
+// 腰帶:橫帶(挖出等距皮帶孔)+ 中空方形扣環(像真的扣環一樣中間透空)。
+const BELT_MARKS: Mark[] = [
+  ...rect(1, 5, 10, 6, FILL).filter((m) => !(m.y === 5 && [2, 4, 7, 9].includes(m.x))),
+  ...rect(4, 3, 7, 8, FILL).filter((m) => !(m.x >= 5 && m.x <= 6 && m.y >= 5 && m.y <= 6)),
+];
 
-// 頭飾:圓頂帽形 + 帽緣。
+// 頭飾:頂端釦 + 窄頂 + 帽身 + 寬帽緣(兩端微微下垂)。
 const HEADWEAR_MARKS: Mark[] = [
-  { x: 5, y: 2, c: FILL },
-  { x: 6, y: 2, c: FILL },
-  ...rect(4, 3, 7, 4, FILL),
-  ...rect(3, 5, 8, 6, FILL),
-  ...rect(2, 7, 9, 7, FILL),
+  { x: 5, y: 1, c: FILL },
+  { x: 6, y: 1, c: FILL },
+  ...rect(4, 2, 7, 3, FILL),
+  ...rect(3, 4, 8, 6, FILL),
+  ...rect(1, 7, 10, 8, FILL),
+  { x: 1, y: 9, c: FILL },
+  { x: 10, y: 9, c: FILL },
 ];
 
-// 面飾:兩片鏡片 + 中間鼻樑橋。
-const FACE_MARKS: Mark[] = [...rect(2, 5, 4, 7, FILL), ...rect(7, 5, 9, 7, FILL), { x: 5, y: 6, c: FILL }, { x: 6, y: 6, c: FILL }];
+// 面飾:兩片鏡片挖空成環狀(像真的護目鏡鏡框)+ 鼻樑橋 + 兩側綁帶。
+const FACE_MARKS: Mark[] = [
+  ...rect(1, 5, 4, 8, FILL).filter((m) => !(m.x >= 2 && m.x <= 3 && m.y >= 6 && m.y <= 7)),
+  ...rect(7, 5, 10, 8, FILL).filter((m) => !(m.x >= 8 && m.x <= 9 && m.y >= 6 && m.y <= 7)),
+  { x: 5, y: 6, c: FILL },
+  { x: 6, y: 6, c: FILL },
+  { x: 0, y: 6, c: FILL },
+  { x: 11, y: 6, c: FILL },
+];
 
-// 手套:掌心方塊 + 拇指凸起。
-const GLOVES_MARKS: Mark[] = [...rect(4, 4, 8, 9, FILL), ...rect(2, 6, 3, 7, FILL)];
+// 手套:掌心(挖出四指分隔缺口)+ 拇指凸起 + 寬版手腕反摺。
+const GLOVES_MARKS: Mark[] = [
+  ...rect(4, 4, 9, 8, FILL).filter((m) => !(m.y === 4 && [5, 7, 9].includes(m.x))),
+  ...rect(2, 6, 3, 7, FILL),
+  ...rect(3, 9, 10, 10, FILL),
+];
 
-// 副手飾品:小掛包本體 + 上蓋 + 背帶。
+// 副手飾品:掛包本體(挖出翻蓋接縫線)+ 翻蓋 + 提把 + 兩側扣帶。
 const OFFHAND_MARKS: Mark[] = [
-  ...rect(3, 5, 8, 9, FILL),
-  ...rect(3, 3, 8, 4, FILL),
+  ...rect(3, 5, 8, 10, FILL).filter((m) => !(m.x >= 5 && m.x <= 6 && m.y === 7)),
+  ...rect(2, 3, 9, 4, FILL),
   { x: 5, y: 1, c: FILL },
   { x: 6, y: 1, c: FILL },
   { x: 5, y: 2, c: FILL },
   { x: 6, y: 2, c: FILL },
+  { x: 4, y: 8, c: FILL },
+  { x: 7, y: 8, c: FILL },
 ];
 
 const SLOT_ICON_MARKS: Partial<Record<EquipmentSlot, Mark[]>> = {

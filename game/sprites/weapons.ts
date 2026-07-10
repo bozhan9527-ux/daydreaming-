@@ -4,11 +4,17 @@ import { upscaleFrame } from './spriteScale';
 // 武器外型只吃「職業 + 是否雙手」,50 個等級檔共用同一個外型(呼應 game/equipment.ts 的
 // WEAPON_NOUNS,一個職業一款單手、一款雙手),顏色仍吃該裝備自己的 item.color(隨等級檔漸亮),
 // 呼叫端(HeroSprite)會把 W 換成該裝備當下的顏色,這裡只負責形狀。
-// 形狀在 6x10 基礎網格畫,配合勇者本體密度提升(64x56,約原本3倍),輸出時整張放大3倍
-// (SCALE 常數),不重新設計形狀——這些造型已經驗證過辨識度沒問題,放大只是配合新密度。
-const BASE_WIDTH = 6;
-const BASE_HEIGHT = 10;
-const SCALE = 3;
+// 形狀在 10x14 基礎網格畫(比舊的 6x10 寬鬆許多,不再侷促,讓每個職業的單手/雙手都能畫出可
+// 辨識的具體造型,雙手款體型/細節明顯比單手款更誇張)。
+// 注意:SCALE 這裡刻意維持 2,不跟其他 sprite 檔案一樣用 3——game/equipment.ts 的
+// SLOT_ANCHORS.mainhand 錨點({x:45,y:19})是拿舊版「6x10 底圖 x3 倍=18x30」的實際輸出尺寸
+// 校準的,HeroSprite 疊圖時只用這個錨點的左上角定位、不會把武器拉伸/裁切成 rect.w/h,所以放大
+// 倍率如果沒跟著底圖尺寸等比例收斂,武器會整個明顯超出勇者手部位置甚至超出勇者本體畫布。用
+// SCALE=2 讓新底圖(10x14)放大後落在 20x28,跟舊的 18x30 錨定尺寸接近,不用去動 HeroSprite.tsx
+// /game/equipment.ts 這些不在本次改動範圍內的呼叫端,細節提升但握持位置維持原本校準。
+const BASE_WIDTH = 10;
+const BASE_HEIGHT = 14;
+const SCALE = 2;
 
 function assertFrameShape(frame: string[], label: string): string[] {
   if (frame.length !== BASE_HEIGHT) throw new Error(`${label}: expected ${BASE_HEIGHT} rows, got ${frame.length}`);
@@ -18,86 +24,297 @@ function assertFrameShape(frame: string[], label: string): string[] {
   return frame;
 }
 
-// 工作手套:拳套形的方塊,窄柄。
+// 工作手套(工地風味):拳套形的厚實護拳 + 側凸拇指 + 寬版護腕。
 const PHYSICAL_MELEE_1H = assertFrameShape(
-  ['......', '.WWWW.', '.WWWW.', '.WWWW.', '.WWWW.', '..WW..', '..WW..', '......', '......', '......'],
+  [
+    '..........',
+    '..WWWWWW..',
+    '.WWWWWWWW.',
+    '.WWWWWWWW.',
+    'WWWWWWWWW.',
+    'WWWWWWWWW.',
+    '.WWWWWWWW.',
+    '.WWWWWWWW.',
+    '..WWWWWW..',
+    '..WWWWWW..',
+    '...WWWW...',
+    '...WWWW...',
+    '...WWWW...',
+    '...WWWW...',
+  ],
   'physicalMelee 1H'
 );
 
-// 鐵鎚:寬鎚頭 + 長柄。
+// 鐵鎚(工地風味):寬鎚頭滿版展開 + 收尖過渡 + 長柄,比拳套更巨大沉重。
 const PHYSICAL_MELEE_2H = assertFrameShape(
-  ['WWWWWW', 'WWWWWW', 'WWWWWW', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..'],
+  [
+    '..WWWWWW..',
+    '.WWWWWWWW.',
+    'WWWWWWWWWW',
+    'WWWWWWWWWW',
+    '.WWWWWWWW.',
+    '...WWWW...',
+    '...WWWW...',
+    '...WWWW...',
+    '...WWWW...',
+    '...WWWW...',
+    '...WWWW...',
+    '...WWWW...',
+    '...WWWW...',
+    '...WWWW...',
+  ],
   'physicalMelee 2H'
 );
 
-// 飛鏢:細長對角線,像擲出去的鏢。
+// 飛鏢:細長對角線鏢身 + 頭端尖鋒 + 尾端羽尾散開。
 const PHYSICAL_RANGED_1H = assertFrameShape(
-  ['.....W', '....WW', '...WW.', '..WW..', '.WW...', 'WW....', 'W.....', '......', '......', '......'],
+  [
+    '.......WW.',
+    '.......WW.',
+    '.......W..',
+    '.......W..',
+    '......W...',
+    '.....W....',
+    '.....W....',
+    '....W.....',
+    '....W.....',
+    '...W......',
+    '..W.......',
+    'W.W.W.....',
+    'WW.W......',
+    'WWW.......',
+  ],
   'physicalRanged 1H'
 );
 
-// 長弓:弓臂弧線 + 中間弓弦。
+// 長弓:對稱弓臂弧線 + 中央握把纏繩 + 貫穿全長的弓弦,比飛鏢更誇張大件。
 const PHYSICAL_RANGED_2H = assertFrameShape(
-  ['..WW..', '.W..W.', 'W...W.', 'W...W.', 'W...W.', 'W...W.', 'W...W.', 'W...W.', '.W..W.', '..WW..'],
+  [
+    '....WW....',
+    '...WW.W...',
+    '..W.W..W..',
+    '.W..W...W.',
+    '.W..W...W.',
+    'W...W....W',
+    'W..WWWW..W',
+    'W..WWWW..W',
+    'W...W....W',
+    '.W..W...W.',
+    '.W..W...W.',
+    '..W.W..W..',
+    '...WW.W...',
+    '....WW....',
+  ],
   'physicalRanged 2H'
 );
 
-// 急救箱:方正小箱子。
+// 急救箱(超商風味):方正提把箱身,正面挖出十字醫療標記鏤空。
 const PHYSICAL_SUPPORT_1H = assertFrameShape(
-  ['......', '.WWWW.', '.WWWW.', '.WWWW.', '.WWWW.', '......', '......', '......', '......', '......'],
+  [
+    '..........',
+    '....WW....',
+    '...W..W...',
+    '..WWWWWW..',
+    '..WWWWWW..',
+    '..WW..WW..',
+    '..W....W..',
+    '..WW..WW..',
+    '..WWWWWW..',
+    '..WWWWWW..',
+    '..WWWWWW..',
+    '..........',
+    '..........',
+    '..........',
+  ],
   'physicalSupport 1H'
 );
 
-// 擔架:長柄配橫桿,梯形節奏。
+// 擔架(超商風味):兩側扶手長桿 + 等距橫桿,收銀台後備用的長型工具,比急救箱誇張許多。
 const PHYSICAL_SUPPORT_2H = assertFrameShape(
-  ['.WWWW.', '.W..W.', '.W..W.', '.WWWW.', '.W..W.', '.W..W.', '.WWWW.', '.W..W.', '.W..W.', '.WWWW.'],
+  [
+    '.WWWWWWWW.',
+    '..W....W..',
+    '..W....W..',
+    '..WWWWWW..',
+    '..W....W..',
+    '..W....W..',
+    '..WWWWWW..',
+    '..W....W..',
+    '..W....W..',
+    '..WWWWWW..',
+    '..W....W..',
+    '..W....W..',
+    '..WWWWWW..',
+    '.WWWWWWWW.',
+  ],
   'physicalSupport 2H'
 );
 
-// 符咒短刀:十字護手 + 短刀身。
+// 符咒短刀(修煉廟宇風味):尖鋒短刀身 + 一字護手 + 纏繩握把 + 小巧刀鐔。
 const MAGIC_MELEE_1H = assertFrameShape(
-  ['......', '..WW..', '..WW..', 'WWWWWW', '..WW..', '..WW..', '..WW..', '......', '......', '......'],
+  [
+    '....WW....',
+    '....WW....',
+    '...WWWW...',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    'WWWWWWWWWW',
+    '..WWWWWW..',
+    '....WW....',
+    '...WWWW...',
+    '....WW....',
+    '...WWWW...',
+    '....WW....',
+    '...WWWW...',
+  ],
   'magicMelee 1H'
 );
 
-// 降魔大劍:長刀身 + 十字護手 + 長柄。
+// 降魔大劍(修煉廟宇風味):加長劍身 + 加厚雙層十字護手 + 長握把,比短刀壯碩許多。
 const MAGIC_MELEE_2H = assertFrameShape(
-  ['..WW..', '..WW..', '..WW..', '..WW..', 'WWWWWW', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..'],
+  [
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '...WWWW...',
+    '....WW....',
+    'WWWWWWWWWW',
+    'WWWWWWWWWW',
+    '....WW....',
+    '...WWWW...',
+    '....WW....',
+    '...WWWW...',
+    '..WWWWWW..',
+  ],
   'magicMelee 2H'
 );
 
-// 法術鍵盤:扁平面板 + 短柄。
+// 法術面板(工程師風味):扁平掃描面板,四角挖出接口孔洞 + 短握柄。
 const MAGIC_RANGED_1H = assertFrameShape(
-  ['......', 'WWWWWW', 'WWWWWW', '..WW..', '..WW..', '......', '......', '......', '......', '......'],
+  [
+    '..........',
+    '..WWWWWW..',
+    '..WWWWWW..',
+    '..W.WW.W..',
+    '..WWWWWW..',
+    '..W.WW.W..',
+    '..WWWWWW..',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+  ],
   'magicRanged 1H'
 );
 
-// 法杖:頂端法球 + 長柄。
+// 法杖(工程師風味):頂端法球 + 天線圈狀收束 + 長桿 + 加寬底座,比面板誇張立體許多。
 const MAGIC_RANGED_2H = assertFrameShape(
-  ['.WWWW.', 'WWWWWW', '.WWWW.', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..'],
+  [
+    '....WW....',
+    '...WWWW...',
+    '..WWWWWW..',
+    '...WWWW...',
+    '....WW....',
+    '..WWWWWW..',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '...WWWW...',
+  ],
   'magicRanged 2H'
 );
 
-// 藥瓶:窄頸寬身。
+// 藥瓶(醫護風味):軟木塞 + 窄頸 + 圓身,中段挖出一道刻度線代表藥液刻度。
 const MAGIC_SUPPORT_1H = assertFrameShape(
-  ['......', '..WW..', '..WW..', '.WWWW.', '.WWWW.', '.WWWW.', '..WW..', '......', '......', '......'],
+  [
+    '..........',
+    '....WW....',
+    '....WW....',
+    '...WWWW...',
+    '..WWWWWW..',
+    '..WWWWWW..',
+    '..W....W..',
+    '..WWWWWW..',
+    '..WWWWWW..',
+    '...WWWW...',
+    '..........',
+    '..........',
+    '..........',
+    '..........',
+  ],
   'magicSupport 1H'
 );
 
-// 藥箱權杖:頂端藥箱 + 長柄。
+// 藥箱權杖(醫護風味):頂端十字藥箱(鏤空成十字標記)+ 長桿 + 加寬底座,比藥瓶誇張立體許多。
 const MAGIC_SUPPORT_2H = assertFrameShape(
-  ['.WWWW.', '.WWWW.', '.WWWW.', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..', '..WW..'],
+  [
+    '...WWWW...',
+    '...W..W...',
+    '...WWWW...',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '...WWWW...',
+  ],
   'magicSupport 2H'
 );
 
-// 起始款(不限職業的舊 18 款)沒有 archetype,給一款通用短劍/大劍外型。
+// 起始款(不限職業的舊 18 款)沒有 archetype,給一款通用短劍外型。
 const GENERIC_1H = assertFrameShape(
-  ['......', '..WW..', '..WW..', '..WW..', 'WWWWWW', '..WW..', '..WW..', '......', '......', '......'],
+  [
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '..WWWWWW..',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '...WWWW...',
+    '..........',
+    '..........',
+    '..........',
+    '..........',
+  ],
   'generic 1H'
 );
 
+// 通用大劍外型,比通用短劍更長更厚重。
 const GENERIC_2H = assertFrameShape(
-  ['..WW..', '..WW..', '..WW..', '..WW..', '..WW..', 'WWWWWW', '..WW..', '..WW..', '..WW..', '..WW..'],
+  [
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '..WWWWWW..',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '....WW....',
+    '...WWWW...',
+    '..........',
+    '..........',
+  ],
   'generic 2H'
 );
 
