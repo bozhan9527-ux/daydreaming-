@@ -1,6 +1,6 @@
 // 分頁導覽用的小圖示,跟 game/sprites/eventIcons.ts 同一套「純程式產生像素格」原則。
 // 新增分頁時只要在這裡多加一個 icon frame + 對應的 TabIconId,不用動 UI 元件本身。
-export type TabIconId = 'job' | 'equipment' | 'skill' | 'companion' | 'enhance' | 'socket' | 'codex' | 'achievement';
+export type TabIconId = 'job' | 'equipment' | 'skill' | 'companion' | 'enhance' | 'socket' | 'codex' | 'achievement' | 'inventory';
 
 const ICON_COLOR = '#f2f2f2';
 
@@ -128,6 +128,23 @@ const ACHIEVEMENT_ICON_FRAME = [
   '............',
 ];
 
+// 背包:提把弧線 + 袋身 + 中間口袋接縫,跟裝備分頁裡的皮包/背飾造型呼應但更簡化,
+// 12x12在小尺寸的分頁圖示裡還是要一眼認得出是「包」不是「箱子」。
+const INVENTORY_ICON_FRAME = [
+  '....XXXX....',
+  '...X....X...',
+  '...X....X...',
+  '.XXXXXXXXXX.',
+  '.X........X.',
+  '.X..XXXX..X.',
+  '.X..XXXX..X.',
+  '.X........X.',
+  '.X........X.',
+  '.XXXXXXXXXX.',
+  '............',
+  '............',
+];
+
 const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   job: JOB_ICON_FRAME,
   equipment: EQUIPMENT_ICON_FRAME,
@@ -137,6 +154,7 @@ const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   socket: SOCKET_ICON_FRAME,
   codex: CODEX_ICON_FRAME,
   achievement: ACHIEVEMENT_ICON_FRAME,
+  inventory: INVENTORY_ICON_FRAME,
 };
 
 export interface TabIconData {

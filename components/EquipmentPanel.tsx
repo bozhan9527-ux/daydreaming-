@@ -19,8 +19,10 @@ import {
 import { getEquipmentSlotIcon, getItemIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
+import { EnhancementPanel } from './EnhancementPanel';
 import { HeroSprite } from './HeroSprite';
 import { PixelSprite } from './PixelSprite';
+import { SocketPanel } from './SocketPanel';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   back: '背飾',
@@ -63,11 +65,14 @@ const EMPTY_ICON_COLOR = '#4a4456';
 // 這裡用 2/3 抵銷回來,維持清單/選槽按鈕原本的物理尺寸不變。
 const ICON_PIXEL_SIZE = 2 / 3;
 
-type SubView = 'worn' | 'bag' | 'shop';
+// 背包已經拆成獨立頂層分頁(見 components/InventoryPanel.tsx),這裡改收納強化跟鑲嵌
+// 兩個原本各自獨立的分頁——都是圍繞「身上穿的這件裝備」在操作,收在裝備分頁底下比較好找。
+type SubView = 'worn' | 'enhance' | 'socket' | 'shop';
 
 const SUB_VIEWS: { id: SubView; label: string }[] = [
   { id: 'worn', label: '穿戴' },
-  { id: 'bag', label: '背包' },
+  { id: 'enhance', label: '強化' },
+  { id: 'socket', label: '鑲嵌' },
   { id: 'shop', label: '商店' },
 ];
 
@@ -106,7 +111,6 @@ export function EquipmentPanel() {
   const equip = useGameState((state) => state.equip);
   const unequip = useGameState((state) => state.unequip);
   const purchaseItem = useGameState((state) => state.purchaseItem);
-  const identifyItem = useGameState((state) => state.identifyItem);
   const showToast = useToast((state) => state.show);
 
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
@@ -120,9 +124,8 @@ export function EquipmentPanel() {
   const items = [...getEquippableItemsForSlot(selectedSlot, job.archetype)].sort(
     (a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0)
   );
-  // 背包:已擁有但沒穿在身上的款式;商店:還沒擁有(不管有沒有等級鎖)的款式——
-  // 「穿戴」畫面不需要這兩份清單,只顯示目前穿著的那一件。
-  const bagItems = items.filter((item) => isItemUnlocked(unlockedItemIds, item.id) && item.id !== currentId);
+  // 商店:還沒擁有(不管有沒有等級鎖)的款式;已擁有但沒穿的背包款式改到獨立的
+  // 「背包」分頁(components/InventoryPanel.tsx)去挑,「穿戴」畫面只顯示目前穿著的那一件。
   const shopItems = items.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
 
   function pickItem(item: EquipmentItem) {
@@ -138,16 +141,6 @@ export function EquipmentPanel() {
       }
     }
     showToast(formatItemStats(item, useGameState.getState().itemInstances[item.id]));
-  }
-
-  function handleIdentify(item: EquipmentItem) {
-    const cost = getIdentifyCost(item);
-    if (coins < cost) {
-      showToast(`金幣不夠鑑定 ${item.name}(需要 ${cost} 金幣)`);
-      return;
-    }
-    identifyItem(item.id);
-    showToast(`鑑定完成:${item.name}\n${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
   }
 
   function renderSlotButton(slot: EquipmentSlot) {
@@ -167,32 +160,23 @@ export function EquipmentPanel() {
     );
   }
 
-  function renderItemRow(item: EquipmentItem, mode: 'bag' | 'shop') {
-    const locked = mode === 'shop' && item.requiredLevel !== undefined && level.level < item.requiredLevel;
+  // 背包分頁拆出去之後,這裡只剩「商店」會用到這個 row 渲染,不用再分 bag/shop 兩種模式
+  // (背包款式的鑑定/點擊裝備邏輯搬到 components/InventoryPanel.tsx 去了)。
+  function renderShopItemRow(item: EquipmentItem) {
+    const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
     const icon = getItemIcon(item);
-    const instance = itemInstances[item.id];
-    const canIdentify = mode === 'bag' && instance !== undefined && !instance.identified;
     return (
-      <View key={item.id}>
-        <Pressable style={[styles.itemRow, locked && styles.itemRowLocked]} onPress={() => pickItem(item)} disabled={locked}>
-          <View style={styles.rowLeft}>
-            <View style={styles.iconWrap}>
-              <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={ICON_PIXEL_SIZE} />
-            </View>
-            <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
-              {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
-            </Text>
+      <Pressable key={item.id} style={[styles.itemRow, locked && styles.itemRowLocked]} onPress={() => pickItem(item)} disabled={locked}>
+        <View style={styles.rowLeft}>
+          <View style={styles.iconWrap}>
+            <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={ICON_PIXEL_SIZE} />
           </View>
-          <Text style={styles.itemRowMeta}>
-            {mode === 'bag' ? '點擊裝備' : locked ? `Lv${item.requiredLevel} 解鎖` : `${item.price} 金幣`}
+          <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
+            {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
           </Text>
-        </Pressable>
-        {canIdentify && (
-          <Pressable style={styles.identifyRow} onPress={() => handleIdentify(item)}>
-            <Text style={styles.identifyLabel}>🔍 鑑定隱藏素質({getIdentifyCost(item)} 金幣)</Text>
-          </Pressable>
-        )}
-      </View>
+        </View>
+        <Text style={styles.itemRowMeta}>{locked ? `Lv${item.requiredLevel} 解鎖` : `${item.price} 金幣`}</Text>
+      </Pressable>
     );
   }
 
@@ -223,7 +207,7 @@ export function EquipmentPanel() {
           >
             <Text style={styles.subNavLabel}>
               {view.label}
-              {view.id === 'bag' ? `(${bagItems.length})` : view.id === 'shop' ? `(${shopItems.length})` : ''}
+              {view.id === 'shop' ? `(${shopItems.length})` : ''}
             </Text>
           </Pressable>
         ))}
@@ -247,22 +231,17 @@ export function EquipmentPanel() {
         </View>
       )}
 
-      {subView === 'bag' && (
-        <View style={styles.itemList}>
-          {bagItems.length === 0 ? (
-            <Text style={styles.wornEmptyText}>背包裡沒有這個部位的其他款式</Text>
-          ) : (
-            bagItems.map((item) => renderItemRow(item, 'bag'))
-          )}
-        </View>
-      )}
+      {/* 強化/鑲嵌本來就是各自獨立看「身上所有已裝備」的清單,不是照 selectedSlot 篩選,
+          搬進來當子分頁之後行為不變,直接沿用原本的元件。 */}
+      {subView === 'enhance' && <EnhancementPanel />}
+      {subView === 'socket' && <SocketPanel />}
 
       {subView === 'shop' && (
         <View style={styles.itemList}>
           {shopItems.length === 0 ? (
             <Text style={styles.wornEmptyText}>這個部位的款式都收集齊了</Text>
           ) : (
-            shopItems.map((item) => renderItemRow(item, 'shop'))
+            shopItems.map(renderShopItemRow)
           )}
         </View>
       )}

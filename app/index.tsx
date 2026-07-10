@@ -38,7 +38,6 @@ export default function HomeScreen() {
   const lastOfflineKills = useGameState((state) => state.lastOfflineKills);
   const lastOfflineCoins = useGameState((state) => state.lastOfflineCoins);
   const coins = useGameState((state) => state.coins);
-  const killCount = useGameState((state) => state.killCount);
   const lastEvent = useGameState((state) => state.lastEvent);
   const lastCompanionDropId = useGameState((state) => state.lastCompanionDropId);
   const lastEquipmentDropId = useGameState((state) => state.lastEquipmentDropId);
@@ -133,8 +132,6 @@ export default function HomeScreen() {
         <BattleScene />
 
         <SkillTracker />
-
-        <Text style={styles.killCountText}>已擊敗 {killCount} 隻怪</Text>
 
         <View style={styles.dropBannerBox}>
           {dropBannerText && (
@@ -273,14 +270,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     color: '#f2f2f2',
-  },
-  killCountText: {
-    color: '#f2f2f2',
-    fontSize: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
   companionDropText: {
     color: '#e8c25a',

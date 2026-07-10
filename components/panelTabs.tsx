@@ -3,11 +3,10 @@ import { ComponentType } from 'react';
 import { TabIconId } from '../game/sprites/tabIcons';
 import { AchievementPanel } from './AchievementPanel';
 import { CompanionPanel } from './CompanionPanel';
-import { EnhancementPanel } from './EnhancementPanel';
 import { EquipmentPanel } from './EquipmentPanel';
+import { InventoryPanel } from './InventoryPanel';
 import { JobSelector } from './JobSelector';
 import { SkillPanel } from './SkillPanel';
-import { SocketPanel } from './SocketPanel';
 
 export interface PanelTab {
   id: string;
@@ -19,13 +18,13 @@ export interface PanelTab {
 }
 
 // 之後要加新系統(例如商店)的分頁,只要在這裡多加一筆、在 game/sprites/tabIcons.ts 補一個 icon frame,
-// TabBar 跟 app/index.tsx 都不用改。
+// TabBar 跟 app/index.tsx 都不用改。強化/鑲嵌已經收納進「裝備」分頁裡當子分頁(見
+// EquipmentPanel.tsx 的 SUB_VIEWS),不再是這裡的獨立項目;背包則反過來從裝備分頁拆成獨立頂層項目。
 export const PANEL_TABS: PanelTab[] = [
   { id: 'job', label: '職業', icon: 'job', Component: JobSelector },
   { id: 'equipment', label: '裝備', icon: 'equipment', Component: EquipmentPanel, iconPixelSize: 4 },
+  { id: 'inventory', label: '背包', icon: 'inventory', Component: InventoryPanel, iconPixelSize: 4 },
   { id: 'skill', label: '技能', icon: 'skill', Component: SkillPanel, iconPixelSize: 4 },
   { id: 'achievement', label: '成就', icon: 'achievement', Component: AchievementPanel },
   { id: 'companion', label: '寵物坐騎', icon: 'companion', Component: CompanionPanel },
-  { id: 'enhance', label: '強化', icon: 'enhance', Component: EnhancementPanel },
-  { id: 'socket', label: '鑲嵌', icon: 'socket', Component: SocketPanel },
 ];
