@@ -1,9 +1,16 @@
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { getCompanionById } from '../game/companions';
-import { getArchetypeComposition } from '../game/combat';
 import { getAttackEffect } from '../game/sprites/attackEffects';
 import { getCompanionFrame } from '../game/sprites/companions';
 import { getMonsterFrame } from '../game/sprites/monsters';
@@ -24,6 +31,18 @@ const MONSTER_PIXEL_SIZE = 4 / 3;
 const COMPANION_PIXEL_SIZE = 1;
 const GROUND_PATTERN_WIDTH = 40;
 const GROUND_SCROLL_DURATION = 1400;
+
+// 特效從勇者側往怪物側移動的來回循環:去程 EFFECT_TRAVEL_MS、停留在怪物旁邊 EFFECT_HOLD_MS
+// 後瞬間收回原位再等 EFFECT_REST_MS,呼應「攻擊要往怪物方向打過去」而不是原地播放。
+// 怪物受擊反應(HIT_REACT_DELAY_MS)刻意卡在特效差不多「打到」的時間點才觸發,兩邊對得上。
+const EFFECT_TRAVEL_MS = 420;
+const EFFECT_HOLD_MS = 120;
+const EFFECT_REST_MS = 460;
+const EFFECT_TRAVEL_DISTANCE = 88;
+const HIT_REACT_DELAY_MS = EFFECT_TRAVEL_MS - 60;
+const HIT_REACT_PUNCH_MS = 90;
+const HIT_REACT_SETTLE_MS = 160;
+const HIT_REACT_CYCLE_MS = EFFECT_TRAVEL_MS + EFFECT_HOLD_MS + EFFECT_REST_MS;
 
 // 底下持續往左捲動的地面刻度線,製造「勇者往右前進」的錯覺,跟戰鬥狀態無關,一直跑。
 function GroundScroll() {
@@ -52,6 +71,79 @@ function GroundScroll() {
   );
 }
 
+interface AttackTravelEffectProps {
+  frame: string[];
+  palette: Record<string, string>;
+  active: boolean;
+}
+
+// 統一的技能特效插槽:不管職業(近戰/遠程/輔助)長怎樣,一律從勇者旁邊往怪物方向移動再收回,
+// 取代原本近戰/遠程/輔助各自寫死一個靜態位置的做法——那樣看起來只是特效疊在旁邊,沒有「打過去」的感覺。
+function AttackTravelEffect({ frame, palette, active }: AttackTravelEffectProps) {
+  const travel = useSharedValue(0);
+
+  useEffect(() => {
+    if (!active) {
+      travel.value = 0;
+      return;
+    }
+    travel.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: EFFECT_TRAVEL_MS, easing: Easing.out(Easing.quad) }),
+        withTiming(1, { duration: EFFECT_HOLD_MS }),
+        withTiming(0, { duration: 0 }),
+        withTiming(0, { duration: EFFECT_REST_MS })
+      ),
+      -1,
+      false
+    );
+  }, [active, travel]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: travel.value * EFFECT_TRAVEL_DISTANCE }],
+    opacity: active ? 1 : 0,
+  }));
+
+  return (
+    <Animated.View style={[styles.effectSlot, animatedStyle]}>
+      <PixelSprite frame={frame} palette={palette} pixelSize={3} />
+    </Animated.View>
+  );
+}
+
+interface MonsterHitReactionProps {
+  active: boolean;
+  children: React.ReactNode;
+}
+
+// 怪物受擊反應:跟 AttackTravelEffect 用同一個週期長度、延遲到特效差不多飛到的時間點才觸發,
+// 短促縮放一下(punch)再彈回原尺寸,模擬「被打到震一下」,不是一直閃爍那種吵的做法。
+function MonsterHitReaction({ active, children }: MonsterHitReactionProps) {
+  const punch = useSharedValue(1);
+
+  useEffect(() => {
+    if (!active) {
+      punch.value = 1;
+      return;
+    }
+    punch.value = withRepeat(
+      withSequence(
+        withDelay(HIT_REACT_DELAY_MS, withTiming(1.12, { duration: HIT_REACT_PUNCH_MS })),
+        withTiming(1, { duration: HIT_REACT_SETTLE_MS }),
+        withTiming(1, { duration: HIT_REACT_CYCLE_MS - HIT_REACT_DELAY_MS - HIT_REACT_PUNCH_MS - HIT_REACT_SETTLE_MS })
+      ),
+      -1,
+      false
+    );
+  }, [active, punch]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: punch.value }],
+  }));
+
+  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
+}
+
 export function BattleScene() {
   const bodyType = useGameState((state) => state.bodyType);
   const equipment = useGameState((state) => state.equipment);
@@ -62,7 +154,6 @@ export function BattleScene() {
   const fightElapsedMs = useGameState((state) => state.fightElapsedMs);
   const boostCurrentFight = useGameState((state) => state.boostCurrentFight);
 
-  const { subtype } = getArchetypeComposition(job.archetype);
   const effect = getAttackEffect(job.archetype);
 
   const progress = currentEncounter ? Math.min(1, fightElapsedMs / currentEncounter.fightDurationMs) : 0;
@@ -84,6 +175,7 @@ export function BattleScene() {
         </View>
       )}
 
+      {/* 勇者從場景正中央移到左側站位,跟右側的怪物拉開距離,中間讓給往返移動的技能特效。 */}
       <View style={styles.heroSlot}>
         <HeroSprite pixelSize={HERO_PIXEL_SIZE} bodyType={bodyType} equipment={equipment} onPress={boostCurrentFight} />
       </View>
@@ -94,30 +186,17 @@ export function BattleScene() {
         </View>
       )}
 
-      {currentEncounter && subtype === 'support' && (
-        <View style={styles.supportEffectSlot}>
-          <PixelSprite frame={effect.frame} palette={effect.palette} pixelSize={3} />
-        </View>
-      )}
-
-      {currentEncounter && subtype === 'ranged' && (
-        <View style={styles.rangedEffectSlot}>
-          <PixelSprite frame={effect.frame} palette={effect.palette} pixelSize={3} />
-        </View>
-      )}
+      <AttackTravelEffect frame={effect.frame} palette={effect.palette} active={!!currentEncounter} />
 
       {currentEncounter && (
         <View key={fightStartedAt ?? 'none'} style={styles.monsterSlot}>
-          {subtype === 'melee' && (
-            <View style={styles.meleeEffectOverlay}>
-              <PixelSprite frame={effect.frame} palette={effect.palette} pixelSize={3} />
-            </View>
-          )}
-          <PixelSprite
-            frame={getMonsterFrame(currentEncounter.monster.id).frame}
-            palette={getMonsterFrame(currentEncounter.monster.id).palette}
-            pixelSize={MONSTER_PIXEL_SIZE}
-          />
+          <MonsterHitReaction active={!!currentEncounter}>
+            <PixelSprite
+              frame={getMonsterFrame(currentEncounter.monster.id).frame}
+              palette={getMonsterFrame(currentEncounter.monster.id).palette}
+              pixelSize={MONSTER_PIXEL_SIZE}
+            />
+          </MonsterHitReaction>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
@@ -164,26 +243,22 @@ const styles = StyleSheet.create({
     marginRight: 1,
     backgroundColor: '#3a3542',
   },
-  // 角色置中:讓插槽橫跨整個場景寬度、用 alignItems 置中子元素,不管場景實際寬度多少都精準置中,
-  // 不用猜測角色圖的像素寬度去手動算 left 位移。
+  // 勇者靠左站位,不再橫跨整個場景寬度置中——固定 left 距離,搭配怪物側的 right 距離,
+  // 版面才會讀成「兩邊對打、中間有空間」而不是勇者疊在怪物正前方。
   heroSlot: {
     position: 'absolute',
-    left: 0,
-    right: 0,
+    left: 8,
     bottom: 20,
-    alignItems: 'center',
   },
   mountSlot: {
     position: 'absolute',
-    left: '50%',
+    left: 4,
     bottom: 12,
-    transform: [{ translateX: -64 }],
   },
   petSlot: {
     position: 'absolute',
-    left: '50%',
+    left: 0,
     bottom: 60,
-    transform: [{ translateX: -72 }],
   },
   monsterSlot: {
     position: 'absolute',
@@ -191,20 +266,12 @@ const styles = StyleSheet.create({
     bottom: 20,
     alignItems: 'center',
   },
-  meleeEffectOverlay: {
+  // 特效插槽的靜止基準點在勇者跟怪物中間偏左,往右移動 EFFECT_TRAVEL_DISTANCE 之後
+  // 大致落在怪物腳邊,呼應「打過去」的方向性。
+  effectSlot: {
     position: 'absolute',
-    left: -18,
-    top: '35%',
-  },
-  rangedEffectSlot: {
-    position: 'absolute',
-    left: '48%',
-    bottom: 40,
-  },
-  supportEffectSlot: {
-    position: 'absolute',
-    left: 4,
-    bottom: 50,
+    left: 110,
+    bottom: 44,
   },
   progressTrack: {
     marginTop: 6,
