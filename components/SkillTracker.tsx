@@ -119,7 +119,7 @@ export function SkillTracker() {
             label={SKILL_SLOT_NAMES[job.archetype][slot]}
             level={skillTree[job.archetype][slot]}
             timerStartedAt={activeSkillTimers[slot]}
-            intervalSeconds={activeSkillTriggerIntervalSeconds(skillTree[job.archetype][slot])}
+            intervalSeconds={activeSkillTriggerIntervalSeconds(slot, skillTree[job.archetype][slot])}
             justTriggered={primaryJustTriggered}
             now={now}
           />

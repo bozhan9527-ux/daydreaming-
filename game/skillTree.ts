@@ -58,15 +58,23 @@ export function upgradeSkillSlot(level: number, tier: JobTier): number {
   return Math.min(skillSlotLevelCap(tier), level + 1);
 }
 
-// 主動技能觸發間隔:秒數倒數,固定不受戰鬥/關卡時長影響,等級越高秒數越短,封頂 9 秒。
-const BASE_TRIGGER_INTERVAL_SECONDS = 30;
-const MIN_TRIGGER_INTERVAL_SECONDS = 9;
-const INTERVAL_STEP_SECONDS = 3;
-const LEVELS_PER_INTERVAL_STEP = 50;
+// 主動技能觸發間隔:秒數倒數,固定不受戰鬥/關卡時長影響。4 個主動欄位各自有自己的基準秒數
+// (前3招一般技能 6/7/8 秒,第4招特別技能 15 秒),隨等級線性降到 tier5 封頂等級(300級,
+// 對齊 skillSlotLevelCap(5))時觸底,下限是基準值的 2/3——6→4秒、7→4.67秒、8→5.33秒、15→10秒。
+const ACTIVE_SLOT_BASE_INTERVAL_SECONDS: Record<ActiveSkillSlotId, number> = {
+  active1: 6,
+  active2: 7,
+  active3: 8,
+  active4: 15,
+};
+const INTERVAL_FLOOR_RATIO = 2 / 3;
+const INTERVAL_DECAY_LEVEL_CAP = 300;
 
-export function activeSkillTriggerIntervalSeconds(level: number): number {
-  const reduction = Math.floor(level / LEVELS_PER_INTERVAL_STEP) * INTERVAL_STEP_SECONDS;
-  return Math.max(MIN_TRIGGER_INTERVAL_SECONDS, BASE_TRIGGER_INTERVAL_SECONDS - reduction);
+export function activeSkillTriggerIntervalSeconds(slot: ActiveSkillSlotId, level: number): number {
+  const base = ACTIVE_SLOT_BASE_INTERVAL_SECONDS[slot];
+  const progress = Math.min(level, INTERVAL_DECAY_LEVEL_CAP) / INTERVAL_DECAY_LEVEL_CAP;
+  const interval = base * (1 - (1 - INTERVAL_FLOOR_RATIO) * progress);
+  return Math.round(interval * 100) / 100;
 }
 
 export type ActiveEffectKind = 'instantFinish' | 'doubleReward' | 'bonusCoins' | 'expBoost';
@@ -110,7 +118,7 @@ export function getActiveEffectKind(archetype: Archetype, slot: SkillSlotId): Ac
 const SECONDARY_SKILL_INTERVAL_MULTIPLIER = 2;
 
 export function secondaryActiveSkillTriggerIntervalSeconds(level: number): number {
-  return activeSkillTriggerIntervalSeconds(level) * SECONDARY_SKILL_INTERVAL_MULTIPLIER;
+  return activeSkillTriggerIntervalSeconds('active1', level) * SECONDARY_SKILL_INTERVAL_MULTIPLIER;
 }
 
 // 被動一律是 passive1=經驗系、passive2=金幣系,所有職業共用同一套分類,靠名稱/描述表現職業風味。
@@ -237,7 +245,8 @@ export function getSkillSlotBonusDescription(archetype: Archetype, slot: SkillSl
     return kind === 'expMastery' ? `永久經驗獲取 +${pct}%` : `永久金幣獲取 +${pct}%`;
   }
   const kind = getActiveEffectKind(archetype, slot);
-  const seconds = activeSkillTriggerIntervalSeconds(level);
+  // isPassiveSlot(slot) 已經在上面 return 過了,能走到這裡代表 slot 一定是 4 個主動欄位之一。
+  const seconds = activeSkillTriggerIntervalSeconds(slot as ActiveSkillSlotId, level);
   if (kind === 'instantFinish') return `每 ${seconds} 秒觸發一次,下一場戰鬥直接瞬間結束`;
   if (kind === 'doubleReward') return `每 ${seconds} 秒觸發一次,這次擊殺的經驗與金幣翻倍`;
   if (kind === 'bonusCoins') return `每 ${seconds} 秒觸發一次,額外獲得 ${getBonusCoinsAmount()} 金幣`;

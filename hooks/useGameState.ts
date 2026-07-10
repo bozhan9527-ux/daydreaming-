@@ -474,7 +474,7 @@ export const useGameState = create<GameState>((set, get) => ({
     let anySkillTriggered = false;
     for (const slot of ACTIVE_SLOT_IDS) {
       const slotLevel = state.skillTree[state.job.archetype][slot];
-      const intervalMs = activeSkillTriggerIntervalSeconds(slotLevel) * 1000;
+      const intervalMs = activeSkillTriggerIntervalSeconds(slot, slotLevel) * 1000;
       const triggered = now - state.activeSkillTimers[slot] >= intervalMs;
       if (!triggered) continue;
       nextActiveSkillTimers[slot] = now;
