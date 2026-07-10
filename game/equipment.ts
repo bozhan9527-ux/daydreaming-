@@ -1073,6 +1073,10 @@ export function getGenderUnlockItems(gender: Gender): string[] {
 // 座標系對應 game/sprites/heroSilhouette.ts 的原生 64 欄 x 56 列網格(密度提升後的版本,
 // 原本是 20x24,座標依 x*3.2/y*2.33 等比例換算),僅以「normal」體型的輪廓比例校準;
 // thin/fat 選擇時疊圖會有些微不貼合,屬於這個架構驗證階段可接受的簡化,尚未做到依體型即時縮放錨點。
+//
+// 座標是直接量測 buildHeroFrames('normal').open 每一列實際填色範圍校準的(不是舊錨點等比例
+// 縮放算出來的——早一版直接用線性倍率換算,沒考慮到新輪廓多了手臂,肩寬佔比本來就比舊版
+// 大,疊圖套上去比例會比身體本身還誇張、看起來「穿太大件」,所以改成量真實輪廓校準)。
 export interface Rect {
   x: number;
   y: number;
@@ -1081,17 +1085,23 @@ export interface Rect {
 }
 
 export const SLOT_ANCHORS: Record<EquipmentSlot, Rect[]> = {
-  back: [{ x: 10, y: 21, w: 45, h: 14 }],
-  bottom: [{ x: 19, y: 35, w: 26, h: 12 }],
-  top: [{ x: 16, y: 21, w: 32, h: 12 }],
-  belt: [{ x: 16, y: 33, w: 32, h: 2 }],
-  headwear: [{ x: 16, y: 2, w: 32, h: 7 }],
-  face: [{ x: 19, y: 9, w: 26, h: 5 }],
+  // 背飾:比肩寬(22-41)略寬,露出一點在身體兩側,做出斗篷飄出來的感覺。
+  back: [{ x: 19, y: 23, w: 26, h: 16 }],
+  // 下身:雙腿外框(26-37),扣掉腰帶/上衣範圍往下。
+  bottom: [{ x: 26, y: 39, w: 12, h: 13 }],
+  // 上身:軀幹布料核心寬度(22-41),往兩側各多蓋一點到袖口區(D遮蔽),不會露出沒穿到的縫隙。
+  top: [{ x: 20, y: 25, w: 24, h: 12 }],
+  // 腰帶:腰帶列本身寬度(26-37)。
+  belt: [{ x: 26, y: 37, w: 12, h: 2 }],
+  // 頭飾:蓋住頭髮最寬的上半段(row4-11,peak width 22),留下方2列頭髮當瀏海。
+  headwear: [{ x: 21, y: 4, w: 22, h: 8 }],
+  // 面飾:眼睛所在列(row16-17)附近的窄框。
+  face: [{ x: 26, y: 15, w: 12, h: 4 }],
   gloves: [
-    { x: 13, y: 26, w: 3, h: 5 },
-    { x: 48, y: 26, w: 3, h: 5 },
+    { x: 13, y: 28, w: 4, h: 4 },
+    { x: 47, y: 28, w: 4, h: 4 },
   ],
-  offhand: [{ x: 3, y: 23, w: 10, h: 9 }],
+  offhand: [{ x: 8, y: 24, w: 14, h: 14 }],
   // 跟武器外型(game/sprites/weapons.ts,放大3倍後 18x30)完全對齊,不拉伸變形。
   mainhand: [{ x: 45, y: 19, w: 18, h: 30 }],
 };
