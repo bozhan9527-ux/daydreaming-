@@ -9,6 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { getCurrentTier } from '../game/combat';
 import { EquipmentLoadout, EquipmentSlot, getEquippedOverlays, SLOT_ANCHORS } from '../game/equipment';
 import { BodyType, buildHeroFrames, HERO_PALETTE } from '../game/sprites/heroSilhouette';
 import { getWeaponFrame } from '../game/sprites/weapons';
@@ -93,7 +94,7 @@ export function HeroSprite({
             };
             // 主手武器用專屬外型(game/sprites/weapons.ts)取代純色色塊,其餘槽位維持色塊疊圖。
             if (overlay.slot === 'mainhand') {
-              const weapon = getWeaponFrame(overlay.item.archetype, overlay.item.twoHanded);
+              const weapon = getWeaponFrame(overlay.item.archetype, overlay.item.twoHanded, getCurrentTier(overlay.item.requiredLevel ?? 1));
               return (
                 <View key={index} style={wrapperStyle}>
                   <PixelSprite frame={weapon.frame} palette={{ [weapon.fillKey]: overlay.color }} pixelSize={pixelSize} />

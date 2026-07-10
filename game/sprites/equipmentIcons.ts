@@ -194,7 +194,7 @@ export function getEquipmentSlotIcon(
 // 給裝備清單用的統一入口:主手武器吃 game/sprites/weapons.ts 的職業造型,其餘槽位吃這裡的通用圖示。
 export function getItemIcon(item: EquipmentItem): EquipmentIconData {
   if (item.slot === 'mainhand') {
-    const weapon = getWeaponFrame(item.archetype, item.twoHanded);
+    const weapon = getWeaponFrame(item.archetype, item.twoHanded, getCurrentTier(item.requiredLevel ?? 1));
     return { frame: weapon.frame, fillKey: weapon.fillKey };
   }
   return getEquipmentSlotIcon(item.slot, item.archetype, item.requiredLevel, item.bracket);
