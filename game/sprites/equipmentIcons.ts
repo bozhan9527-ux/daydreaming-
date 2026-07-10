@@ -1,11 +1,16 @@
+import { Archetype, getCurrentTier } from '../combat';
 import { EquipmentItem, EquipmentSlot } from '../equipment';
 import { upscaleFrame } from './spriteScale';
 import { getWeaponFrame } from './weapons';
 
 // 非武器 8 槽位的通用圖示,12x12 跟 tabIcons/skillIcons 同一套畫布尺寸。武器(mainhand)另外
-// 用 game/sprites/weapons.ts 依職業給專屬造型;這裡的 8 個槽位圖示是「這個槽位類型長什麼樣」,
-// 同一槽位所有職業/等級檔共用同一個外型,顏色仍吃該裝備自己的 item.color。
-// 配合勇者本體密度提升,輸出時放大3倍(SCALE),形狀本身不重新設計。
+// 用 game/sprites/weapons.ts 依職業給專屬造型。這裡的 8 個槽位圖示是「這個槽位類型長什麼樣」
+// 的共用基礎剪影,疊上三層程式化標記讓 9 插槽x50 等級檔x6 職業=3000 款裝備都有可辨識的視覺
+// 差異(不是手繪3000張圖):
+//   1. 職業徽記(右上角3x3小圖騰,6職業各自造型,呼應skillIcons.ts已經建立的職業風味語彙)
+//   2. 階級星標(左下角,職業階級1-5階,階數越高星標越多,呼應skillIcons.ts的tier accent手法)
+//   3. 等級檔刻度(最底一排,1-10個小刻度循環,同一階內的10個等級檔也看得出差異)
+// 配合勇者本體密度提升,輸出時放大3倍(SCALE),基礎剪影形狀不重新設計。
 const CANVAS = 12;
 const SCALE = 3;
 
@@ -97,13 +102,66 @@ const SLOT_ICON_MARKS: Partial<Record<EquipmentSlot, Mark[]>> = {
   offhand: OFFHAND_MARKS,
 };
 
+// 職業徽記:右上角 3x3 小圖騰,呼應 skillIcons.ts 已經建立的職業風味(工地/外送/超商店員/
+// 修煉廟宇/工程師/醫護),讓同一個插槽在不同職業手上看起來不是完全同一張圖。
+const ARCHETYPE_EMBLEM_MARKS: Record<Archetype, Mark[]> = {
+  // 安全帽尖頂,工地風味。
+  physicalMelee: [{ x: 10, y: 1, c: FILL }, { x: 9, y: 2, c: FILL }, { x: 11, y: 2, c: FILL }],
+  // 對角箭頭,外送奔跑風味。
+  physicalRanged: [{ x: 9, y: 2, c: FILL }, { x: 10, y: 1, c: FILL }, { x: 11, y: 0, c: FILL }],
+  // 四角散點,收銀台/會員點數風味。
+  physicalSupport: [{ x: 9, y: 0, c: FILL }, { x: 11, y: 0, c: FILL }, { x: 9, y: 2, c: FILL }, { x: 11, y: 2, c: FILL }],
+  // 菱形火光,修煉/香火風味。
+  magicMelee: [{ x: 10, y: 0, c: FILL }, { x: 9, y: 1, c: FILL }, { x: 11, y: 1, c: FILL }, { x: 10, y: 2, c: FILL }],
+  // 空心方框,螢幕/工程師風味。
+  magicRanged: [
+    { x: 9, y: 0, c: FILL }, { x: 10, y: 0, c: FILL }, { x: 11, y: 0, c: FILL },
+    { x: 9, y: 1, c: FILL }, { x: 11, y: 1, c: FILL },
+    { x: 9, y: 2, c: FILL }, { x: 10, y: 2, c: FILL }, { x: 11, y: 2, c: FILL },
+  ],
+  // 十字,醫護風味。
+  magicSupport: [{ x: 10, y: 0, c: FILL }, { x: 9, y: 1, c: FILL }, { x: 10, y: 1, c: FILL }, { x: 11, y: 1, c: FILL }, { x: 10, y: 2, c: FILL }],
+};
+
+// 階級星標:左下角,職業階級(1-5)越高星標越多,呼應 skillIcons.ts 的 tier accent 手法。
+function tierStarMarks(tier: number): Mark[] {
+  const marks: Mark[] = [];
+  const positions = [
+    { x: 0, y: 10 },
+    { x: 2, y: 10 },
+    { x: 0, y: 8 },
+    { x: 2, y: 8 },
+  ];
+  for (let i = 0; i < Math.min(tier - 1, positions.length); i++) {
+    marks.push({ x: positions[i].x, y: positions[i].y, c: FILL });
+  }
+  return marks;
+}
+
+// 等級檔刻度:最底一排,依 bracket 循環出 1-10 個刻度,同一階內的 10 個等級檔也看得出差異。
+function bracketTickMarks(bracket: number | undefined): Mark[] {
+  if (bracket === undefined) return [];
+  const count = ((bracket - 1) % 10) + 1;
+  const marks: Mark[] = [];
+  for (let i = 0; i < count; i++) marks.push({ x: i, y: 11, c: FILL });
+  return marks;
+}
+
 export interface EquipmentIconData {
   frame: string[];
   fillKey: string;
 }
 
-export function getEquipmentSlotIcon(slot: EquipmentSlot): EquipmentIconData {
-  const marks = SLOT_ICON_MARKS[slot] ?? [];
+export function getEquipmentSlotIcon(
+  slot: EquipmentSlot,
+  archetype?: Archetype,
+  requiredLevel?: number,
+  bracket?: number
+): EquipmentIconData {
+  const baseMarks = SLOT_ICON_MARKS[slot] ?? [];
+  const archetypeMarks = archetype ? ARCHETYPE_EMBLEM_MARKS[archetype] : [];
+  const tier = getCurrentTier(requiredLevel ?? 1);
+  const marks = [...baseMarks, ...archetypeMarks, ...tierStarMarks(tier), ...bracketTickMarks(bracket)];
   return { frame: upscaleFrame(buildFrame(marks), SCALE), fillKey: FILL };
 }
 
@@ -113,5 +171,5 @@ export function getItemIcon(item: EquipmentItem): EquipmentIconData {
     const weapon = getWeaponFrame(item.archetype, item.twoHanded);
     return { frame: weapon.frame, fillKey: weapon.fillKey };
   }
-  return getEquipmentSlotIcon(item.slot);
+  return getEquipmentSlotIcon(item.slot, item.archetype, item.requiredLevel, item.bracket);
 }

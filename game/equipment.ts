@@ -30,6 +30,10 @@ export interface EquipmentItem {
   archetype?: Archetype;
   // undefined = 無等級限制;有值 = 要練到這個等級才能購買/裝備。
   requiredLevel?: number;
+  // undefined = 不限等級檔(起始/性別預設款);有值 = 生成式目錄的等級檔編號(1-50),
+  // 圖示產生器(equipmentIcons.ts/weapons.ts)拿這個數字疊加「等級檔標記」,讓3000款裝備
+  // 都有可辨識的視覺差異,不用真的手繪3000張圖。
+  bracket?: number;
 }
 
 // 每插槽固定一種加成類型(此插槽兩款只差數值),數值 = 百分比加成(0.02 = +2%):
@@ -82,6 +86,15 @@ const ARCHETYPES: Archetype[] = [
 ];
 
 const BRACKET_COUNT = 50;
+
+// 同一階(title+baseNoun)裡的 10 個等級檔,原本只靠「·LvN」數字區分,加一個品質詞前綴
+// 讓名稱本身也看得出差異,不用點進去看等級數字才知道差在哪。依 bracket 循環,不特別對齊
+// 職業階級邊界(職業階級已經用 title 表現了,這裡純粹補等級檔顆粒度)。
+const QUALITY_WORDS = ['簡易', '耐用', '精良', '強化', '特製', '稀有', '精銳', '大師', '傳說', '究極'];
+
+function qualityWordForBracket(bracket: number): string {
+  return QUALITY_WORDS[(bracket - 1) % QUALITY_WORDS.length];
+}
 const LEVELS_PER_BRACKET = 10;
 
 function bracketRequiredLevel(bracket: number): number {
@@ -872,12 +885,13 @@ function generateRegularSlotItems(slot: EquipmentSlot): EquipmentItem[] {
       items.push({
         id: `${slot}-${archetype}-${bracket}`,
         slot,
-        name: `${title}${baseNoun}·Lv${requiredLevel}`,
+        name: `${title}${qualityWordForBracket(bracket)}${baseNoun}·Lv${requiredLevel}`,
         color: shiftColorForBracket(tierColor, bracket),
         price: bracketPrice(bracket),
         bonus: { stat, value: bracketBonusValue(bracket) },
         archetype,
         requiredLevel,
+        bracket,
       });
     }
   }
@@ -899,23 +913,25 @@ function generateMainhandItems(): EquipmentItem[] {
       items.push({
         id: `mainhand-1h-${archetype}-${bracket}`,
         slot: 'mainhand',
-        name: `${title}${nouns.oneHanded}·Lv${requiredLevel}`,
+        name: `${title}${qualityWordForBracket(bracket)}${nouns.oneHanded}·Lv${requiredLevel}`,
         color,
         price,
         bonus: { stat, value: oneHandedBonus },
         archetype,
         requiredLevel,
+        bracket,
       });
 
       items.push({
         id: `mainhand-2h-${archetype}-${bracket}`,
         slot: 'mainhand',
-        name: `${title}${nouns.twoHanded}·Lv${requiredLevel}(雙手)`,
+        name: `${title}${qualityWordForBracket(bracket)}${nouns.twoHanded}·Lv${requiredLevel}(雙手)`,
         color,
         price: Math.round(price * TWO_HANDED_PRICE_MULTIPLIER),
         bonus: { stat, value: Math.round(oneHandedBonus * TWO_HANDED_BONUS_MULTIPLIER * 1000) / 1000 },
         archetype,
         requiredLevel,
+        bracket,
         twoHanded: true,
       });
     }
