@@ -13,8 +13,13 @@ const DAMAGE_SCALE = 0.35;
 const MAX_DAMAGE_FRACTION = 0.6;
 // 每次「成功擊殺」(非戰敗)回復 8% 最大HP。
 const HP_REGEN_FRACTION_PER_KILL = 0.08;
-// 戰敗後以 50% 最大HP重新站起來。
-const DEFEAT_RECOVERY_FRACTION = 0.5;
+// 戰敗後以 75% 最大HP重新站起來——這個數字必須嚴格大於 MAX_DAMAGE_FRACTION(0.6),
+// 不然會出現無法脫困的無限戰敗迴圈:damageForFight() 是純數值函式、同一場戰鬥(同關卡/
+// 同倍率)每次算出來的傷害完全一樣,如果戰敗恢復血量 <= 單場戰鬥的傷害上限,玩家會在
+// 「打輸→用回復血量重新挑戰同一隻怪→傷害一樣多→又打輸」這個迴圈裡卡死出不來,
+// 而且因為每次都在還沒跑到技能觸發那段程式碼前就 return,技能倒數會整個凍結——
+// 這正是實測(推王時Lv偏低)踩到的真實 bug,回復血量拉到 0.75 才能保證重打一定會贏。
+const DEFEAT_RECOVERY_FRACTION = 0.75;
 // 戰敗後倒地恢復,這段時間不生成新戰鬥。
 export const RECOVERY_DELAY_MS = 4000;
 
