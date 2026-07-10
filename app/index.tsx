@@ -2,19 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BattleScene } from '../components/BattleScene';
+import { DailyQuestBadge } from '../components/DailyQuestBadge';
 import { EquippedItemsStrip } from '../components/EquippedItemsStrip';
 import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
 import { HeroHealthBar } from '../components/HeroHealthBar';
 import { MainVisual } from '../components/MainVisual';
 import { PANEL_TABS } from '../components/panelTabs';
-import { ResourceBar } from '../components/ResourceBar';
 import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
 import { TopResourceBar } from '../components/TopResourceBar';
 import { getCompanionById } from '../game/companions';
-import { canClaimDailyQuest, DAILY_QUEST_KILL_TARGET } from '../game/daily';
 import { getItemById } from '../game/equipment';
 import { canLevelUp, expToNext, levelsAvailable, MAX_LEVEL } from '../game/leveling';
 import { newlyUnlockedTabs } from '../game/onboarding';
@@ -46,9 +45,7 @@ export default function HomeScreen() {
   const lastTransferFragmentArchetype = useGameState((state) => state.lastTransferFragmentArchetype);
   const transferFragments = useGameState((state) => state.transferFragments);
   const lastDailyLoginBonus = useGameState((state) => state.lastDailyLoginBonus);
-  const dailyKillCount = useGameState((state) => state.dailyKillCount);
-  const dailyQuestClaimed = useGameState((state) => state.dailyQuestClaimed);
-  const claimDailyQuest = useGameState((state) => state.claimDailyQuest);
+  const killCount = useGameState((state) => state.killCount);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
 
   const [openTabId, setOpenTabId] = useState<string | null>(null);
@@ -58,6 +55,20 @@ export default function HomeScreen() {
   const [dailyBonusModalDismissed, setDailyBonusModalDismissed] = useState(false);
 
   useBattleLoop();
+
+  // 四種掉落通知(裝備/轉職碎片/寵物/金幣)同一時間最多只顯示一則。優先序:裝備 > 轉職碎片 >
+  // 寵物 > 金幣(轉職碎片只在打贏大魔王才會掉,比寵物/金幣更值得被看到)。移到 hooks 之前算好,
+  // 下面的 useEffect 才能引用到——不能放在 `if (!isLoaded) return` 之後,那樣會違反 hooks 規則。
+  const equipmentDropItem = lastEquipmentDropId ? getItemById(lastEquipmentDropId) : undefined;
+  const dropBannerText = equipmentDropItem
+    ? `撿到裝備掉落:${equipmentDropItem.name}!已自動解鎖,可以到「裝備」分頁裝備`
+    : lastTransferFragmentArchetype
+      ? `撿到${TRANSFER_FRAGMENT_NAMES[lastTransferFragmentArchetype]}!(${transferFragments[lastTransferFragmentArchetype] ?? 0}/${TRANSFER_FRAGMENTS_PER_PROOF})`
+      : lastCompanionDropId
+        ? `意外獲得了新夥伴:${getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備`
+        : lastCoinWindfall !== null
+          ? `意外之財!多撿到 ${lastCoinWindfall} 金幣`
+          : null;
 
   // 追蹤玩家這次 session 裡等級有沒有跨過某個分頁的解鎖門檻,跨過就跳提示——
   // previousLevelRef 在第一次load完成時才取樣,避免老玩家重新整理頁面時被誤判成「剛解鎖」而狂跳提示。
@@ -77,6 +88,22 @@ export default function HomeScreen() {
     previousLevelRef.current = level.level;
   }, [isLoaded, level.level, showToast]);
 
+  // 掉落通知原本是常駐主畫面的固定高度區塊,現在改成 toast 跳出後自動消失——killCount 每次
+  // 擊殺成功才會變(戰敗不算,見 game/heroHealth.ts),用它當「這次擊殺剛結算」的觸發點,
+  // 避免同一個 dropBannerText 值在無關的重渲染時重複跳 toast。
+  const previousKillCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (previousKillCountRef.current === null) {
+      previousKillCountRef.current = killCount;
+      return;
+    }
+    if (killCount !== previousKillCountRef.current && dropBannerText) {
+      showToast(dropBannerText);
+    }
+    previousKillCountRef.current = killCount;
+  }, [isLoaded, killCount, dropBannerText, showToast]);
+
   if (!isLoaded) {
     return (
       <View style={styles.loadingContainer}>
@@ -92,32 +119,22 @@ export default function HomeScreen() {
   const availableLevels = isMaxLevel ? 0 : levelsAvailable(level);
   const showOfflineModal = lastOfflineKills > 0 && !offlineModalDismissed;
   const showDailyBonusModal = lastDailyLoginBonus !== null && !dailyBonusModalDismissed;
-  const canClaimQuest = canClaimDailyQuest(dailyKillCount, dailyQuestClaimed);
-  const equipmentDropItem = lastEquipmentDropId ? getItemById(lastEquipmentDropId) : undefined;
-
-  // 四種掉落通知(裝備/轉職碎片/寵物/金幣)同一時間最多只顯示一則,固定高度的區塊,
-  // 不會因為運氣好連續觸發就疊出好幾行、把下面的經驗條跟分頁按鈕往下推。
-  // 優先序:裝備 > 轉職碎片 > 寵物 > 金幣(轉職碎片只在打贏大魔王才會掉,比寵物/金幣更值得被看到)。
-  const dropBannerText = equipmentDropItem
-    ? `撿到裝備掉落:${equipmentDropItem.name}!已自動解鎖,可以到「裝備」分頁裝備`
-    : lastTransferFragmentArchetype
-      ? `撿到${TRANSFER_FRAGMENT_NAMES[lastTransferFragmentArchetype]}!(${transferFragments[lastTransferFragmentArchetype] ?? 0}/${TRANSFER_FRAGMENTS_PER_PROOF})`
-      : lastCompanionDropId
-        ? `意外獲得了新夥伴:${getCompanionById(lastCompanionDropId)?.name}!已自動解鎖,可以到「寵物坐騎」分頁裝備`
-        : lastCoinWindfall !== null
-          ? `意外之財!多撿到 ${lastCoinWindfall} 金幣`
-          : null;
 
   return (
     <View style={styles.root}>
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-      {/* 彩蛋反應放最上面,一進畫面就看得到觸發結果。 */}
+    <View style={styles.container}>
+      {/* 頂部資源列放最上面,一眼就看得到等級/金幣,不用往下找。 */}
+      <TopResourceBar level={level.level} coins={coins} />
+
+      {/* 彩蛋反應框縮小+加外框,不再是又高又空的區塊——原本100px高、沒有邊框,現在收窄
+          高度並加一圈卡片邊框,呼應整頁不能滾動的版面限制,騰出來的高度給下面的內容。
+          標題「勇者發呆中」拿掉,頂部資源列+彩蛋框已經足夠表明這是首頁,不需要額外重複。 */}
       <View style={styles.resultBox}>
         {lastEvent !== null ? (
           <>
             <EventIcon rarity={lastEvent.rarity} />
             <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
-            <Text style={styles.resultText} numberOfLines={2} ellipsizeMode="tail">
+            <Text style={styles.resultText} numberOfLines={1} ellipsizeMode="tail">
               {lastEvent.payload}
             </Text>
           </>
@@ -126,9 +143,6 @@ export default function HomeScreen() {
         )}
       </View>
 
-      <TopResourceBar level={level.level} coins={coins} />
-      <Text style={styles.title}>勇者發呆中</Text>
-
       <MainVisual>
         <BattleScene />
 
@@ -136,13 +150,7 @@ export default function HomeScreen() {
 
         <SkillTracker />
 
-        <View style={styles.dropBannerBox}>
-          {dropBannerText && (
-            <Text style={styles.companionDropText} numberOfLines={2}>
-              {dropBannerText}
-            </Text>
-          )}
-        </View>
+        {/* 掉落通知改用 toast 跳出後自動消失(見上面的 useEffect),不再常駐佔用一個固定高度區塊。 */}
 
         <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} levelsAvailable={availableLevels} />
 
@@ -160,29 +168,15 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <ResourceBar />
-
-        {/* 已裝備道具縮圖列:9插槽一次看完裝了什麼/幾級/有沒有強化,不用切去「裝備」分頁。 */}
+        {/* 已裝備道具縮圖列:9插槽一次看完裝了什麼/幾級/有沒有強化,不用切去「裝備」分頁。
+            強化石/寶石數量原本在這裡下面常駐一列,現在收進「背包」分頁(見 InventoryPanel.tsx)。 */}
         <EquippedItemsStrip />
-
-        {/* 每日任務:輕量的一行進度+領取按鈕,不開新分頁、不加彈窗,達標前只是安靜顯示進度。 */}
-        <View style={styles.dailyQuestRow}>
-          <Text style={styles.dailyQuestText}>
-            {dailyQuestClaimed ? '今日任務已領取' : `今日任務:擊敗怪物 ${Math.min(dailyKillCount, DAILY_QUEST_KILL_TARGET)}/${DAILY_QUEST_KILL_TARGET}`}
-          </Text>
-          {!dailyQuestClaimed && (
-            <Pressable
-              style={[styles.dailyQuestButton, !canClaimQuest && styles.dailyQuestButtonDisabled]}
-              onPress={() => claimDailyQuest()}
-              disabled={!canClaimQuest}
-            >
-              <Text style={styles.dailyQuestButtonLabel}>領取</Text>
-            </Pressable>
-          )}
-        </View>
 
         <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} level={level.level} hasChosenJob={hasChosenJob} onSelect={setOpenTabId} />
       </MainVisual>
+
+      {/* 每日任務改成浮在畫面右側的小徽章,已領取直接消失,不再佔用主畫面高度。 */}
+      <DailyQuestBadge />
 
       <Modal visible={showOfflineModal} animationType="fade" transparent onRequestClose={() => setOfflineModalDismissed(true)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setOfflineModalDismissed(true)} />
@@ -239,11 +233,11 @@ export default function HomeScreen() {
           <ToastHost />
         </View>
       </Modal>
-    </ScrollView>
+    </View>
 
     {/* Toast 提示(分頁鎖定提示/新分頁解鎖公告)要在主畫面就能跳出來,不能只綁在分頁 Modal 底下——
-        跟 ScrollView 同層放在共用的 flex:1 root 裡,不會被捲動帶走,也不會像 Modal 那樣疊出
-        一層擋住底下按鈕點擊的全螢幕 wrapper。 */}
+        跟主畫面內容同層放在共用的 flex:1 root 裡,不會像 Modal 那樣疊出一層擋住底下按鈕點擊的
+        全螢幕 wrapper。 */}
     <ToastHost />
     </View>
   );
@@ -253,64 +247,51 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
-  scroll: {
-    flex: 1,
-    backgroundColor: '#0f0f14',
-  },
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0f0f14',
   },
+  // 整頁不能滾動(手機螢幕多高,畫面就是多高),container 用 flex:1 撐滿 root、不能再用
+  // ScrollView 那種「內容多高就多高」的邏輯——上面每個區塊都要精算過高度預算,加新東西
+  // 之前務必先確認總高度沒有超過手機螢幕。
   container: {
+    flex: 1,
     alignItems: 'center',
     backgroundColor: '#0f0f14',
-    gap: 24,
-    paddingVertical: 48,
-    paddingHorizontal: 16,
+    gap: 6,
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 12,
   },
   title: {
     fontSize: 20,
     color: '#f2f2f2',
   },
-  companionDropText: {
-    color: '#e8c25a',
-    fontSize: 12,
-    textAlign: 'center',
-    maxWidth: 280,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-  },
-  // 固定高度:三種掉落通知(裝備/寵物/金幣)同一時間只顯示一則,不管有沒有內容都佔用
-  // 同樣的空間,避免連續觸發時疊出好幾行、把下面的經驗條跟分頁按鈕往下推。
-  dropBannerBox: {
-    height: 44,
-    width: '100%',
-    maxWidth: 280,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // 固定高度+置中,不管有沒有觸發到事件、文案長短,這個區塊佔的空間都一樣,
-  // 不會因為內容不同把下面的技能列/經驗條往下推。降到2行文字上限,配合縮小後的高度。
+  // 縮小+加外框:原本100px高、沒有邊框的空白區塊,現在收窄高度並加卡片邊框,
+  // 騰出來的高度讓整頁能塞進一個手機螢幕不用滾動。
   resultBox: {
     width: '100%',
     maxWidth: 280,
-    height: 100,
+    height: 46,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: 1,
     overflow: 'hidden',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#3a3a45',
+    backgroundColor: 'rgba(28, 28, 36, 0.6)',
+    paddingHorizontal: 10,
   },
   resultRarity: {
     color: '#8a8a95',
-    fontSize: 11,
+    fontSize: 10,
   },
   resultText: {
     color: '#f2f2f2',
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
   },
   levelUpRow: {
@@ -329,36 +310,6 @@ const styles = StyleSheet.create({
   },
   levelUpLabel: {
     color: '#f2f2f2',
-  },
-  dailyQuestRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    maxWidth: 320,
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
-  },
-  dailyQuestText: {
-    color: '#c9c9d2',
-    fontSize: 11,
-  },
-  dailyQuestButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    backgroundColor: '#c9a94f',
-  },
-  dailyQuestButtonDisabled: {
-    opacity: 0.35,
-  },
-  dailyQuestButtonLabel: {
-    color: '#17171f',
-    fontSize: 11,
-    fontWeight: '600',
   },
   modalBackdrop: {
     flex: 1,
@@ -401,7 +352,12 @@ const styles = StyleSheet.create({
   modalBody: {
     flexGrow: 0,
   },
+  // 分頁內容(裝備/職業/技能...等)自己的容器都有 maxWidth 限制版面寬度,但 ScrollView 的
+  // contentContainerStyle 預設橫向對齊是 stretch,maxWidth 生效後內容就會貼著左邊、右側留一大塊
+  // 空白,不是真的置中——這裡明確加 alignItems:'center',所有分頁內容才會在較寬的手機/視窗裡
+  // 真正置中,不只是「看起來寬度對但偏左」。
   modalBodyContent: {
+    alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 20,
     paddingBottom: 32,

@@ -176,9 +176,15 @@ function TierList({
       <View style={styles.tierRow}>
         {TIERS.map((tier) => {
           const unlocked = currentLevel >= TIER_UNLOCK_LEVELS[tier];
+          // 還沒真的選定這個職業之前(!isPrimary),分支還沒選,先用分支A的稱號當預覽代表——
+          // 兩個分支在1階本來就同名,2階起才分岔,這裡只是讓玩家先看到「大概會變成什麼身分」。
+          const tierTitle = getJobTitle(archetype, isPrimary ? branch : 'A', tier);
           return (
             <Pressable key={tier} style={[styles.tierButton, !unlocked && styles.tierButtonLocked]} onPress={() => onSelectTier(tier)}>
               <Text style={styles.tierButtonLabel}>{tier}階</Text>
+              <Text style={styles.tierButtonTitle} numberOfLines={1} ellipsizeMode="tail">
+                {tierTitle}
+              </Text>
               {!unlocked && <Text style={styles.tierButtonLockHint}>Lv{TIER_UNLOCK_LEVELS[tier]}</Text>}
             </Pressable>
           );
@@ -236,17 +242,20 @@ function TierList({
 function SkillDetailPanel({
   archetype,
   tier,
+  branch,
   skillLevels,
   onBack,
 }: {
   archetype: Archetype;
   tier: JobTier;
+  branch: JobBranch;
   skillLevels: SkillTreeLevels[Archetype];
   onBack: () => void;
 }) {
   const [previewSlot, setPreviewSlot] = useState<SkillSlotId>('active1');
   const previewLevel = skillLevels[previewSlot];
   const flavor = getSlotFlavor(archetype, tier, previewSlot);
+  const tierTitle = getJobTitle(archetype, branch, tier);
 
   return (
     <View style={styles.panelCard}>
@@ -254,7 +263,9 @@ function SkillDetailPanel({
         <Pressable style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonLabel}>‹ {ARCHETYPE_LABELS[archetype]}</Text>
         </Pressable>
-        <Text style={styles.tierHeaderLabel}>{tier}階技能</Text>
+        <Text style={styles.tierHeaderLabel}>
+          {tier}階 · {tierTitle}
+        </Text>
       </View>
 
       <View style={styles.previewGrid}>
@@ -358,6 +369,7 @@ export function JobSelector() {
         <SkillDetailPanel
           archetype={viewingArchetype}
           tier={viewingTier}
+          branch={isViewingPrimary ? job.branch : 'A'}
           skillLevels={skillTree[viewingArchetype]}
           onBack={() => setView('tiers')}
         />
@@ -465,6 +477,11 @@ const styles = StyleSheet.create({
     color: '#f2f2f2',
     fontSize: 12,
     fontWeight: '600',
+  },
+  tierButtonTitle: {
+    color: '#c9a94f',
+    fontSize: 7,
+    maxWidth: 48,
   },
   tierButtonLockHint: {
     color: '#8a8a95',

@@ -17,6 +17,7 @@ import { getEquipmentSlotIcon, getItemIcon } from '../game/sprites/equipmentIcon
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { PixelSprite } from './PixelSprite';
+import { ResourceBar } from './ResourceBar';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   back: '背飾',
@@ -158,6 +159,9 @@ export function InventoryPanel() {
 
   return (
     <View style={styles.container}>
+      {/* 強化石/寶石數量原本常駐主畫面,現在收進背包分頁——反正這些「彈藥」本來就是要
+          在背包/裝備相關畫面查看的資訊,不需要佔用主畫面的高度。 */}
+      <ResourceBar />
       <View style={styles.slotRow}>{SLOT_ORDER.map(renderSlotButton)}</View>
       <Text style={styles.hint}>目前選擇:{SLOT_LABELS[selectedSlot]}</Text>
       <View style={styles.itemList}>
