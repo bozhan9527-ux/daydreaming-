@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BattleScene } from '../components/BattleScene';
+import { EquippedItemsStrip } from '../components/EquippedItemsStrip';
 import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
 import { MainVisual } from '../components/MainVisual';
@@ -10,6 +11,7 @@ import { ResourceBar } from '../components/ResourceBar';
 import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
+import { TopResourceBar } from '../components/TopResourceBar';
 import { getCompanionById } from '../game/companions';
 import { canClaimDailyQuest, DAILY_QUEST_KILL_TARGET } from '../game/daily';
 import { getItemById } from '../game/equipment';
@@ -103,6 +105,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.root}>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+      <TopResourceBar level={level.level} coins={coins} />
       <Text style={styles.title}>勇者發呆中</Text>
 
       <MainVisual>
@@ -153,6 +156,9 @@ export default function HomeScreen() {
         </View>
 
         <ResourceBar />
+
+        {/* 已裝備道具縮圖列:9插槽一次看完裝了什麼/幾級/有沒有強化,不用切去「裝備」分頁。 */}
+        <EquippedItemsStrip />
 
         {/* 每日任務:輕量的一行進度+領取按鈕,不開新分頁、不加彈窗,達標前只是安靜顯示進度。 */}
         <View style={styles.dailyQuestRow}>

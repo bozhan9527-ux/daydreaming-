@@ -171,13 +171,16 @@ const styles = StyleSheet.create({
     gap: 4,
     width: TILE_SIZE + BORDER_THICKNESS * 2 + 8,
   },
+  // 圓形圖示,呼應手遊常見的技能圓餅樣式;外框(倒數段)跟內圈都設成完整圓角,
+  // wrapper 加 overflow hidden 讓4段矩形倒數框被裁成圓弧,不用另外刻SVG圓環。
   tileWrapper: {
     width: TILE_SIZE + BORDER_THICKNESS * 2,
     height: TILE_SIZE + BORDER_THICKNESS * 2,
     position: 'relative',
     borderWidth: BORDER_THICKNESS,
     borderColor: '#3a3a45',
-    borderRadius: 12,
+    borderRadius: (TILE_SIZE + BORDER_THICKNESS * 2) / 2,
+    overflow: 'hidden',
     alignSelf: 'center',
   },
   tile: {
@@ -186,7 +189,7 @@ const styles = StyleSheet.create({
     left: BORDER_THICKNESS,
     width: TILE_SIZE,
     height: TILE_SIZE,
-    borderRadius: 10,
+    borderRadius: TILE_SIZE / 2,
     backgroundColor: '#2a2a35',
     alignItems: 'center',
     justifyContent: 'center',
