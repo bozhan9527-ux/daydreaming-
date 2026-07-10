@@ -278,6 +278,7 @@ type PersistableState = Pick<
   | 'unlockedAchievementIds'
   | 'hasEverAssembledTransferProof'
   | 'hasEverSwitchedJob'
+  | 'killCount'
 >;
 
 function persist(state: PersistableState): void {
@@ -307,6 +308,7 @@ function persist(state: PersistableState): void {
     unlockedAchievementIds: state.unlockedAchievementIds,
     hasEverAssembledTransferProof: state.hasEverAssembledTransferProof,
     hasEverSwitchedJob: state.hasEverSwitchedJob,
+    killCount: state.killCount,
     lastActiveAt: Date.now(),
   });
 }
@@ -490,6 +492,7 @@ export const useGameState = create<GameState>((set, get) => ({
       unlockedAchievementIds: save.unlockedAchievementIds,
       hasEverAssembledTransferProof: save.hasEverAssembledTransferProof,
       hasEverSwitchedJob: save.hasEverSwitchedJob,
+      killCount: save.killCount,
       lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,

@@ -25,7 +25,7 @@ import { createInitialStageProgress, StageProgress } from '../game/stages';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -82,6 +82,10 @@ export interface SaveData {
   unlockedAchievementIds: string[];
   hasEverAssembledTransferProof: boolean;
   hasEverSwitchedJob: boolean;
+  // 累計擊殺數(不是 dailyKillCount 那個跨日歸零的每日任務計數,這個終生累加)——
+  // 補在這裡是因為它原本只活在記憶體裡沒存檔,每次重整就歸零,導致成就系統(game/achievements.ts)
+  // 的擊殺數里程碑(kills_1~kills_10000)在真的玩很多天的玩家身上幾乎不可能解鎖到後面幾個。
+  killCount: number;
   lastActiveAt: number;
 }
 
@@ -112,6 +116,7 @@ export function createInitialSaveData(): SaveData {
     unlockedAchievementIds: [],
     hasEverAssembledTransferProof: false,
     hasEverSwitchedJob: false,
+    killCount: 0,
     lastActiveAt: Date.now(),
   };
 }
@@ -857,11 +862,40 @@ function isUnlockedAchievementIds(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((id) => typeof id === 'string');
 }
 
-function isSaveDataV19(value: unknown): value is SaveData {
+interface SaveDataV19 {
+  version: 19;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  stageProgress: StageProgress;
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
+  hasChosenJob: boolean;
+  unlockedAchievementIds: string[];
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
+  lastActiveAt: number;
+}
+
+function isSaveDataV19(value: unknown): value is SaveDataV19 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 19 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -890,6 +924,40 @@ function isSaveDataV19(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV20(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    isStageProgress(record.stageProgress) &&
+    typeof record.lastDailyResetAt === 'string' &&
+    typeof record.dailyKillCount === 'number' &&
+    typeof record.dailyQuestClaimed === 'boolean' &&
+    isTransferCounts(record.transferFragments) &&
+    isTransferCounts(record.transferProofs) &&
+    typeof record.hasChosenJob === 'boolean' &&
+    isUnlockedAchievementIds(record.unlockedAchievementIds) &&
+    typeof record.hasEverAssembledTransferProof === 'boolean' &&
+    typeof record.hasEverSwitchedJob === 'boolean' &&
+    typeof record.killCount === 'number'
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
@@ -910,9 +978,14 @@ function isSaveDataV19(value: unknown): value is SaveData {
 // 這個功能上線前的存檔不會被誤判成「已經達成過轉職相關成就」,但下一次 load() 的
 // 全量重新計算(見 hooks/useGameState.ts 的 checkAndGrantAchievements)會立刻幫舊存檔
 // 追溯性授予所有已經達標的成就(例如已經 Lv400 的老存檔會馬上補到 level_30~level_200)。
+// v19 沒有 killCount(累計擊殺數,先前只活在記憶體裡沒存檔,重整就歸零),補 0——
+// 舊玩家的歷史擊殺數已經無法追回,只能從這次更新後重新累加,不影響其他任何進度。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV19(value)) return value;
+  if (isSaveDataV20(value)) return value;
+  if (isSaveDataV19(value)) {
+    return { ...value, version: SCHEMA_VERSION, killCount: 0 };
+  }
   if (isSaveDataV18(value)) {
     return {
       ...value,
@@ -920,6 +993,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
     };
   }
   if (isSaveDataV17(value)) {
@@ -930,6 +1004,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
     };
   }
   if (isSaveDataV16(value)) {
@@ -959,6 +1034,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -989,6 +1065,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1019,6 +1096,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1049,6 +1127,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1079,6 +1158,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1109,6 +1189,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1139,6 +1220,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1169,6 +1251,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1199,6 +1282,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1229,6 +1313,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1259,6 +1344,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1289,6 +1375,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1319,6 +1406,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1349,6 +1437,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1379,6 +1468,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1409,6 +1499,7 @@ function migrate(value: unknown): SaveData {
       unlockedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
+      killCount: 0,
       lastActiveAt: value.lastActiveAt,
     };
   }
