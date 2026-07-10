@@ -66,6 +66,7 @@ import {
   todayDateString,
 } from '../game/daily';
 import { getRandomEvent, GameEvent } from '../game/events';
+import { heroMaxHp, RECOVERY_DELAY_MS, resolveFightHealth } from '../game/heroHealth';
 import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
 import {
   activeSkillTriggerIntervalSeconds,
@@ -217,6 +218,10 @@ interface GameState {
   fightElapsedMs: number;
   heroClicksThisFight: number;
   killCount: number;
+  // 勇者血量/戰敗風險系統(見 game/heroHealth.ts):heroHp 是這場戰鬥開始「前」的血量,
+  // defeatRecoveryUntil 是戰敗倒地恢復到什麼時間戳(null = 沒有在恢復中)。
+  heroHp: number;
+  defeatRecoveryUntil: number | null;
   lastEvent: GameEvent | null;
   lastCompanionDropId: string | null;
   lastEquipmentDropId: string | null;
@@ -280,6 +285,8 @@ type PersistableState = Pick<
   | 'hasEverAssembledTransferProof'
   | 'hasEverSwitchedJob'
   | 'killCount'
+  | 'heroHp'
+  | 'defeatRecoveryUntil'
 >;
 
 function persist(state: PersistableState): void {
@@ -310,6 +317,8 @@ function persist(state: PersistableState): void {
     hasEverAssembledTransferProof: state.hasEverAssembledTransferProof,
     hasEverSwitchedJob: state.hasEverSwitchedJob,
     killCount: state.killCount,
+    heroHp: state.heroHp,
+    defeatRecoveryUntil: state.defeatRecoveryUntil,
     lastActiveAt: Date.now(),
   });
 }
@@ -424,6 +433,8 @@ export const useGameState = create<GameState>((set, get) => ({
   fightElapsedMs: 0,
   heroClicksThisFight: 0,
   killCount: 0,
+  heroHp: heroMaxHp(1),
+  defeatRecoveryUntil: null,
   lastEvent: null,
   lastCompanionDropId: null,
   lastEquipmentDropId: null,
@@ -494,6 +505,8 @@ export const useGameState = create<GameState>((set, get) => ({
       hasEverAssembledTransferProof: save.hasEverAssembledTransferProof,
       hasEverSwitchedJob: save.hasEverSwitchedJob,
       killCount: save.killCount,
+      heroHp: save.heroHp,
+      defeatRecoveryUntil: save.defeatRecoveryUntil,
       lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,
@@ -528,6 +541,10 @@ export const useGameState = create<GameState>((set, get) => ({
     if (!state.isLoaded) return;
 
     if (!state.currentEncounter || state.fightStartedAt === null) {
+      // 戰敗倒地恢復:這段時間內不生成新戰鬥,呈現「倒地恢復中」的空檔,恢復期過了才照常生成下一場戰鬥。
+      if (state.defeatRecoveryUntil !== null && Date.now() < state.defeatRecoveryUntil) {
+        return;
+      }
       const { speedMultiplier } = computeRewardMultipliers(
         state.job,
         state.level.level,
@@ -561,6 +578,7 @@ export const useGameState = create<GameState>((set, get) => ({
         fightElapsedMs: 0,
         heroClicksThisFight: 0,
         forceInstantNextFight: false,
+        defeatRecoveryUntil: null,
       });
       persist(get());
       return;
@@ -586,6 +604,36 @@ export const useGameState = create<GameState>((set, get) => ({
     // 所以算獎勵的當下它還沒變),疊加在等級/裝備既有的獎勵倍率之上,是完全獨立的另一條軸線。
     const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress);
     const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, expMultiplier, coinMultiplier, difficultyMultiplier);
+
+    // 勇者血量/戰敗風險判定(見 game/heroHealth.ts):在這場戰鬥開始「前」的血量基礎上計算,
+    // 跟結算擊殺獎勵同一個時間點一次做完,不拆到下一個 tick。substatTotals 在這裡算一次,
+    // 下面爆擊率判定共用同一份,不重複呼叫。
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    const healthResult = resolveFightHealth(
+      state.heroHp,
+      heroMaxHp(state.level.level),
+      state.level.level,
+      getCurrentTier(state.level.level),
+      substatTotals.resistance,
+      state.currentEncounter.rarity,
+      difficultyMultiplier
+    );
+
+    if (healthResult.defeated) {
+      // 這場戰鬥沒有擊殺成功,勇者被打倒:不算擊殺,不發任何 exp/coins/掉落/成就,killCount 不增加。
+      // currentEncounter 設回 null 讓下一輪 tick 重新生成同一隻怪(等於這場戰鬥重來),
+      // 進入短暫的倒地恢復期(defeatRecoveryUntil),恢復期內 tickBattle 不會生成新戰鬥。
+      set({
+        heroHp: healthResult.nextHp,
+        currentEncounter: null,
+        fightStartedAt: null,
+        fightElapsedMs: 0,
+        defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
+      });
+      persist(get());
+      return;
+    }
+
     const event = getRandomEvent(state.currentEncounter.rarity);
     const nextStageProgress = advanceStageProgress(state.stageProgress);
 
@@ -653,7 +701,7 @@ export const useGameState = create<GameState>((set, get) => ({
     }
 
     // 裝備隨機/隱藏素質的爆擊率:獨立於技能觸發之外的機率,額外翻倍這次擊殺獎勵。
-    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    // substatTotals 已經在上面血量判定時算過一份,這裡共用不重算。
     if (Math.random() < substatTotals.critRate) {
       exp *= 2;
       coins *= 2;
@@ -713,6 +761,7 @@ export const useGameState = create<GameState>((set, get) => ({
     set({
       level: nextLevel,
       coins: nextCoins,
+      heroHp: healthResult.nextHp,
       companions: nextCompanions,
       enhanceStones: nextEnhanceStones,
       gemCounts: nextGemCounts,

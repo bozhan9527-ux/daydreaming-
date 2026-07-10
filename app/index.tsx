@@ -5,6 +5,7 @@ import { BattleScene } from '../components/BattleScene';
 import { EquippedItemsStrip } from '../components/EquippedItemsStrip';
 import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
+import { HeroHealthBar } from '../components/HeroHealthBar';
 import { MainVisual } from '../components/MainVisual';
 import { PANEL_TABS } from '../components/panelTabs';
 import { ResourceBar } from '../components/ResourceBar';
@@ -130,6 +131,8 @@ export default function HomeScreen() {
 
       <MainVisual>
         <BattleScene />
+
+        <HeroHealthBar />
 
         <SkillTracker />
 
