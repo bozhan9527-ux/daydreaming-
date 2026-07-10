@@ -91,6 +91,33 @@ export function getExpBoostAmount(): number {
   return EXP_BOOST_AMOUNT;
 }
 
+// 職業樹分階內容:每晉一階(2/3/4/5),主動技能觸發時額外「疊加」一個新效果在既有4種基礎機制
+// 之外——是疊加不是取代,tier5玩家同時享有tier2~5全部疊加效果,呼應「職業樹點進去可以看到
+// 2/3/4/5階分支,各階都有專屬新技能」的需求。數值刻意壓在跟被動技能封頂(+30%)、裝備爆擊率
+// 等既有加成同一量級,不會讓經濟大幅波動。每次「任一主動技能觸發」的批次只套用一次(不會因為
+// 剛好4格同時觸發就疊加4次),見 hooks/useGameState.ts 的 tickBattle。副職觸發不套用這組加成,
+// 呼應副職「只拿部分加成」的既有定位。
+export const TIER2_BONUS_COIN_MULT = 0.1;
+export const TIER3_BONUS_EXP_MULT = 0.1;
+export const TIER4_BONUS_FLAT_COINS = 3;
+export const TIER5_EXTRA_INSTANT_CHANCE = 0.08;
+
+export interface TierTriggerBonus {
+  bonusCoinMult: number;
+  bonusExpMult: number;
+  bonusFlatCoins: number;
+  extraInstantChance: number;
+}
+
+export function getTierTriggerBonus(tier: JobTier): TierTriggerBonus {
+  return {
+    bonusCoinMult: tier >= 2 ? TIER2_BONUS_COIN_MULT : 0,
+    bonusExpMult: tier >= 3 ? TIER3_BONUS_EXP_MULT : 0,
+    bonusFlatCoins: tier >= 4 ? TIER4_BONUS_FLAT_COINS : 0,
+    extraInstantChance: tier >= 5 ? TIER5_EXTRA_INSTANT_CHANCE : 0,
+  };
+}
+
 // 4 種主動效果依 subtype 決定排列順序:跟該 subtype 呼應的「招牌效果」排在 active1(沿用舊版單一
 // 技能的效果分配),其餘 3 種依固定順序輪流填滿 active2-4,確保每個職業的 4 個主動技能各不相同。
 const ACTIVE_KIND_ORDER: ActiveEffectKind[] = ['instantFinish', 'doubleReward', 'bonusCoins', 'expBoost'];

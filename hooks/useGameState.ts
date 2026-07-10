@@ -77,6 +77,7 @@ import {
   getBonusCoinsAmount,
   getExpBoostAmount,
   getPassiveBonusValue,
+  getTierTriggerBonus,
   secondaryActiveSkillTriggerIntervalSeconds,
   skillSlotLevelCap,
   skillSlotUpgradeCoinCost,
@@ -616,7 +617,15 @@ export const useGameState = create<GameState>((set, get) => ({
         forceInstantNextFight = true;
       }
     }
-    if (anySkillTriggered) lastSkillTriggerAt = now;
+    if (anySkillTriggered) {
+      lastSkillTriggerAt = now;
+      // 職業樹分階疊加效果:tier2起才有,且是一次觸發批次只套用一次(不會因為剛好4格
+      // 同時觸發就疊加4次)——見 game/skillTree.ts 的 getTierTriggerBonus 設計說明。
+      const tierBonus = getTierTriggerBonus(getCurrentTier(state.level.level));
+      coins += Math.round(coins * tierBonus.bonusCoinMult) + tierBonus.bonusFlatCoins;
+      exp += Math.round(exp * tierBonus.bonusExpMult);
+      if (Math.random() < tierBonus.extraInstantChance) forceInstantNextFight = true;
+    }
 
     // 副職只借用它的主動技能第1格(該職業招牌效果),間隔是本職的兩倍,跟主職各自獨立計時、
     // 可以同一擊同時觸發,呼應副職只拿「部分加成」的定位。
