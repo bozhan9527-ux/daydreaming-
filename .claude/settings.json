@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | grep -q 'game/sprites/heroSilhouette\\.ts$' && printf '{\"systemMessage\": \"\\u26a0\\ufe0f 勇者輪廓(heroSilhouette.ts)已修改!畫布尺寸/體型參數如果變了,記得檢查 game/equipment.ts 的 SLOT_ANCHORS 是否要跟著重新校準(用實際輪廓量測,不要用舊錨點乘倍率算),不然裝備疊圖會跑位或比例跑掉——這個專案已經踩過一次。\"}' || true",
+            "timeout": 5,
+            "statusMessage": "檢查勇者輪廓變動影響..."
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | grep -q 'lib/storage\\.ts$' && printf '{\"systemMessage\": \"\\u26a0\\ufe0f lib/storage.ts 已修改!如果動到 SCHEMA_VERSION,記得檢查有沒有其他檔案(尤其 hooks/useGameState.ts)維護了重複、可能過期的版本常數——不同步會導致存檔遷移邏輯誤判,每次reload都重跑migration、把每日獎勵等狀態洗掉。這個專案已經踩過一次。\"}' || true",
+            "timeout": 5,
+            "statusMessage": "檢查存檔schema版本一致性..."
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | grep -qE 'game/sprites/(skillIcons|equipmentIcons|weapons|heroSilhouette)\\.ts$' && printf '{\"systemMessage\": \"\\u26a0\\ufe0f 圖示/造型產生函式的簽名如果改了,記得檢查所有呼叫端是否要跟著更新:components/SkillPanel.tsx、SkillTracker.tsx、JobSelector.tsx、EquipmentPanel.tsx、EnhancementPanel.tsx、SocketPanel.tsx、HeroSprite.tsx、game/sprites/attackEffects.ts。漏改通常會被 tsc 抓到,但先提醒省一輪來回。\"}' || true",
+            "timeout": 5,
+            "statusMessage": "檢查圖示產生器呼叫端..."
+          }
+        ]
+      }
+    ]
+  }
+}
