@@ -123,6 +123,7 @@ interface TierListProps {
   onSetBranch: (branch: JobBranch) => void;
   onToggleSecondary: () => void;
   onSelectTier: (tier: JobTier) => void;
+  onSwitchArchetype: (archetype: Archetype) => void;
 }
 
 // 第二層:這個職業的身分/主副職操作(原本 JobDetailCard 的操作區塊搬過來),外加5個階級按鈕——
@@ -144,6 +145,7 @@ function TierList({
   onSetBranch,
   onToggleSecondary,
   onSelectTier,
+  onSwitchArchetype,
 }: TierListProps) {
   const icon = getSkillIcon(archetype, 'active1', 1);
   const combatBonusPct = Math.round((calcCombatMultiplier(archetype, currentTier) - 1) * 100);
@@ -155,6 +157,25 @@ function TierList({
         <Pressable style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonLabel}>‹ 職業</Text>
         </Pressable>
+      </View>
+
+      {/* 職業快切列:留在第二層就能跳看其他5個職業,不用先按「‹ 職業」退回第一層 grid。 */}
+      <View style={styles.archetypeSwitchRow}>
+        {ARCHETYPES.map((switchArchetype) => {
+          const switchIcon = getSkillIcon(switchArchetype, 'active1', 1);
+          const isActive = switchArchetype === archetype;
+          return (
+            <Pressable
+              key={switchArchetype}
+              style={styles.archetypeSwitchTile}
+              onPress={() => onSwitchArchetype(switchArchetype)}
+            >
+              <View style={[styles.archetypeSwitchIconWrap, isActive && styles.archetypeSwitchIconWrapActive]}>
+                <PixelSprite frame={switchIcon.frame} palette={switchIcon.palette} pixelSize={1.5} />
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
 
       <View style={styles.detailHeader}>
@@ -370,6 +391,10 @@ export function JobSelector() {
             setViewingTier(tier);
             setView('skills');
           }}
+          onSwitchArchetype={(archetype) => {
+            setViewingArchetype(archetype);
+            setViewingTier(1);
+          }}
         />
       )}
 
@@ -473,6 +498,31 @@ const styles = StyleSheet.create({
     color: '#c9a94f',
     fontSize: 12,
     fontWeight: '600',
+  },
+  archetypeSwitchRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  archetypeSwitchTile: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  archetypeSwitchIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#2a2a35',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  archetypeSwitchIconWrapActive: {
+    backgroundColor: '#4a4456',
+    borderWidth: 2,
+    borderColor: '#c9a94f',
   },
   tierRow: {
     flexDirection: 'row',
