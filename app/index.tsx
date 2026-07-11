@@ -18,17 +18,9 @@ import { getItemById } from '../game/equipment';
 import { canLevelUp, expToNext, levelsAvailable, MAX_LEVEL } from '../game/leveling';
 import { newlyUnlockedTabs } from '../game/onboarding';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF } from '../game/transfer';
-import { Rarity } from '../game/trigger';
 import { useBattleLoop } from '../hooks/useBattleLoop';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
-
-const RARITY_LABEL: Record<Rarity, string> = {
-  common: '一般反應',
-  rare: '稀有畫面',
-  epic: '超稀有彩蛋',
-  legendary: '傳說事件',
-};
 
 export default function HomeScreen() {
   const isLoaded = useGameState((state) => state.isLoaded);
@@ -88,10 +80,10 @@ export default function HomeScreen() {
     previousLevelRef.current = level.level;
   }, [isLoaded, level.level, showToast]);
 
-  // 掉落通知直接疊在關卡卡片(MainVisual/戰鬥場景)上面,顯示一陣子後自動消失,不佔用
-  // 主畫面固定高度、也不跟畫面最下面的全域 toast(分頁鎖定提示等)搶同一個位置。
-  // killCount 每次擊殺成功才會變(戰敗不算,見 game/heroHealth.ts),用它當「這次擊殺剛
-  // 結算」的觸發點,避免同一個 dropBannerText 值在無關的重渲染時重複跳出來。
+  // 掉落通知疊在彩蛋框正下方,顯示1秒後自動消失,不佔用主畫面固定高度、也不跟畫面最下面的
+  // 全域 toast(分頁鎖定提示等)搶同一個位置。killCount 每次擊殺成功才會變(戰敗不算,見
+  // game/heroHealth.ts),用它當「這次擊殺剛結算」的觸發點,避免同一個 dropBannerText 值
+  // 在無關的重渲染時重複跳出來。
   const [stageDropBanner, setStageDropBanner] = useState<string | null>(null);
   const previousKillCountRef = useRef<number | null>(null);
   useEffect(() => {
@@ -102,7 +94,7 @@ export default function HomeScreen() {
     }
     if (killCount !== previousKillCountRef.current && dropBannerText) {
       setStageDropBanner(dropBannerText);
-      const timer = setTimeout(() => setStageDropBanner(null), 2800);
+      const timer = setTimeout(() => setStageDropBanner(null), 1000);
       previousKillCountRef.current = killCount;
       return () => clearTimeout(timer);
     }
@@ -139,26 +131,38 @@ export default function HomeScreen() {
       {/* 彩蛋反應框縮小+加外框+改橫向排版——原本100px高、直向堆疊圖示+兩行文字,縮到46px高
           時圖示本身(48px)就已經比整個框還高,彩蛋內容直接被裁掉看不見。改成「圖示在左、
           文字在右」橫向排版,把省下來的高度預算換成寬度(這裡不缺寬度),圖示縮小一點但
-          完整露出來,文字維持看得到。 */}
-      <View style={styles.resultBox}>
-        {lastEvent !== null ? (
-          <>
-            <View style={styles.resultIconWrap}>
-              <EventIcon rarity={lastEvent.rarity} pixelSize={3} />
-            </View>
-            <View style={styles.resultTextCol}>
-              <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
-              <Text style={styles.resultText} numberOfLines={2} ellipsizeMode="tail">
-                {lastEvent.payload}
-              </Text>
-            </View>
-          </>
-        ) : (
-          <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
+          完整露出來,文字維持看得到。不再額外顯示「一般反應/稀有畫面/...」這行分類標籤——
+          圖示本身(EventIcon 依 rarity 換色)已經傳達稀有度,拿掉這行讓彩蛋文字能多占一行。 */}
+      <View style={styles.resultBoxWrap}>
+        <View style={styles.resultBox}>
+          {lastEvent !== null ? (
+            <>
+              <View style={styles.resultIconWrap}>
+                <EventIcon rarity={lastEvent.rarity} pixelSize={3} />
+              </View>
+              <View style={styles.resultTextCol}>
+                <Text style={styles.resultText} numberOfLines={3} ellipsizeMode="tail">
+                  {lastEvent.payload}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
+          )}
+        </View>
+
+        {/* 掉落通知(裝備/轉職碎片/寵物/金幣)疊在彩蛋框正下方,顯示1秒後自動消失——用絕對定位
+            掛在 resultBoxWrap 底下,不會把下面的關卡卡片往下推、也不會蓋住戰鬥畫面裡的怪物。 */}
+        {stageDropBanner && (
+          <View style={styles.dropBannerOverlay} pointerEvents="none">
+            <Text style={styles.dropBannerText} numberOfLines={2}>
+              {stageDropBanner}
+            </Text>
+          </View>
         )}
       </View>
 
-      <MainVisual dropBannerText={stageDropBanner}>
+      <MainVisual>
         <BattleScene />
 
         <HeroHealthBar />
@@ -286,9 +290,12 @@ const styles = StyleSheet.create({
   },
   // 縮小+加外框:原本100px高、沒有邊框的空白區塊,現在收窄高度並加卡片邊框,
   // 騰出來的高度讓整頁能塞進一個手機螢幕不用滾動。
-  resultBox: {
+  resultBoxWrap: {
     width: '100%',
     maxWidth: 280,
+  },
+  resultBox: {
+    width: '100%',
     minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
@@ -300,6 +307,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(28, 28, 36, 0.6)',
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  // 掛在彩蛋框正下方的掉落通知,絕對定位不占版面高度,顯示1秒後由 stageDropBanner 變 null
+  // 直接消失(卡片本身很短命,沒有另外做淡出動畫的必要)。
+  dropBannerOverlay: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    zIndex: 10,
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(10, 8, 6, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(201, 169, 79, 0.5)',
+  },
+  dropBannerText: {
+    color: '#e8c25a',
+    fontSize: 11,
+    textAlign: 'center',
   },
   resultIconWrap: {
     width: 36,

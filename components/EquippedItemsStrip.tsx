@@ -5,8 +5,11 @@ import { getItemIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
 
-const TILE_SIZE = 32;
-const ICON_PIXEL_SIZE = 2 / 3;
+// 9 插槽 + 8 個間距要在最窄的手機寬度(扣掉左右 padding 後淨寬約 288px)也能排成一行,
+// 不然「已裝備」跟「未裝備」款式尺寸就會因為換行而看起來不一致。28px×9 + 3px×8=276px,
+// 留了一點餘裕。
+const TILE_SIZE = 28;
+const ICON_PIXEL_SIZE = 0.6;
 const EMPTY_SLOT_COLOR = '#3a3a45';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
@@ -64,9 +67,9 @@ export function EquippedItemsStrip() {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     justifyContent: 'center',
-    gap: 5,
+    gap: 3,
     width: '100%',
     maxWidth: 320,
   },

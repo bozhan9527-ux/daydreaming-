@@ -89,8 +89,16 @@ function ArchetypeGrid({
             <Text style={styles.archetypeTileLabel} numberOfLines={1}>
               {ARCHETYPE_LABELS[archetype]}
             </Text>
-            {isPrimary && <Text style={styles.archetypeTileTag}>主</Text>}
-            {isSecondary && <Text style={styles.archetypeTileTag}>副</Text>}
+            {isPrimary && (
+              <View style={styles.archetypeTileTagWrap}>
+                <Text style={styles.archetypeTileTag}>主</Text>
+              </View>
+            )}
+            {isSecondary && (
+              <View style={styles.archetypeTileTagWrap}>
+                <Text style={styles.archetypeTileTag}>副</Text>
+              </View>
+            )}
           </Pressable>
         );
       })}
@@ -397,14 +405,18 @@ const styles = StyleSheet.create({
     gap: 8,
     width: '100%',
   },
+  // 固定寬高:原本只有寬度固定,高度隨「主/副」標籤有沒有出現而增減一行,6張卡片參差不齊。
+  // 標籤改成絕對定位疊在卡片右上角(見 archetypeTileTagWrap),不再佔用版面高度。
   archetypeTile: {
     width: 82,
+    height: 78,
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: '#1c1c24',
     borderWidth: 1,
     borderColor: '#2a2a35',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 3,
   },
   archetypeIconWrap: {
@@ -423,6 +435,11 @@ const styles = StyleSheet.create({
   archetypeTileLabel: {
     color: '#f2f2f2',
     fontSize: 11,
+  },
+  archetypeTileTagWrap: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
   },
   archetypeTileTag: {
     color: '#c9a94f',
