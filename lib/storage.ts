@@ -25,14 +25,51 @@ import {
 import { createInitialDungeonState, DungeonState } from '../game/dungeon';
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { SkillLevels, SKILL_IDS } from '../game/skills';
-import { createInitialSkillTreeLevels, SKILL_SLOT_IDS, SkillSlotId, SkillTreeLevels } from '../game/skillTree';
+import {
+  createInitialSkillTreeLevels,
+  SKILL_LEVEL_CAP,
+  SKILL_SLOT_IDS,
+  SkillSlotId,
+  SkillTreeLevels,
+} from '../game/skillTree';
 import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialStageProgress, StageProgress } from '../game/stages';
-import { createInitialStudentSkillTreeLevels } from '../game/studentSkillTree';
+import { createInitialStudentSkillTreeLevels, STUDENT_SKILL_LEVEL_CAP } from '../game/studentSkillTree';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 24;
+export const SCHEMA_VERSION = 25;
+
+// 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
+// v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
+// 「職業樹300→10」與「學生樹60→2」兩條換算,四捨五入後不超過新制上限,不能讓玩家原本
+// 投資的等級數字直接歸零,也不能讓數字看起來一樣但意義已經不同。
+const LEGACY_SKILL_LEVEL_TO_NEW_RATIO = 30;
+
+function migrateSkillLevel(oldLevel: number, newCap: number, oldToNewRatio: number): number {
+  return Math.min(newCap, Math.round(oldLevel / oldToNewRatio));
+}
+
+function migrateSkillTreeLevels(skillTree: SkillTreeLevels): SkillTreeLevels {
+  const result = {} as SkillTreeLevels;
+  (Object.keys(skillTree) as Archetype[]).forEach((archetype) => {
+    const slots = skillTree[archetype];
+    const convertedSlots = {} as Record<SkillSlotId, number>;
+    SKILL_SLOT_IDS.forEach((slotId) => {
+      convertedSlots[slotId] = migrateSkillLevel(slots[slotId], SKILL_LEVEL_CAP, LEGACY_SKILL_LEVEL_TO_NEW_RATIO);
+    });
+    result[archetype] = convertedSlots;
+  });
+  return result;
+}
+
+function migrateStudentSkillTreeLevels(studentSkillTree: Record<SkillSlotId, number>): Record<SkillSlotId, number> {
+  const result = {} as Record<SkillSlotId, number>;
+  SKILL_SLOT_IDS.forEach((slotId) => {
+    result[slotId] = migrateSkillLevel(studentSkillTree[slotId], STUDENT_SKILL_LEVEL_CAP, LEGACY_SKILL_LEVEL_TO_NEW_RATIO);
+  });
+  return result;
+}
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -68,6 +105,8 @@ export interface SaveData {
   itemInstances: ItemInstances;
   enhanceStones: number;
   gemCounts: GemCounts;
+  // 技能書(見 game/skillTree.ts):v25 起技能升級改吃的獨立資源,不再跟角色升等搶銀行經驗值。
+  skillBooks: number;
   stageProgress: StageProgress;
   // 每日內容:上次重置的日期字串(''=從沒重置過,下次load()一定會觸發),今日已擊敗隻數,
   // 今日任務是否已領過獎勵——三個欄位一起在跨日時歸零(見 hooks/useGameState.ts 的 load())。
@@ -126,6 +165,7 @@ export function createInitialSaveData(): SaveData {
     itemInstances: createEmptyItemInstances(),
     enhanceStones: 0,
     gemCounts: createEmptyGemCounts(),
+    skillBooks: 0,
     stageProgress: createInitialStageProgress(),
     lastDailyResetAt: '',
     dailyKillCount: 0,
@@ -1250,7 +1290,84 @@ function isSaveDataV23(value: unknown): value is SaveDataV23 {
   );
 }
 
-function isSaveDataV24(value: unknown): value is SaveData {
+// v24(破壞性數值轉換遷移前的最後一版):skillTree/studentSkillTree 還是舊制連續等級
+// (0~tier*60 / 0~60),沒有 skillBooks。v25 把這兩套等級數字整套換算成新制(見 migrateSkillLevel),
+// 不能直接當 SaveData(缺 skillBooks 欄位)使用,所以獨立留一份舊形狀的 interface。
+interface SaveDataV24 {
+  version: 24;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  stageProgress: StageProgress;
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
+  hasChosenJob: boolean;
+  unlockedAchievementIds: string[];
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
+  killCount: number;
+  heroHp: number;
+  defeatRecoveryUntil: number | null;
+  studentSkillTree: Record<SkillSlotId, number>;
+  companionGear: CompanionGearState;
+  dungeon: DungeonState;
+  lastActiveAt: number;
+}
+
+function isSaveDataV24(value: unknown): value is SaveDataV24 {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 24 &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    isStageProgress(record.stageProgress) &&
+    typeof record.lastDailyResetAt === 'string' &&
+    typeof record.dailyKillCount === 'number' &&
+    typeof record.dailyQuestClaimed === 'boolean' &&
+    isTransferCounts(record.transferFragments) &&
+    isTransferCounts(record.transferProofs) &&
+    typeof record.hasChosenJob === 'boolean' &&
+    isUnlockedAchievementIds(record.unlockedAchievementIds) &&
+    typeof record.hasEverAssembledTransferProof === 'boolean' &&
+    typeof record.hasEverSwitchedJob === 'boolean' &&
+    typeof record.killCount === 'number' &&
+    typeof record.heroHp === 'number' &&
+    (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
+    isStudentSkillTreeLevels(record.studentSkillTree) &&
+    isCompanionGearState(record.companionGear) &&
+    isDungeonState(record.dungeon)
+  );
+}
+
+function isSaveDataV25(value: unknown): value is SaveData {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
@@ -1270,6 +1387,7 @@ function isSaveDataV24(value: unknown): value is SaveData {
     isItemInstances(record.itemInstances) &&
     typeof record.enhanceStones === 'number' &&
     isGemCounts(record.gemCounts) &&
+    typeof record.skillBooks === 'number' &&
     isStageProgress(record.stageProgress) &&
     typeof record.lastDailyResetAt === 'string' &&
     typeof record.dailyKillCount === 'number' &&
@@ -1322,9 +1440,25 @@ function isSaveDataV24(value: unknown): value is SaveData {
 // 呼應「解鎖當下就能馬上用」的既有設計慣例,舊玩家一登入副本分頁就有 5 張票可以打。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV24(value)) return value;
+  if (isSaveDataV25(value)) return value;
+  if (isSaveDataV24(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      skillTree: migrateSkillTreeLevels(value.skillTree),
+      studentSkillTree: migrateStudentSkillTreeLevels(value.studentSkillTree),
+      skillBooks: 0,
+    };
+  }
   if (isSaveDataV23(value)) {
-    return { ...value, version: SCHEMA_VERSION, dungeon: createInitialDungeonState() };
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      dungeon: createInitialDungeonState(),
+      skillTree: migrateSkillTreeLevels(value.skillTree),
+      studentSkillTree: migrateStudentSkillTreeLevels(value.studentSkillTree),
+      skillBooks: 0,
+    };
   }
   if (isSaveDataV22(value)) {
     return {
@@ -1332,6 +1466,9 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      skillTree: migrateSkillTreeLevels(value.skillTree),
+      studentSkillTree: migrateStudentSkillTreeLevels(value.studentSkillTree),
+      skillBooks: 0,
     };
   }
   if (isSaveDataV21(value)) {
@@ -1341,6 +1478,8 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillBooks: 0,
     };
   }
   if (isSaveDataV20(value)) {
@@ -1352,6 +1491,8 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillBooks: 0,
     };
   }
   if (isSaveDataV19(value)) {
@@ -1364,6 +1505,8 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillBooks: 0,
     };
   }
   if (isSaveDataV18(value)) {
@@ -1379,6 +1522,8 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillBooks: 0,
     };
   }
   if (isSaveDataV17(value)) {
@@ -1395,6 +1540,8 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillBooks: 0,
     };
   }
   if (isSaveDataV16(value)) {
@@ -1405,7 +1552,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: value.skillTree,
+      skillTree: migrateSkillTreeLevels(value.skillTree),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1414,6 +1561,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: value.itemInstances,
       enhanceStones: value.enhanceStones,
       gemCounts: value.gemCounts,
+      skillBooks: 0,
       stageProgress: value.stageProgress,
       lastDailyResetAt: value.lastDailyResetAt,
       dailyKillCount: value.dailyKillCount,
@@ -1441,7 +1589,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: value.skillTree,
+      skillTree: migrateSkillTreeLevels(value.skillTree),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1450,6 +1598,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: value.itemInstances,
       enhanceStones: value.enhanceStones,
       gemCounts: value.gemCounts,
+      skillBooks: 0,
       stageProgress: value.stageProgress,
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1486,6 +1635,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: value.itemInstances,
       enhanceStones: value.enhanceStones,
       gemCounts: value.gemCounts,
+      skillBooks: 0,
       stageProgress: value.stageProgress,
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1522,6 +1672,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: value.itemInstances,
       enhanceStones: value.enhanceStones,
       gemCounts: value.gemCounts,
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1558,6 +1709,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: upgradeItemInstancesToV13(value.itemInstances),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1594,6 +1746,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1630,6 +1783,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1666,6 +1820,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1702,6 +1857,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1738,6 +1894,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1774,6 +1931,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1810,6 +1968,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1846,6 +2005,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1882,6 +2042,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1918,6 +2079,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -1954,6 +2116,7 @@ function migrate(value: unknown): SaveData {
       itemInstances: createEmptyItemInstances(),
       enhanceStones: 0,
       gemCounts: createEmptyGemCounts(),
+      skillBooks: 0,
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,

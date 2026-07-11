@@ -18,6 +18,7 @@ export const DAILY_LOGIN_EXP_BONUS = 50;
 export const DAILY_QUEST_KILL_TARGET = 50;
 export const DAILY_QUEST_COIN_REWARD = 300;
 export const DAILY_QUEST_ENHANCE_STONE_REWARD = 2;
+export const DAILY_QUEST_SKILL_BOOK_REWARD = 3;
 
 export function canClaimDailyQuest(dailyKillCount: number, dailyQuestClaimed: boolean): boolean {
   return !dailyQuestClaimed && dailyKillCount >= DAILY_QUEST_KILL_TARGET;

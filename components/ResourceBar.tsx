@@ -8,12 +8,17 @@ import { useGameState } from '../hooks/useGameState';
 export function ResourceBar() {
   const enhanceStones = useGameState((state) => state.enhanceStones);
   const gemCounts = useGameState((state) => state.gemCounts);
+  const skillBooks = useGameState((state) => state.skillBooks);
 
   return (
     <View style={styles.row}>
       <View style={styles.item}>
         <Text style={styles.label}>強化石</Text>
         <Text style={styles.value}>{enhanceStones}</Text>
+      </View>
+      <View style={styles.item}>
+        <Text style={styles.label}>技能書</Text>
+        <Text style={styles.value}>{skillBooks}</Text>
       </View>
       {GEM_TYPES.map((gemType) => (
         <View key={gemType} style={styles.item}>

@@ -44,6 +44,7 @@ export default function HomeScreen() {
   const job = useGameState((state) => state.job);
   const equipment = useGameState((state) => state.equipment);
   const enhanceStones = useGameState((state) => state.enhanceStones);
+  const skillBooks = useGameState((state) => state.skillBooks);
   const gemCounts = useGameState((state) => state.gemCounts);
   const skillTree = useGameState((state) => state.skillTree);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
@@ -133,7 +134,6 @@ export default function HomeScreen() {
   const tabAttention = computeTabAttentionFlags({
     hasChosenJob,
     level: level.level,
-    bankedExp: level.bankedExp,
     coins,
     transferProofs,
     equipment,
@@ -141,6 +141,7 @@ export default function HomeScreen() {
     gemCounts,
     jobTier: getCurrentTier(level.level),
     activeSkillLevels: hasChosenJob ? skillTree[job.archetype] : studentSkillTree,
+    skillBooks,
     companionGear,
     dungeon,
   });

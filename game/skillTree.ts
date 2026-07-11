@@ -1,5 +1,4 @@
 import { Archetype, getArchetypeComposition, JobTier, Subtype } from './combat';
-import { expToNext } from './leveling';
 
 // 每個職業 6 個技能欄位:2 被動(永久數值加成)+ 4 主動(各自獨立冷卻,同時運作)。
 export type SkillSlotId = 'passive1' | 'passive2' | 'active1' | 'active2' | 'active3' | 'active4';
@@ -27,39 +26,38 @@ export function createInitialSkillTreeLevels(): SkillTreeLevels {
   };
 }
 
-// 技能等級上限依現有轉職階級(1-5階)分開累加:每提升一階,該職業所有技能的上限多 60 級
-// (階1封頂60、階2封頂120...階5封頂300),呼應「每階技能最高60等」的需求。
-const LEVEL_CAP_PER_TIER = 60;
+// 技能等級上限改成「累積技能書」制:單一格最高 10 級,依現有轉職階級(1-5階)分段解鎖
+// (階1封頂2級、階2封頂4級...階5封頂10級),呼應「10級的進度比300級好懂太多」的重新設計。
+export const SKILL_LEVEL_CAP = 10;
+const LEVEL_CAP_PER_TIER = SKILL_LEVEL_CAP / 5;
 
 export function skillSlotLevelCap(tier: JobTier): number {
   return tier * LEVEL_CAP_PER_TIER;
 }
 
-// 升級花費沿用舊版公式:經驗花費是 exp_to_next 的 1/5,疊加等比金幣花費,兩者都要夠、且不能超過目前階級的上限。
-const SKILL_COIN_COST_PER_LEVEL = 2;
-
-export function skillSlotUpgradeCost(level: number): number {
-  return Math.floor(expToNext(level) / 5);
+// 升級花費改成純粹技能書、倍增制:0→1級要1本、1→2級要2本...9→10級要512本,逼玩家在6格
+// 之間做真實取捨(不再跟角色升等搶銀行經驗值,也不再吃金幣)。
+export function skillSlotUpgradeBookCost(level: number): number {
+  return Math.pow(2, level);
 }
 
-export function skillSlotUpgradeCoinCost(level: number): number {
-  return level * SKILL_COIN_COST_PER_LEVEL;
-}
-
-export function canUpgradeSkillSlot(level: number, tier: JobTier, bankedExp: number, coins: number): boolean {
-  return (
-    level < skillSlotLevelCap(tier) &&
-    bankedExp >= skillSlotUpgradeCost(level) &&
-    coins >= skillSlotUpgradeCoinCost(level)
-  );
+export function canUpgradeSkillSlot(level: number, tier: JobTier, skillBooks: number): boolean {
+  return level < skillSlotLevelCap(tier) && skillBooks >= skillSlotUpgradeBookCost(level);
 }
 
 export function upgradeSkillSlot(level: number, tier: JobTier): number {
   return Math.min(skillSlotLevelCap(tier), level + 1);
 }
 
+// 技能書掉落:比照 game/equipment.ts 的強化石/寶石掉落,每次擊殺獨立判定一次,互不干擾。
+const SKILL_BOOK_DROP_CHANCE = 0.04;
+
+export function rollSkillBookDrop(rng: () => number = Math.random): boolean {
+  return rng() < SKILL_BOOK_DROP_CHANCE;
+}
+
 // 主動技能觸發間隔:秒數倒數,固定不受戰鬥/關卡時長影響。4 個主動欄位各自有自己的基準秒數
-// (前3招一般技能 6/7/8 秒,第4招特別技能 15 秒),隨等級線性降到 tier5 封頂等級(300級,
+// (前3招一般技能 6/7/8 秒,第4招特別技能 15 秒),隨等級線性降到 tier5 封頂等級(10級,
 // 對齊 skillSlotLevelCap(5))時觸底,下限是基準值的 2/3——6→4秒、7→4.67秒、8→5.33秒、15→10秒。
 const ACTIVE_SLOT_BASE_INTERVAL_SECONDS: Record<ActiveSkillSlotId, number> = {
   active1: 6,
@@ -68,7 +66,7 @@ const ACTIVE_SLOT_BASE_INTERVAL_SECONDS: Record<ActiveSkillSlotId, number> = {
   active4: 15,
 };
 const INTERVAL_FLOOR_RATIO = 2 / 3;
-const INTERVAL_DECAY_LEVEL_CAP = 300;
+const INTERVAL_DECAY_LEVEL_CAP = SKILL_LEVEL_CAP;
 
 export function activeSkillTriggerIntervalSeconds(slot: ActiveSkillSlotId, level: number): number {
   const base = ACTIVE_SLOT_BASE_INTERVAL_SECONDS[slot];
@@ -153,8 +151,9 @@ export function getPassiveEffectKind(slot: SkillSlotId): PassiveEffectKind {
   return slot === 'passive1' ? 'expMastery' : 'coinMastery';
 }
 
-// 每級 +0.1% 加成,階5滿級(300級)時最高 +30%,量級跟裝備/寵物既有加成同一個數量級,不會暴衝。
-const PASSIVE_BONUS_PER_LEVEL = 0.001;
+// 每級 +3% 加成,階5滿級(10級)時最高 +30%(跟舊制「300級封頂30%」戰力對齊,只是刻度從
+// 0.1%/級改成3%/級),量級跟裝備/寵物既有加成同一個數量級,不會暴衝。
+const PASSIVE_BONUS_PER_LEVEL = 0.03;
 
 export function getPassiveBonusValue(level: number): number {
   return level * PASSIVE_BONUS_PER_LEVEL;

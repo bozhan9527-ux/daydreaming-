@@ -16,8 +16,7 @@ import {
   getPassiveEffectKind,
   isPassiveSlot,
   PassiveEffectKind,
-  skillSlotUpgradeCoinCost,
-  skillSlotUpgradeCost,
+  skillSlotUpgradeBookCost,
   SkillSlotId,
 } from './skillTree';
 
@@ -28,24 +27,20 @@ export {
   getExpBoostAmount,
   getPassiveBonusValue,
   getPassiveEffectKind,
-  skillSlotUpgradeCoinCost,
-  skillSlotUpgradeCost,
+  skillSlotUpgradeBookCost,
 };
 
 export function createInitialStudentSkillTreeLevels(): Record<SkillSlotId, number> {
   return { passive1: 0, passive2: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
 }
 
-// 學生沒有 JobTier 概念,等級上限直接開一個新常數,對齊職業樹 tier1 的封頂(60級),
-// 呼應「學生期能練到的技能深度跟職業tier1差不多」的定位。
-export const STUDENT_SKILL_LEVEL_CAP = 60;
+// 學生沒有 JobTier 概念,等級上限直接開一個新常數,對齊職業樹 tier1 的封頂(2級),
+// 呼應「學生期能練到的技能深度跟職業tier1差不多」的定位(新制沿用舊制「學生封頂60剛好等於
+// 舊制tier1封頂60」的對應關係)。
+export const STUDENT_SKILL_LEVEL_CAP = 2;
 
-export function canUpgradeStudentSkillSlot(level: number, bankedExp: number, coins: number): boolean {
-  return (
-    level < STUDENT_SKILL_LEVEL_CAP &&
-    bankedExp >= skillSlotUpgradeCost(level) &&
-    coins >= skillSlotUpgradeCoinCost(level)
-  );
+export function canUpgradeStudentSkillSlot(level: number, skillBooks: number): boolean {
+  return level < STUDENT_SKILL_LEVEL_CAP && skillBooks >= skillSlotUpgradeBookCost(level);
 }
 
 export function upgradeStudentSkillSlot(level: number): number {
@@ -125,10 +120,10 @@ export const STUDENT_SKILL_FLAVOR: Record<1 | 2, Record<SkillSlotId, StudentSkil
   },
 };
 
-// level < 10 用 tier1(新生)內容,level >= 10 用 tier2(風雲人物)內容,
-// 呼應「10級做一組」的分界。
+// level < 1 用 tier1(新生)內容,level >= 1 用 tier2(風雲人物)內容——新制封頂只有2級,
+// 格子很少、每一級都珍貴,練過一次升級就換一套敘述,呼應舊制「10級做一組」按比例縮小後的分界。
 export function getStudentSkillFlavor(level: number, slot: SkillSlotId): StudentSkillFlavor {
-  return STUDENT_SKILL_FLAVOR[level >= 10 ? 2 : 1][slot];
+  return STUDENT_SKILL_FLAVOR[level >= 1 ? 2 : 1][slot];
 }
 
 // 依目前技能等級組成一句人看得懂的說明,對照 game/skillTree.ts 的 getSkillSlotBonusDescription,

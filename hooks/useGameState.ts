@@ -76,6 +76,7 @@ import {
   DAILY_LOGIN_EXP_BONUS,
   DAILY_QUEST_COIN_REWARD,
   DAILY_QUEST_ENHANCE_STONE_REWARD,
+  DAILY_QUEST_SKILL_BOOK_REWARD,
   isNewDay,
   todayDateString,
 } from '../game/daily';
@@ -93,10 +94,10 @@ import {
   getExpBoostAmount,
   getPassiveBonusValue,
   getTierTriggerBonus,
+  rollSkillBookDrop,
   secondaryActiveSkillTriggerIntervalSeconds,
   skillSlotLevelCap,
-  skillSlotUpgradeCoinCost,
-  skillSlotUpgradeCost,
+  skillSlotUpgradeBookCost,
   SkillSlotId,
   SkillTreeLevels,
   upgradeSkillSlot as nextSkillSlotLevel,
@@ -227,6 +228,8 @@ interface GameState {
   itemInstances: ItemInstances;
   enhanceStones: number;
   gemCounts: GemCounts;
+  // 技能書(見 game/skillTree.ts):技能升級改吃的獨立資源,不再跟角色升等搶銀行經驗值。
+  skillBooks: number;
   stageProgress: StageProgress;
   // 每日內容:見 game/daily.ts。lastDailyLoginBonus 不存檔,只給 UI 顯示一次性登入獎勵彈窗用。
   lastDailyResetAt: string;
@@ -317,6 +320,7 @@ type PersistableState = Pick<
   | 'itemInstances'
   | 'enhanceStones'
   | 'gemCounts'
+  | 'skillBooks'
   | 'stageProgress'
   | 'lastDailyResetAt'
   | 'dailyKillCount'
@@ -352,6 +356,7 @@ function persist(state: PersistableState): void {
     itemInstances: state.itemInstances,
     enhanceStones: state.enhanceStones,
     gemCounts: state.gemCounts,
+    skillBooks: state.skillBooks,
     stageProgress: state.stageProgress,
     lastDailyResetAt: state.lastDailyResetAt,
     dailyKillCount: state.dailyKillCount,
@@ -462,6 +467,7 @@ export const useGameState = create<GameState>((set, get) => ({
   itemInstances: createEmptyItemInstances(),
   enhanceStones: 0,
   gemCounts: createEmptyGemCounts(),
+  skillBooks: 0,
   stageProgress: createInitialStageProgress(),
   lastDailyResetAt: '',
   dailyKillCount: 0,
@@ -550,6 +556,7 @@ export const useGameState = create<GameState>((set, get) => ({
       itemInstances,
       enhanceStones: save.enhanceStones,
       gemCounts: save.gemCounts,
+      skillBooks: save.skillBooks,
       stageProgress: save.stageProgress,
       lastDailyResetAt: newDay ? todayDateString() : save.lastDailyResetAt,
       dailyKillCount: newDay ? 0 : save.dailyKillCount,
@@ -778,10 +785,11 @@ export const useGameState = create<GameState>((set, get) => ({
       lastCompanionDropId = companionDrop.id;
     }
 
-    // 強化石/寶石掉落:各自獨立判定,互不干擾、跟寵物掉落同一套邏輯。
+    // 強化石/寶石/技能書掉落:各自獨立判定,互不干擾、跟寵物掉落同一套邏輯。
     const nextEnhanceStones = state.enhanceStones + (rollEnhanceStoneDrop() ? 1 : 0);
     const gemDrop = rollGemDrop();
     const nextGemCounts = gemDrop ? { ...state.gemCounts, [gemDrop]: state.gemCounts[gemDrop] + 1 } : state.gemCounts;
+    const nextSkillBooks = state.skillBooks + (rollSkillBookDrop() ? 1 : 0);
 
     // 裝備掉落:免費直接解鎖一件當前職業/等級穿得下的付費款,豐富擊殺獎勵種類,
     // 跟上面幾種掉落一樣各自獨立判定、互不影響。
@@ -827,6 +835,7 @@ export const useGameState = create<GameState>((set, get) => ({
       companions: nextCompanions,
       enhanceStones: nextEnhanceStones,
       gemCounts: nextGemCounts,
+      skillBooks: nextSkillBooks,
       unlockedItemIds: nextUnlockedItemIds,
       itemInstances: nextItemInstances,
       stageProgress: nextStageProgress,
@@ -1152,20 +1161,18 @@ export const useGameState = create<GameState>((set, get) => ({
   },
 
   upgradeSkillSlot: (archetype, slot) => {
-    const { level, skillTree, coins } = get();
+    const { level, skillTree, skillBooks } = get();
     const tier = getCurrentTier(level.level);
     const currentSlotLevel = skillTree[archetype][slot];
-    if (!canUpgradeSkillSlot(currentSlotLevel, tier, level.bankedExp, coins)) return;
+    if (!canUpgradeSkillSlot(currentSlotLevel, tier, skillBooks)) return;
 
-    const expCost = skillSlotUpgradeCost(currentSlotLevel);
-    const coinCost = skillSlotUpgradeCoinCost(currentSlotLevel);
-    const nextLevel: LevelState = { level: level.level, bankedExp: level.bankedExp - expCost };
+    const bookCost = skillSlotUpgradeBookCost(currentSlotLevel);
     const nextSkillTree: SkillTreeLevels = {
       ...skillTree,
       [archetype]: { ...skillTree[archetype], [slot]: nextSkillSlotLevel(currentSlotLevel, tier) },
     };
 
-    set({ level: nextLevel, skillTree: nextSkillTree, coins: coins - coinCost });
+    set({ skillTree: nextSkillTree, skillBooks: skillBooks - bookCost });
     persist(get());
     playSkillUpgrade();
   },
@@ -1174,19 +1181,17 @@ export const useGameState = create<GameState>((set, get) => ({
   // studentSkillTree,upgrade/cost 函式換成 game/studentSkillTree.ts 那組(等級上限固定
   // STUDENT_SKILL_LEVEL_CAP,不吃 JobTier)。
   upgradeStudentSkillSlot: (slot) => {
-    const { level, studentSkillTree, coins } = get();
+    const { studentSkillTree, skillBooks } = get();
     const currentSlotLevel = studentSkillTree[slot];
-    if (!canUpgradeStudentSkillSlot(currentSlotLevel, level.bankedExp, coins)) return;
+    if (!canUpgradeStudentSkillSlot(currentSlotLevel, skillBooks)) return;
 
-    const expCost = skillSlotUpgradeCost(currentSlotLevel);
-    const coinCost = skillSlotUpgradeCoinCost(currentSlotLevel);
-    const nextLevel: LevelState = { level: level.level, bankedExp: level.bankedExp - expCost };
+    const bookCost = skillSlotUpgradeBookCost(currentSlotLevel);
     const nextStudentSkillTree: Record<SkillSlotId, number> = {
       ...studentSkillTree,
       [slot]: nextStudentSkillSlotLevel(currentSlotLevel),
     };
 
-    set({ level: nextLevel, studentSkillTree: nextStudentSkillTree, coins: coins - coinCost });
+    set({ studentSkillTree: nextStudentSkillTree, skillBooks: skillBooks - bookCost });
     persist(get());
     playSkillUpgrade();
   },
@@ -1249,11 +1254,12 @@ export const useGameState = create<GameState>((set, get) => ({
 
   // 每日任務:今日擊敗數達標且還沒領過才會發獎勵,隔天(見load())dailyQuestClaimed會自動重置。
   claimDailyQuest: () => {
-    const { dailyKillCount, dailyQuestClaimed, coins, enhanceStones } = get();
+    const { dailyKillCount, dailyQuestClaimed, coins, enhanceStones, skillBooks } = get();
     if (!canClaimDailyQuest(dailyKillCount, dailyQuestClaimed)) return;
     set({
       coins: coins + DAILY_QUEST_COIN_REWARD,
       enhanceStones: enhanceStones + DAILY_QUEST_ENHANCE_STONE_REWARD,
+      skillBooks: skillBooks + DAILY_QUEST_SKILL_BOOK_REWARD,
       dailyQuestClaimed: true,
     });
     persist(get());

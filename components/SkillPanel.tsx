@@ -9,8 +9,7 @@ import {
   PASSIVE_SLOT_IDS,
   getSkillSlotBonusDescription,
   skillSlotLevelCap,
-  skillSlotUpgradeCoinCost,
-  skillSlotUpgradeCost,
+  skillSlotUpgradeBookCost,
   SKILL_SLOT_DESCRIPTIONS,
   SKILL_SLOT_NAMES,
   SkillSlotId,
@@ -33,7 +32,7 @@ export function SkillPanel() {
   const skillTree = useGameState((state) => state.skillTree);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const level = useGameState((state) => state.level);
-  const coins = useGameState((state) => state.coins);
+  const skillBooks = useGameState((state) => state.skillBooks);
   const upgradeSkillSlot = useGameState((state) => state.upgradeSkillSlot);
   const upgradeStudentSkillSlot = useGameState((state) => state.upgradeStudentSkillSlot);
 
@@ -46,11 +45,10 @@ export function SkillPanel() {
   const cap = hasChosenJob ? skillSlotLevelCap(tier) : STUDENT_SKILL_LEVEL_CAP;
 
   const selectedLevel = slotLevels[selectedSlot];
-  const selectedCost = skillSlotUpgradeCost(selectedLevel);
-  const selectedCoinCost = skillSlotUpgradeCoinCost(selectedLevel);
+  const selectedBookCost = skillSlotUpgradeBookCost(selectedLevel);
   const canUpgradeSelected = hasChosenJob
-    ? canUpgradeSkillSlot(selectedLevel, tier, level.bankedExp, coins)
-    : canUpgradeStudentSkillSlot(selectedLevel, level.bankedExp, coins);
+    ? canUpgradeSkillSlot(selectedLevel, tier, skillBooks)
+    : canUpgradeStudentSkillSlot(selectedLevel, skillBooks);
   const selectedAtCap = selectedLevel >= cap;
 
   const selectedFlavor = getStudentSkillFlavor(level.level, selectedSlot);
@@ -84,7 +82,7 @@ export function SkillPanel() {
                 <Text style={styles.tileKindTagText}>{isPassiveSlot(slot) ? '被動' : '主動'}</Text>
               </View>
               <View style={styles.tileLevelBadge}>
-                <Text style={styles.tileLevelText}>Lv.{slotLevel}</Text>
+                <Text style={styles.tileLevelText}>{slotLevel}/{cap}</Text>
               </View>
             </Pressable>
           );
@@ -95,7 +93,7 @@ export function SkillPanel() {
         <View style={styles.detailHeader}>
           <Text style={styles.detailKind}>{isPassiveSlot(selectedSlot) ? '被動技能' : '主動技能'}</Text>
           <Text style={styles.detailName}>
-            {selectedName} Lv.{selectedLevel}
+            {selectedName} {selectedLevel}/{cap}
             {selectedAtCap ? '(已達本階上限)' : ''}
           </Text>
         </View>
@@ -109,7 +107,7 @@ export function SkillPanel() {
           disabled={!canUpgradeSelected}
         >
           <Text style={styles.upgradeLabel}>
-            {selectedAtCap ? '已達上限' : `升級 (${selectedCost} 經驗 / ${selectedCoinCost} 金幣)`}
+            {selectedAtCap ? '已達上限' : `升級 (${selectedBookCost} 技能書)`}
           </Text>
         </Pressable>
       </View>

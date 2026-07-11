@@ -12,7 +12,6 @@ import { canUpgradeStudentSkillSlot } from './studentSkillTree';
 export interface TabAttentionInput {
   hasChosenJob: boolean;
   level: number;
-  bankedExp: number;
   coins: number;
   transferProofs: Partial<Record<Archetype, number>>;
   equipment: EquipmentLoadout;
@@ -22,6 +21,8 @@ export interface TabAttentionInput {
   // 呼叫端先決定好要吃 skillTree[job.archetype] 還是 studentSkillTree(取決於 hasChosenJob),
   // 這裡只認一份已經選好的槽位等級,不重複判斷一次。
   activeSkillLevels: Record<SkillSlotId, number>;
+  // 技能升級改吃技能書(見 game/skillTree.ts),不再吃 bankedExp。
+  skillBooks: number;
   companionGear: CompanionGearState;
   dungeon: DungeonState;
 }
@@ -44,14 +45,13 @@ function hasAnySkillUpgrade(
   hasChosenJob: boolean,
   tier: JobTier,
   levels: Record<SkillSlotId, number>,
-  bankedExp: number,
-  coins: number
+  skillBooks: number
 ): boolean {
   return SKILL_SLOT_IDS.some((slot) => {
     const level = levels[slot];
     return hasChosenJob
-      ? canUpgradeSkillSlot(level, tier, bankedExp, coins)
-      : canUpgradeStudentSkillSlot(level, bankedExp, coins);
+      ? canUpgradeSkillSlot(level, tier, skillBooks)
+      : canUpgradeStudentSkillSlot(level, skillBooks);
   });
 }
 
@@ -73,7 +73,7 @@ export function computeTabAttentionFlags(input: TabAttentionInput): TabAttention
     job: canGraduate || (canDualClass && hasUsableTransferProof),
     equipment: input.enhanceStones > 0 || Object.values(input.gemCounts).some((count) => count > 0),
     inventory: hasAnyEmptySlot(input.equipment),
-    skill: hasAnySkillUpgrade(input.hasChosenJob, input.jobTier, input.activeSkillLevels, input.bankedExp, input.coins),
+    skill: hasAnySkillUpgrade(input.hasChosenJob, input.jobTier, input.activeSkillLevels, input.skillBooks),
     // 成就是擊殺後自動發放、不需要玩家手動領取(見 hooks/useGameState.ts checkAndGrantAchievements),
     // 沒有「待處理」的狀態可以提醒,故意不給角標。
     achievement: false,
