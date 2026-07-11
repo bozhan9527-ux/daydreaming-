@@ -13,10 +13,12 @@ import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
 import { TopResourceBar } from '../components/TopResourceBar';
+import { getCurrentTier } from '../game/combat';
 import { getCompanionById } from '../game/companions';
 import { getItemById } from '../game/equipment';
 import { canLevelUp, expToNext, levelsAvailable, MAX_LEVEL } from '../game/leveling';
 import { newlyUnlockedTabs } from '../game/onboarding';
+import { computeTabAttentionFlags } from '../game/tabAttention';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF } from '../game/transfer';
 import { useBattleLoop } from '../hooks/useBattleLoop';
 import { useGameState } from '../hooks/useGameState';
@@ -39,6 +41,15 @@ export default function HomeScreen() {
   const lastDailyLoginBonus = useGameState((state) => state.lastDailyLoginBonus);
   const killCount = useGameState((state) => state.killCount);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
+  const job = useGameState((state) => state.job);
+  const equipment = useGameState((state) => state.equipment);
+  const enhanceStones = useGameState((state) => state.enhanceStones);
+  const gemCounts = useGameState((state) => state.gemCounts);
+  const skillTree = useGameState((state) => state.skillTree);
+  const studentSkillTree = useGameState((state) => state.studentSkillTree);
+  const companionGear = useGameState((state) => state.companionGear);
+  const dungeon = useGameState((state) => state.dungeon);
+  const transferProofs = useGameState((state) => state.transferProofs);
 
   const [openTabId, setOpenTabId] = useState<string | null>(null);
   const openTab = PANEL_TABS.find((tab) => tab.id === openTabId) ?? null;
@@ -117,6 +128,23 @@ export default function HomeScreen() {
   const showOfflineModal = lastOfflineKills > 0 && !offlineModalDismissed;
   const showDailyBonusModal = lastDailyLoginBonus !== null && !dailyBonusModalDismissed;
 
+  // 跨分頁提醒角標(見 game/tabAttention.ts):判斷每個分頁圖示要不要顯示小紅點,
+  // 純函式計算,不需要另外存進 state。
+  const tabAttention = computeTabAttentionFlags({
+    hasChosenJob,
+    level: level.level,
+    bankedExp: level.bankedExp,
+    coins,
+    transferProofs,
+    equipment,
+    enhanceStones,
+    gemCounts,
+    jobTier: getCurrentTier(level.level),
+    activeSkillLevels: hasChosenJob ? skillTree[job.archetype] : studentSkillTree,
+    companionGear,
+    dungeon,
+  });
+
   return (
     <View style={styles.root}>
     {/* 整頁內容量已經壓到單一手機螢幕塞得下、正常情況不需要滑動,但外層還是要用 ScrollView
@@ -189,7 +217,14 @@ export default function HomeScreen() {
             強化石/寶石數量原本在這裡下面常駐一列,現在收進「背包」分頁(見 InventoryPanel.tsx)。 */}
         <EquippedItemsStrip />
 
-        <TabBar tabs={PANEL_TABS} activeId={openTabId ?? ''} level={level.level} hasChosenJob={hasChosenJob} onSelect={setOpenTabId} />
+        <TabBar
+          tabs={PANEL_TABS}
+          activeId={openTabId ?? ''}
+          level={level.level}
+          hasChosenJob={hasChosenJob}
+          attention={tabAttention}
+          onSelect={setOpenTabId}
+        />
       </MainVisual>
 
       {/* 每日任務改成浮在畫面右側的小徽章,已領取直接消失,不再佔用主畫面高度。 */}

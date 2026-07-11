@@ -1,0 +1,83 @@
+import { Archetype, DUAL_CLASS_UNLOCK_LEVEL, JobTier, TIER_UNLOCK_LEVELS } from './combat';
+import { canUpgradeCompanionGearSlot, CompanionGearState } from './companions';
+import { applyDungeonTicketRegen, DungeonState } from './dungeon';
+import { EquipmentLoadout, GemCounts, SLOT_Z_ORDER } from './equipment';
+import { canUpgradeSkillSlot, SkillSlotId, SKILL_SLOT_IDS } from './skillTree';
+import { canUpgradeStudentSkillSlot } from './studentSkillTree';
+
+// 跨分頁提醒角標:每個頂層分頁圖示要不要顯示「有事可做」的小紅點,判準統一收在這裡——
+// 純函式、不碰 React,方便獨立測試,也讓 TabBar/app/index.tsx 不用各自重複判斷邏輯。
+// 故意只做「便宜、大致正確」的檢查(例如裝備分頁只看有沒有閒置強化石/寶石,不逐一模擬
+// 每件裝備能不能強化成功),避免角標本身的計算成本比它要提醒的操作還貴。
+export interface TabAttentionInput {
+  hasChosenJob: boolean;
+  level: number;
+  bankedExp: number;
+  coins: number;
+  transferProofs: Partial<Record<Archetype, number>>;
+  equipment: EquipmentLoadout;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  jobTier: JobTier;
+  // 呼叫端先決定好要吃 skillTree[job.archetype] 還是 studentSkillTree(取決於 hasChosenJob),
+  // 這裡只認一份已經選好的槽位等級,不重複判斷一次。
+  activeSkillLevels: Record<SkillSlotId, number>;
+  companionGear: CompanionGearState;
+  dungeon: DungeonState;
+}
+
+export interface TabAttentionFlags {
+  job: boolean;
+  equipment: boolean;
+  inventory: boolean;
+  skill: boolean;
+  achievement: boolean;
+  companion: boolean;
+  dungeon: boolean;
+}
+
+function hasAnyEmptySlot(equipment: EquipmentLoadout): boolean {
+  return SLOT_Z_ORDER.some((slot) => equipment[slot] === undefined);
+}
+
+function hasAnySkillUpgrade(
+  hasChosenJob: boolean,
+  tier: JobTier,
+  levels: Record<SkillSlotId, number>,
+  bankedExp: number,
+  coins: number
+): boolean {
+  return SKILL_SLOT_IDS.some((slot) => {
+    const level = levels[slot];
+    return hasChosenJob
+      ? canUpgradeSkillSlot(level, tier, bankedExp, coins)
+      : canUpgradeStudentSkillSlot(level, bankedExp, coins);
+  });
+}
+
+function hasAnyCompanionGearUpgrade(gear: CompanionGearState, level: number, coins: number): boolean {
+  const kinds: (keyof CompanionGearState)[] = ['pet', 'mount'];
+  return kinds.some((kind) =>
+    (Object.keys(gear[kind]) as (keyof (typeof gear)['pet'])[]).some((slot) =>
+      canUpgradeCompanionGearSlot(gear[kind][slot], level, coins)
+    )
+  );
+}
+
+export function computeTabAttentionFlags(input: TabAttentionInput): TabAttentionFlags {
+  const canGraduate = !input.hasChosenJob && input.level >= TIER_UNLOCK_LEVELS[2];
+  const hasUsableTransferProof = Object.values(input.transferProofs).some((count) => (count ?? 0) >= 1);
+  const canDualClass = input.hasChosenJob && input.level >= DUAL_CLASS_UNLOCK_LEVEL;
+
+  return {
+    job: canGraduate || (canDualClass && hasUsableTransferProof),
+    equipment: input.enhanceStones > 0 || Object.values(input.gemCounts).some((count) => count > 0),
+    inventory: hasAnyEmptySlot(input.equipment),
+    skill: hasAnySkillUpgrade(input.hasChosenJob, input.jobTier, input.activeSkillLevels, input.bankedExp, input.coins),
+    // 成就是擊殺後自動發放、不需要玩家手動領取(見 hooks/useGameState.ts checkAndGrantAchievements),
+    // 沒有「待處理」的狀態可以提醒,故意不給角標。
+    achievement: false,
+    companion: hasAnyCompanionGearUpgrade(input.companionGear, input.level, input.coins),
+    dungeon: applyDungeonTicketRegen(input.dungeon).tickets > 0,
+  };
+}
