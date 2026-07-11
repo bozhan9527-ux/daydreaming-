@@ -1,6 +1,16 @@
 // 分頁導覽用的小圖示,跟 game/sprites/eventIcons.ts 同一套「純程式產生像素格」原則。
 // 新增分頁時只要在這裡多加一個 icon frame + 對應的 TabIconId,不用動 UI 元件本身。
-export type TabIconId = 'job' | 'equipment' | 'skill' | 'companion' | 'enhance' | 'socket' | 'codex' | 'achievement' | 'inventory';
+export type TabIconId =
+  | 'job'
+  | 'equipment'
+  | 'skill'
+  | 'companion'
+  | 'enhance'
+  | 'socket'
+  | 'codex'
+  | 'achievement'
+  | 'inventory'
+  | 'dungeon';
 
 const ICON_COLOR = '#f2f2f2';
 
@@ -145,6 +155,22 @@ const INVENTORY_ICON_FRAME = [
   '............',
 ];
 
+// 副本:傳送門/地下城入口造型——外圈拱門輪廓 + 中央鏤空通道,呼應「走進去挑戰」的意象。
+const DUNGEON_ICON_FRAME = [
+  '....XXXX....',
+  '...X....X...',
+  '..X......X..',
+  '..X......X..',
+  '..X......X..',
+  '..X.XXXX.X..',
+  '..X.X..X.X..',
+  '..X.X..X.X..',
+  '..X.XXXX.X..',
+  '..X......X..',
+  '..XXXXXXXX..',
+  '............',
+];
+
 const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   job: JOB_ICON_FRAME,
   equipment: EQUIPMENT_ICON_FRAME,
@@ -155,6 +181,7 @@ const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   codex: CODEX_ICON_FRAME,
   achievement: ACHIEVEMENT_ICON_FRAME,
   inventory: INVENTORY_ICON_FRAME,
+  dungeon: DUNGEON_ICON_FRAME,
 };
 
 export interface TabIconData {

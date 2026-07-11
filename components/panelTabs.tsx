@@ -3,6 +3,7 @@ import { ComponentType } from 'react';
 import { TabIconId } from '../game/sprites/tabIcons';
 import { AchievementPanel } from './AchievementPanel';
 import { CompanionPanel } from './CompanionPanel';
+import { DungeonPanel } from './DungeonPanel';
 import { EquipmentPanel } from './EquipmentPanel';
 import { InventoryPanel } from './InventoryPanel';
 import { JobSelector } from './JobSelector';
@@ -27,4 +28,5 @@ export const PANEL_TABS: PanelTab[] = [
   { id: 'skill', label: '技能', icon: 'skill', Component: SkillPanel },
   { id: 'achievement', label: '成就', icon: 'achievement', Component: AchievementPanel },
   { id: 'companion', label: '寵物坐騎', icon: 'companion', Component: CompanionPanel },
+  { id: 'dungeon', label: '副本', icon: 'dungeon', Component: DungeonPanel },
 ];

@@ -61,6 +61,14 @@ import {
   UnlockedItemIds,
 } from '../game/equipment';
 import { rollCoinWindfall } from '../game/currency';
+import {
+  applyDungeonTicketRegen,
+  createInitialDungeonState,
+  DungeonState,
+  dungeonDifficultyMultiplier,
+  dungeonWinCoinReward,
+  spendDungeonTicket,
+} from '../game/dungeon';
 import { applyTransferFragmentGain, rollTransferFragmentDrop, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import {
   canClaimDailyQuest,
@@ -213,6 +221,8 @@ interface GameState {
   companions: CompanionState;
   // 寵物/坐騎專屬裝備(見 game/companions.ts):綁在 pet/mount 身分上,不是綁在特定寵物身上。
   companionGear: CompanionGearState;
+  // 轉職試煉副本(見 game/dungeon.ts):6 個職業共用同一份入場券池,打贏保證掉指定職業的轉職碎片。
+  dungeon: DungeonState;
   secondaryJob: Archetype | null;
   itemInstances: ItemInstances;
   enhanceStones: number;
@@ -267,6 +277,7 @@ interface GameState {
   tickBattle: () => void;
   boostCurrentFight: () => void;
   setJob: (archetype: Archetype, branch: JobBranch) => void;
+  challengeDungeon: (archetype: Archetype) => void;
   setSecondaryJob: (archetype: Archetype | null) => void;
   equip: (itemId: string) => void;
   unequip: (slot: EquipmentSlot) => void;
@@ -301,6 +312,7 @@ type PersistableState = Pick<
   | 'unlockedItemIds'
   | 'companions'
   | 'companionGear'
+  | 'dungeon'
   | 'secondaryJob'
   | 'itemInstances'
   | 'enhanceStones'
@@ -335,6 +347,7 @@ function persist(state: PersistableState): void {
     unlockedItemIds: state.unlockedItemIds,
     companions: state.companions,
     companionGear: state.companionGear,
+    dungeon: state.dungeon,
     secondaryJob: state.secondaryJob,
     itemInstances: state.itemInstances,
     enhanceStones: state.enhanceStones,
@@ -444,6 +457,7 @@ export const useGameState = create<GameState>((set, get) => ({
   unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
   companions: createEmptyCompanionState(),
   companionGear: createEmptyCompanionGearState(),
+  dungeon: createInitialDungeonState(),
   secondaryJob: null,
   itemInstances: createEmptyItemInstances(),
   enhanceStones: 0,
@@ -529,6 +543,9 @@ export const useGameState = create<GameState>((set, get) => ({
       unlockedItemIds: save.unlockedItemIds,
       companions: save.companions,
       companionGear: save.companionGear,
+      // 入場券回補跟離線收益同一套精神:玩家關掉遊戲一段時間回來,票要照經過的時間回補,
+      // 不能等到玩家手動點進副本分頁才觸發。
+      dungeon: applyDungeonTicketRegen(save.dungeon),
       secondaryJob: save.secondaryJob,
       itemInstances,
       enhanceStones: save.enhanceStones,
@@ -837,6 +854,52 @@ export const useGameState = create<GameState>((set, get) => ({
     checkAndGrantAchievements(get, set);
     persist(get());
     playEvent(state.currentEncounter.rarity);
+  },
+
+  // 轉職試煉副本(見 game/dungeon.ts):跟一般戰鬥(tickBattle)是完全獨立的另一條戰鬥判定路線,
+  // 消耗入場券,勝負判定複用同一套 resolveFightHealth,唯一差異是打贏保證掉「指定」archetype 的
+  // 轉職碎片(不是隨機抽),不是每隻小怪都能觸發,而是玩家主動選職業來打。
+  challengeDungeon: (archetype) => {
+    const state = get();
+    const spent = spendDungeonTicket(state.dungeon);
+    if (spent === null) return; // 沒票,UI 按鈕本來就該 disabled,這裡是防呆。
+
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    const healthResult = resolveFightHealth(
+      state.heroHp,
+      heroMaxHp(state.level.level),
+      state.level.level,
+      getCurrentTier(state.level.level),
+      substatTotals.resistance,
+      'legendary',
+      dungeonDifficultyMultiplier(state.level.level)
+    );
+
+    if (healthResult.defeated) {
+      set({
+        heroHp: healthResult.nextHp,
+        dungeon: spent,
+        defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
+      });
+      persist(get());
+      return;
+    }
+
+    const gained = applyTransferFragmentGain(state.transferFragments, state.transferProofs, archetype);
+    const nextHasEverAssembledTransferProof =
+      (gained.proofs[archetype] ?? 0) !== (state.transferProofs[archetype] ?? 0) ? true : state.hasEverAssembledTransferProof;
+
+    set({
+      heroHp: healthResult.nextHp,
+      coins: state.coins + dungeonWinCoinReward(state.level.level),
+      dungeon: spent,
+      transferFragments: gained.fragments,
+      transferProofs: gained.proofs,
+      hasEverAssembledTransferProof: nextHasEverAssembledTransferProof,
+      lastTransferFragmentArchetype: archetype,
+    });
+    checkAndGrantAchievements(get, set);
+    persist(get());
   },
 
   // 點擊勇者可以搶快一點打完當前這隻怪(縮短剩餘時間);同時每次點擊都算一次「觸發點擊」,

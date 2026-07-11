@@ -22,6 +22,7 @@ import {
   unlockItem,
   upgradeItemInstancesToV13,
 } from '../game/equipment';
+import { createInitialDungeonState, DungeonState } from '../game/dungeon';
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { SkillLevels, SKILL_IDS } from '../game/skills';
 import { createInitialSkillTreeLevels, SKILL_SLOT_IDS, SkillSlotId, SkillTreeLevels } from '../game/skillTree';
@@ -31,7 +32,7 @@ import { createInitialStudentSkillTreeLevels } from '../game/studentSkillTree';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 23;
+export const SCHEMA_VERSION = 24;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -102,6 +103,9 @@ export interface SaveData {
   // 寵物/坐騎專屬裝備(見 game/companions.ts 的「升級格子」模式):裝備綁在 pet/mount 這兩個
   // 身分上,不是綁在某一隻特定寵物身上,5 槽位(top/bottom/helmet/shoes/weapon)各自 0-10 級。
   companionGear: CompanionGearState;
+  // 轉職試煉副本(見 game/dungeon.ts):tickets/lastTicketRegenAt 是入場券張數與回補計時基準,
+  // 6 個職業各自的副本共用同一份入場券池,不分職業各自計次。
+  dungeon: DungeonState;
   lastActiveAt: number;
 }
 
@@ -137,6 +141,7 @@ export function createInitialSaveData(): SaveData {
     defeatRecoveryUntil: null,
     studentSkillTree: createInitialStudentSkillTreeLevels(),
     companionGear: createEmptyCompanionGearState(),
+    dungeon: createInitialDungeonState(),
     lastActiveAt: Date.now(),
   };
 }
@@ -1167,11 +1172,51 @@ function isSaveDataV22(value: unknown): value is SaveDataV22 {
   );
 }
 
-function isSaveDataV23(value: unknown): value is SaveData {
+function isDungeonState(value: unknown): value is DungeonState {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.tickets === 'number' && typeof record.lastTicketRegenAt === 'number';
+}
+
+interface SaveDataV23 {
+  version: 23;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  stageProgress: StageProgress;
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
+  hasChosenJob: boolean;
+  unlockedAchievementIds: string[];
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
+  killCount: number;
+  heroHp: number;
+  defeatRecoveryUntil: number | null;
+  studentSkillTree: Record<SkillSlotId, number>;
+  companionGear: CompanionGearState;
+  lastActiveAt: number;
+}
+
+function isSaveDataV23(value: unknown): value is SaveDataV23 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 23 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -1205,6 +1250,45 @@ function isSaveDataV23(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV24(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    isStageProgress(record.stageProgress) &&
+    typeof record.lastDailyResetAt === 'string' &&
+    typeof record.dailyKillCount === 'number' &&
+    typeof record.dailyQuestClaimed === 'boolean' &&
+    isTransferCounts(record.transferFragments) &&
+    isTransferCounts(record.transferProofs) &&
+    typeof record.hasChosenJob === 'boolean' &&
+    isUnlockedAchievementIds(record.unlockedAchievementIds) &&
+    typeof record.hasEverAssembledTransferProof === 'boolean' &&
+    typeof record.hasEverSwitchedJob === 'boolean' &&
+    typeof record.killCount === 'number' &&
+    typeof record.heroHp === 'number' &&
+    (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
+    isStudentSkillTreeLevels(record.studentSkillTree) &&
+    isCompanionGearState(record.companionGear) &&
+    isDungeonState(record.dungeon)
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
@@ -1234,11 +1318,21 @@ function isSaveDataV23(value: unknown): value is SaveData {
 // (不論還在學生期還是早就畢業)一律從零開始點學生技能,不影響其餘任何既有進度。
 // v22 沒有 companionGear(見 game/companions.ts 的寵物/坐騎專屬裝備「升級格子」),補全 0 級的
 // 空裝備狀態——舊玩家的寵物/坐騎加成不變,只是還沒點裝備格子而已。
+// v23 沒有 dungeon(見 game/dungeon.ts 的轉職試煉副本入場券),補滿張的初始入場券狀態——
+// 呼應「解鎖當下就能馬上用」的既有設計慣例,舊玩家一登入副本分頁就有 5 張票可以打。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV23(value)) return value;
+  if (isSaveDataV24(value)) return value;
+  if (isSaveDataV23(value)) {
+    return { ...value, version: SCHEMA_VERSION, dungeon: createInitialDungeonState() };
+  }
   if (isSaveDataV22(value)) {
-    return { ...value, version: SCHEMA_VERSION, companionGear: createEmptyCompanionGearState() };
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
+    };
   }
   if (isSaveDataV21(value)) {
     return {
@@ -1246,6 +1340,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
     };
   }
   if (isSaveDataV20(value)) {
@@ -1256,6 +1351,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
     };
   }
   if (isSaveDataV19(value)) {
@@ -1267,6 +1363,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
     };
   }
   if (isSaveDataV18(value)) {
@@ -1281,6 +1378,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
     };
   }
   if (isSaveDataV17(value)) {
@@ -1296,6 +1394,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
     };
   }
   if (isSaveDataV16(value)) {
@@ -1330,6 +1429,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1365,6 +1465,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1400,6 +1501,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1435,6 +1537,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1470,6 +1573,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1505,6 +1609,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1540,6 +1645,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1575,6 +1681,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1610,6 +1717,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1645,6 +1753,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1680,6 +1789,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1715,6 +1825,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1750,6 +1861,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1785,6 +1897,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1820,6 +1933,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1855,6 +1969,7 @@ function migrate(value: unknown): SaveData {
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
       companionGear: createEmptyCompanionGearState(),
+      dungeon: createInitialDungeonState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
