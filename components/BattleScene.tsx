@@ -240,7 +240,7 @@ export function BattleScene() {
 
       {mount && (
         <View style={styles.mountSlot}>
-          <PixelSprite {...getCompanionFrame('mount', mount.rarity)} pixelSize={COMPANION_PIXEL_SIZE} />
+          <PixelSprite {...getCompanionFrame(mount.id)} pixelSize={COMPANION_PIXEL_SIZE} />
         </View>
       )}
 
@@ -251,7 +251,7 @@ export function BattleScene() {
 
       {pet && (
         <View style={styles.petSlot}>
-          <PixelSprite {...getCompanionFrame('pet', pet.rarity)} pixelSize={COMPANION_PIXEL_SIZE} />
+          <PixelSprite {...getCompanionFrame(pet.id)} pixelSize={COMPANION_PIXEL_SIZE} />
         </View>
       )}
 

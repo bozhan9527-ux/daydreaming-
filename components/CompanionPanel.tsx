@@ -2,8 +2,16 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
+  canUpgradeCompanionGearSlot,
   CompanionBonusStat,
+  CompanionGearSlot,
   CompanionKind,
+  companionGearSlotBonusValue,
+  companionGearSlotStat,
+  companionGearUpgradeCoinCost,
+  companionGearUpgradeRequiredLevel,
+  COMPANION_GEAR_MAX_LEVEL,
+  COMPANION_GEAR_SLOTS,
   getCompanionBonusTotals,
   getCompanionById,
   getCompanionsByKind,
@@ -22,12 +30,21 @@ const STAT_LABELS: Record<CompanionBonusStat, string> = {
   speed: '戰鬥速度',
 };
 
-type SubView = 'worn' | 'bag' | 'shop';
+const GEAR_SLOT_LABELS: Record<CompanionGearSlot, string> = {
+  top: '上身',
+  bottom: '下身',
+  helmet: '頭盔',
+  shoes: '鞋',
+  weapon: '武器',
+};
+
+type SubView = 'worn' | 'bag' | 'shop' | 'gear';
 
 const SUB_VIEWS: { id: SubView; label: string }[] = [
   { id: 'worn', label: '裝備中' },
   { id: 'bag', label: '背包' },
   { id: 'shop', label: '商店' },
+  { id: 'gear', label: '裝備' },
 ];
 
 function formatBonus(stat: CompanionBonusStat, value: number): string {
@@ -38,8 +55,12 @@ const KINDS: CompanionKind[] = ['pet', 'mount'];
 
 export function CompanionPanel() {
   const companions = useGameState((state) => state.companions);
+  const companionGear = useGameState((state) => state.companionGear);
+  const level = useGameState((state) => state.level);
+  const coins = useGameState((state) => state.coins);
   const purchaseCompanion = useGameState((state) => state.purchaseCompanion);
   const unequipCompanionSlot = useGameState((state) => state.unequipCompanionSlot);
+  const upgradeCompanionGearSlot = useGameState((state) => state.upgradeCompanionGearSlot);
 
   const [subView, setSubView] = useState<SubView>('worn');
 
@@ -138,6 +159,41 @@ export function CompanionPanel() {
           );
         })}
       {subView === 'shop' && shopCount === 0 && <Text style={styles.emptyText}>寵物坐騎都收集齊了</Text>}
+
+      {subView === 'gear' &&
+        KINDS.map((kind) => (
+          <View key={kind} style={styles.kindSection}>
+            <Text style={styles.kindTitle}>{KIND_LABELS[kind]}裝備</Text>
+            {COMPANION_GEAR_SLOTS.map((slot) => {
+              const slotLevel = companionGear[kind][slot];
+              const stat = companionGearSlotStat(kind, slot);
+              const bonusValue = companionGearSlotBonusValue(slotLevel);
+              const atCap = slotLevel >= COMPANION_GEAR_MAX_LEVEL;
+              const requiredLevel = companionGearUpgradeRequiredLevel(slotLevel + 1);
+              const coinCost = companionGearUpgradeCoinCost(slotLevel);
+              const canUpgrade = canUpgradeCompanionGearSlot(slotLevel, level.level, coins);
+              return (
+                <View key={slot} style={styles.gearRow}>
+                  <View style={styles.gearRowHeader}>
+                    <Text style={styles.label}>{GEAR_SLOT_LABELS[slot]}</Text>
+                    <Text style={styles.cost}>
+                      {slotLevel}/{COMPANION_GEAR_MAX_LEVEL} 級 · {formatBonus(stat, bonusValue)}
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={[styles.upgradeButton, !canUpgrade && styles.upgradeButtonDisabled]}
+                    onPress={() => upgradeCompanionGearSlot(kind, slot)}
+                    disabled={!canUpgrade}
+                  >
+                    <Text style={styles.upgradeLabel}>
+                      {atCap ? '已達上限' : `升級(需 Lv.${requiredLevel} / ${coinCost} 金幣)`}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        ))}
     </View>
   );
 }
@@ -230,5 +286,31 @@ const styles = StyleSheet.create({
   cost: {
     color: '#8a8a95',
     fontSize: 12,
+  },
+  gearRow: {
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#2a2a35',
+    marginBottom: 4,
+  },
+  gearRowHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  upgradeButton: {
+    marginTop: 2,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
+  },
+  upgradeButtonDisabled: {
+    opacity: 0.4,
+  },
+  upgradeLabel: {
+    color: '#f2f2f2',
+    fontSize: 11,
   },
 });

@@ -3,13 +3,19 @@ import { create } from 'zustand';
 import { ACHIEVEMENTS, AchievementProgress, evaluateUnlockedAchievementIds } from '../game/achievements';
 import { calcKillReward, Encounter, estimateOfflineBattleResult, generateEncounter } from '../game/battle';
 import {
+  canUpgradeCompanionGearSlot,
   COMPANIONS,
+  CompanionGearSlot,
+  CompanionGearState,
   CompanionKind,
   CompanionState,
+  companionGearUpgradeCoinCost,
+  createEmptyCompanionGearState,
   createEmptyCompanionState,
   equipCompanion,
   getCompanionBonusTotals,
   getCompanionById,
+  getCompanionGearBonusTotals,
   isCompanionUnlocked,
   rollCompanionDrop,
   unequipCompanion,
@@ -156,6 +162,7 @@ function computeRewardMultipliers(
   level: number,
   equipment: EquipmentLoadout,
   companions: CompanionState,
+  companionGear: CompanionGearState,
   secondaryJob: Archetype | null,
   itemInstances: ItemInstances,
   skillTree: SkillTreeLevels,
@@ -165,11 +172,13 @@ function computeRewardMultipliers(
   const jobMultiplier = currentJobMultiplier(job, level, secondaryJob, hasChosenJob);
   const equipmentBonus = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const companionBonus = getCompanionBonusTotals(companions);
+  const companionGearBonus = getCompanionGearBonusTotals(companionGear);
   const passiveBonus = computePassiveSkillBonus(job, skillTree, studentSkillTree, hasChosenJob);
   return {
-    expMultiplier: jobMultiplier * (1 + equipmentBonus.exp + companionBonus.exp + passiveBonus.exp),
-    coinMultiplier: 1 + equipmentBonus.coins + companionBonus.coins + passiveBonus.coins,
-    speedMultiplier: 1 + equipmentBonus.speed + companionBonus.speed,
+    expMultiplier:
+      jobMultiplier * (1 + equipmentBonus.exp + companionBonus.exp + companionGearBonus.exp + passiveBonus.exp),
+    coinMultiplier: 1 + equipmentBonus.coins + companionBonus.coins + companionGearBonus.coins + passiveBonus.coins,
+    speedMultiplier: 1 + equipmentBonus.speed + companionBonus.speed + companionGearBonus.speed,
   };
 }
 
@@ -202,6 +211,8 @@ interface GameState {
   coins: number;
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
+  // 寵物/坐騎專屬裝備(見 game/companions.ts):綁在 pet/mount 身分上,不是綁在特定寵物身上。
+  companionGear: CompanionGearState;
   secondaryJob: Archetype | null;
   itemInstances: ItemInstances;
   enhanceStones: number;
@@ -266,6 +277,7 @@ interface GameState {
   setGender: (gender: Gender) => void;
   purchaseCompanion: (id: string) => void;
   unequipCompanionSlot: (kind: CompanionKind) => void;
+  upgradeCompanionGearSlot: (kind: CompanionKind, slot: CompanionGearSlot) => void;
   identifyItem: (itemId: string) => void;
   enhanceItem: (itemId: string) => void;
   purchaseEnhanceStone: () => void;
@@ -288,6 +300,7 @@ type PersistableState = Pick<
   | 'coins'
   | 'unlockedItemIds'
   | 'companions'
+  | 'companionGear'
   | 'secondaryJob'
   | 'itemInstances'
   | 'enhanceStones'
@@ -321,6 +334,7 @@ function persist(state: PersistableState): void {
     coins: state.coins,
     unlockedItemIds: state.unlockedItemIds,
     companions: state.companions,
+    companionGear: state.companionGear,
     secondaryJob: state.secondaryJob,
     itemInstances: state.itemInstances,
     enhanceStones: state.enhanceStones,
@@ -429,6 +443,7 @@ export const useGameState = create<GameState>((set, get) => ({
   coins: 0,
   unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
   companions: createEmptyCompanionState(),
+  companionGear: createEmptyCompanionGearState(),
   secondaryJob: null,
   itemInstances: createEmptyItemInstances(),
   enhanceStones: 0,
@@ -481,6 +496,7 @@ export const useGameState = create<GameState>((set, get) => ({
       save.level.level,
       save.equipment,
       save.companions,
+      save.companionGear,
       save.secondaryJob,
       itemInstances,
       save.skillTree,
@@ -512,6 +528,7 @@ export const useGameState = create<GameState>((set, get) => ({
       coins,
       unlockedItemIds: save.unlockedItemIds,
       companions: save.companions,
+      companionGear: save.companionGear,
       secondaryJob: save.secondaryJob,
       itemInstances,
       enhanceStones: save.enhanceStones,
@@ -572,6 +589,7 @@ export const useGameState = create<GameState>((set, get) => ({
         state.level.level,
         state.equipment,
         state.companions,
+        state.companionGear,
         state.secondaryJob,
         state.itemInstances,
         state.skillTree,
@@ -618,6 +636,7 @@ export const useGameState = create<GameState>((set, get) => ({
       state.level.level,
       state.equipment,
       state.companions,
+      state.companionGear,
       state.secondaryJob,
       state.itemInstances,
       state.skillTree,
@@ -1144,6 +1163,25 @@ export const useGameState = create<GameState>((set, get) => ({
     const { companions } = get();
     set({ companions: unequipCompanion(companions, kind) });
     persist(get());
+  },
+
+  // 寵物/坐騎專屬裝備升級:比照 purchaseCompanion/upgradeStudentSkillSlot 的既有寫法,
+  // 只吃金幣(不吃 bankedExp)——這是寵物系統的加成,定位是「金幣的額外去處」,
+  // 不跟主要練等經濟(bankedExp)搶資源。
+  upgradeCompanionGearSlot: (kind, slot) => {
+    const { companionGear, level, coins } = get();
+    const currentSlotLevel = companionGear[kind][slot];
+    if (!canUpgradeCompanionGearSlot(currentSlotLevel, level.level, coins)) return;
+
+    const coinCost = companionGearUpgradeCoinCost(currentSlotLevel);
+    const nextCompanionGear: CompanionGearState = {
+      ...companionGear,
+      [kind]: { ...companionGear[kind], [slot]: currentSlotLevel + 1 },
+    };
+
+    set({ companionGear: nextCompanionGear, coins: coins - coinCost });
+    persist(get());
+    playSkillUpgrade();
   },
 
   // 每日任務:今日擊敗數達標且還沒領過才會發獎勵,隔天(見load())dailyQuestClaimed會自動重置。

@@ -1,7 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Archetype, JobBranch } from '../game/combat';
-import { CompanionState, createEmptyCompanionState } from '../game/companions';
+import {
+  CompanionGearState,
+  CompanionState,
+  createEmptyCompanionGearState,
+  createEmptyCompanionState,
+} from '../game/companions';
 import {
   applyGenderDefault,
   createEmptyGemCounts,
@@ -26,7 +31,7 @@ import { createInitialStudentSkillTreeLevels } from '../game/studentSkillTree';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 22;
+export const SCHEMA_VERSION = 23;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -94,6 +99,9 @@ export interface SaveData {
   // 「學生」期專屬技能樹(見 game/studentSkillTree.ts):6 格各自的等級,獨立於 skillTree
   // (職業技能樹)之外——學生還沒選職業,不能借用那套 Record<Archetype, ...> 的形狀。
   studentSkillTree: Record<SkillSlotId, number>;
+  // 寵物/坐騎專屬裝備(見 game/companions.ts 的「升級格子」模式):裝備綁在 pet/mount 這兩個
+  // 身分上,不是綁在某一隻特定寵物身上,5 槽位(top/bottom/helmet/shoes/weapon)各自 0-10 級。
+  companionGear: CompanionGearState;
   lastActiveAt: number;
 }
 
@@ -128,6 +136,7 @@ export function createInitialSaveData(): SaveData {
     heroHp: 50 + createInitialLevelState().level * 2,
     defeatRecoveryUntil: null,
     studentSkillTree: createInitialStudentSkillTreeLevels(),
+    companionGear: createEmptyCompanionGearState(),
     lastActiveAt: Date.now(),
   };
 }
@@ -209,6 +218,20 @@ function isCompanionState(value: unknown): value is CompanionState {
     (record.equippedPetId === null || typeof record.equippedPetId === 'string') &&
     (record.equippedMountId === null || typeof record.equippedMountId === 'string')
   );
+}
+
+const COMPANION_GEAR_SLOT_IDS = ['top', 'bottom', 'helmet', 'shoes', 'weapon'] as const;
+
+function isCompanionGearLevels(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return COMPANION_GEAR_SLOT_IDS.every((slot) => typeof record[slot] === 'number');
+}
+
+function isCompanionGearState(value: unknown): value is CompanionGearState {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return isCompanionGearLevels(record.pet) && isCompanionGearLevels(record.mount);
 }
 
 interface SaveDataV1 {
@@ -1074,11 +1097,44 @@ function isSaveDataV21(value: unknown): value is SaveDataV21 {
   );
 }
 
-function isSaveDataV22(value: unknown): value is SaveData {
+interface SaveDataV22 {
+  version: 22;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  stageProgress: StageProgress;
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
+  hasChosenJob: boolean;
+  unlockedAchievementIds: string[];
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
+  killCount: number;
+  heroHp: number;
+  defeatRecoveryUntil: number | null;
+  studentSkillTree: Record<SkillSlotId, number>;
+  lastActiveAt: number;
+}
+
+function isSaveDataV22(value: unknown): value is SaveDataV22 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 22 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -1111,6 +1167,44 @@ function isSaveDataV22(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV23(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    isStageProgress(record.stageProgress) &&
+    typeof record.lastDailyResetAt === 'string' &&
+    typeof record.dailyKillCount === 'number' &&
+    typeof record.dailyQuestClaimed === 'boolean' &&
+    isTransferCounts(record.transferFragments) &&
+    isTransferCounts(record.transferProofs) &&
+    typeof record.hasChosenJob === 'boolean' &&
+    isUnlockedAchievementIds(record.unlockedAchievementIds) &&
+    typeof record.hasEverAssembledTransferProof === 'boolean' &&
+    typeof record.hasEverSwitchedJob === 'boolean' &&
+    typeof record.killCount === 'number' &&
+    typeof record.heroHp === 'number' &&
+    (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
+    isStudentSkillTreeLevels(record.studentSkillTree) &&
+    isCompanionGearState(record.companionGear)
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
@@ -1138,11 +1232,21 @@ function isSaveDataV22(value: unknown): value is SaveData {
 // (沒有在恢復中)。
 // v21 沒有 studentSkillTree(見 game/studentSkillTree.ts),補全 0 的空技能樹物件——舊存檔
 // (不論還在學生期還是早就畢業)一律從零開始點學生技能,不影響其餘任何既有進度。
+// v22 沒有 companionGear(見 game/companions.ts 的寵物/坐騎專屬裝備「升級格子」),補全 0 級的
+// 空裝備狀態——舊玩家的寵物/坐騎加成不變,只是還沒點裝備格子而已。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV22(value)) return value;
+  if (isSaveDataV23(value)) return value;
+  if (isSaveDataV22(value)) {
+    return { ...value, version: SCHEMA_VERSION, companionGear: createEmptyCompanionGearState() };
+  }
   if (isSaveDataV21(value)) {
-    return { ...value, version: SCHEMA_VERSION, studentSkillTree: createInitialStudentSkillTreeLevels() };
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
+    };
   }
   if (isSaveDataV20(value)) {
     return {
@@ -1151,6 +1255,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
     };
   }
   if (isSaveDataV19(value)) {
@@ -1161,6 +1266,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
     };
   }
   if (isSaveDataV18(value)) {
@@ -1174,6 +1280,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
     };
   }
   if (isSaveDataV17(value)) {
@@ -1188,6 +1295,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
     };
   }
   if (isSaveDataV16(value)) {
@@ -1221,6 +1329,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1255,6 +1364,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1289,6 +1399,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1323,6 +1434,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1357,6 +1469,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1391,6 +1504,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1425,6 +1539,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1459,6 +1574,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1493,6 +1609,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1527,6 +1644,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1561,6 +1679,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1595,6 +1714,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1629,6 +1749,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1663,6 +1784,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1697,6 +1819,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1731,6 +1854,7 @@ function migrate(value: unknown): SaveData {
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: createInitialStudentSkillTreeLevels(),
+      companionGear: createEmptyCompanionGearState(),
       lastActiveAt: value.lastActiveAt,
     };
   }
