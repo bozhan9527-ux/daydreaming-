@@ -51,6 +51,8 @@ export default function HomeScreen() {
   const companionGear = useGameState((state) => state.companionGear);
   const dungeon = useGameState((state) => state.dungeon);
   const transferProofs = useGameState((state) => state.transferProofs);
+  const unlockedAchievementIds = useGameState((state) => state.unlockedAchievementIds);
+  const claimedAchievementIds = useGameState((state) => state.claimedAchievementIds);
 
   const [openTabId, setOpenTabId] = useState<string | null>(null);
   const openTab = PANEL_TABS.find((tab) => tab.id === openTabId) ?? null;
@@ -144,6 +146,8 @@ export default function HomeScreen() {
     skillBooks,
     companionGear,
     dungeon,
+    unlockedAchievementIds,
+    claimedAchievementIds,
   });
 
   return (

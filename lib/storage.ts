@@ -38,7 +38,7 @@ import { createInitialStudentSkillTreeLevels, STUDENT_SKILL_LEVEL_CAP } from '..
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 25;
+export const SCHEMA_VERSION = 26;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -120,12 +120,15 @@ export interface SaveData {
   // 主職,職業樹只能瀏覽/預覽,不套用任何職業戰鬥加成;true=已在Lv30畢業選定主職。
   // 這個功能上線前建立的存檔一律視為 true(老玩家本來就已經有主職,直接視為畢業)。
   hasChosenJob: boolean;
-  // 成就系統(見 game/achievements.ts):unlockedAchievementIds 是已解鎖成就 id 的持久化清單,
-  // 全量重新計算後跟這份清單做 diff 找出新解鎖項目。hasEverAssembledTransferProof/
-  // hasEverSwitchedJob 是專門給轉職相關成就用的「曾經發生過」旗標,因為底層資源
-  // (transferProofs 會被 setJob 消耗)事後看不出「有沒有發生過」,只能事件當下記一次性旗標,
-  // 設為 true 後永不重置。
+  // 成就系統(見 game/achievements.ts):unlockedAchievementIds 是「條件已達成」成就 id 的持久化
+  // 清單,全量重新計算後跟這份清單做 diff 找出新達成項目。v26 起改成手動領取制,獎勵不再隨條件
+  // 達成自動發放,claimedAchievementIds 是「已經按過領取按鈕、拿到獎勵」的 id 清單——
+  // unlockedAchievementIds 減去 claimedAchievementIds 就是「待領取」清單。
+  // hasEverAssembledTransferProof/hasEverSwitchedJob 是專門給轉職相關成就用的「曾經發生過」旗標,
+  // 因為底層資源(transferProofs 會被 setJob 消耗)事後看不出「有沒有發生過」,只能事件當下記
+  // 一次性旗標,設為 true 後永不重置。
   unlockedAchievementIds: string[];
+  claimedAchievementIds: string[];
   hasEverAssembledTransferProof: boolean;
   hasEverSwitchedJob: boolean;
   // 累計擊殺數(不是 dailyKillCount 那個跨日歸零的每日任務計數,這個終生累加)——
@@ -174,6 +177,7 @@ export function createInitialSaveData(): SaveData {
     transferProofs: {},
     hasChosenJob: false,
     unlockedAchievementIds: [],
+    claimedAchievementIds: [],
     hasEverAssembledTransferProof: false,
     hasEverSwitchedJob: false,
     killCount: 0,
@@ -1367,11 +1371,50 @@ function isSaveDataV24(value: unknown): value is SaveDataV24 {
   );
 }
 
-function isSaveDataV25(value: unknown): value is SaveData {
+// v25(成就手動領取制上線前的最後一版):有 unlockedAchievementIds,但沒有 claimedAchievementIds
+// ——那個年代的成就是條件達成就自動發獎,所以「已解鎖」跟「已領獎」是同一份清單,不能直接當
+// SaveData(缺 claimedAchievementIds 欄位)使用,獨立留一份舊形狀的 interface。
+interface SaveDataV25 {
+  version: 25;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  skillBooks: number;
+  stageProgress: StageProgress;
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
+  hasChosenJob: boolean;
+  unlockedAchievementIds: string[];
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
+  killCount: number;
+  heroHp: number;
+  defeatRecoveryUntil: number | null;
+  studentSkillTree: Record<SkillSlotId, number>;
+  companionGear: CompanionGearState;
+  dungeon: DungeonState;
+  lastActiveAt: number;
+}
+
+function isSaveDataV25(value: unknown): value is SaveDataV25 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 25 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -1407,6 +1450,47 @@ function isSaveDataV25(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV26(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    typeof record.skillBooks === 'number' &&
+    isStageProgress(record.stageProgress) &&
+    typeof record.lastDailyResetAt === 'string' &&
+    typeof record.dailyKillCount === 'number' &&
+    typeof record.dailyQuestClaimed === 'boolean' &&
+    isTransferCounts(record.transferFragments) &&
+    isTransferCounts(record.transferProofs) &&
+    typeof record.hasChosenJob === 'boolean' &&
+    isUnlockedAchievementIds(record.unlockedAchievementIds) &&
+    isUnlockedAchievementIds(record.claimedAchievementIds) &&
+    typeof record.hasEverAssembledTransferProof === 'boolean' &&
+    typeof record.hasEverSwitchedJob === 'boolean' &&
+    typeof record.killCount === 'number' &&
+    typeof record.heroHp === 'number' &&
+    (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
+    isStudentSkillTreeLevels(record.studentSkillTree) &&
+    isCompanionGearState(record.companionGear) &&
+    isDungeonState(record.dungeon)
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
@@ -1425,8 +1509,9 @@ function isSaveDataV25(value: unknown): value is SaveData {
 // 不會平白把老玩家打回「學生」狀態鎖技能分頁)。
 // v18 沒有成就系統欄位,補空的已解鎖成就清單 + 兩個 false 的「曾經發生過」旗標——
 // 這個功能上線前的存檔不會被誤判成「已經達成過轉職相關成就」,但下一次 load() 的
-// 全量重新計算(見 hooks/useGameState.ts 的 checkAndGrantAchievements)會立刻幫舊存檔
-// 追溯性授予所有已經達標的成就(例如已經 Lv400 的老存檔會馬上補到 level_30~level_200)。
+// 全量重新計算(見 hooks/useGameState.ts 的 checkAndUnlockAchievements)會立刻幫舊存檔
+// 追溯性標記所有已經達標的成就為「可領取」(例如已經 Lv400 的老存檔會馬上補到
+// level_30~level_200 可領,實際入帳仍要玩家自己去成就分頁按領取)。
 // v19 沒有 killCount(累計擊殺數,先前只活在記憶體裡沒存檔,重整就歸零),補 0——
 // 舊玩家的歷史擊殺數已經無法追回,只能從這次更新後重新累加,不影響其他任何進度。
 // v20 沒有勇者血量/戰敗風險系統欄位(見 game/heroHealth.ts),補 heroHp = 50 + 目前等級*2
@@ -1438,9 +1523,22 @@ function isSaveDataV25(value: unknown): value is SaveData {
 // 空裝備狀態——舊玩家的寵物/坐騎加成不變,只是還沒點裝備格子而已。
 // v23 沒有 dungeon(見 game/dungeon.ts 的轉職試煉副本入場券),補滿張的初始入場券狀態——
 // 呼應「解鎖當下就能馬上用」的既有設計慣例,舊玩家一登入副本分頁就有 5 張票可以打。
+// v25→v26 沒有 claimedAchievementIds(見成就系統改成手動領取制):相容性關鍵是,v25 以前的
+// 成就是條件達成就自動發獎,所以任何已經在舊版 unlockedAchievementIds 裡的成就,獎勵早就已經
+// 發過了——claimedAchievementIds 必須直接設成跟舊的 unlockedAchievementIds 一樣的內容(不是
+// 空陣列!),不然老玩家一登入會看到一堆「未領取」但其實金幣早就已經拿過的成就,點領取就會
+// 重複發獎勵。v24 以前的版本本來就沒有成就系統(unlockedAchievementIds 補空陣列),
+// claimedAchievementIds 同步補空陣列即可。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV25(value)) return value;
+  if (isSaveDataV26(value)) return value;
+  if (isSaveDataV25(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      claimedAchievementIds: [...value.unlockedAchievementIds],
+    };
+  }
   if (isSaveDataV24(value)) {
     return {
       ...value,
@@ -1448,6 +1546,7 @@ function migrate(value: unknown): SaveData {
       skillTree: migrateSkillTreeLevels(value.skillTree),
       studentSkillTree: migrateStudentSkillTreeLevels(value.studentSkillTree),
       skillBooks: 0,
+      claimedAchievementIds: [...value.unlockedAchievementIds],
     };
   }
   if (isSaveDataV23(value)) {
@@ -1458,6 +1557,7 @@ function migrate(value: unknown): SaveData {
       skillTree: migrateSkillTreeLevels(value.skillTree),
       studentSkillTree: migrateStudentSkillTreeLevels(value.studentSkillTree),
       skillBooks: 0,
+      claimedAchievementIds: [...value.unlockedAchievementIds],
     };
   }
   if (isSaveDataV22(value)) {
@@ -1469,6 +1569,7 @@ function migrate(value: unknown): SaveData {
       skillTree: migrateSkillTreeLevels(value.skillTree),
       studentSkillTree: migrateStudentSkillTreeLevels(value.studentSkillTree),
       skillBooks: 0,
+      claimedAchievementIds: [...value.unlockedAchievementIds],
     };
   }
   if (isSaveDataV21(value)) {
@@ -1480,6 +1581,7 @@ function migrate(value: unknown): SaveData {
       dungeon: createInitialDungeonState(),
       skillTree: migrateSkillTreeLevels(value.skillTree),
       skillBooks: 0,
+      claimedAchievementIds: [...value.unlockedAchievementIds],
     };
   }
   if (isSaveDataV20(value)) {
@@ -1493,6 +1595,7 @@ function migrate(value: unknown): SaveData {
       dungeon: createInitialDungeonState(),
       skillTree: migrateSkillTreeLevels(value.skillTree),
       skillBooks: 0,
+      claimedAchievementIds: [...value.unlockedAchievementIds],
     };
   }
   if (isSaveDataV19(value)) {
@@ -1507,6 +1610,7 @@ function migrate(value: unknown): SaveData {
       dungeon: createInitialDungeonState(),
       skillTree: migrateSkillTreeLevels(value.skillTree),
       skillBooks: 0,
+      claimedAchievementIds: [...value.unlockedAchievementIds],
     };
   }
   if (isSaveDataV18(value)) {
@@ -1514,6 +1618,7 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1532,6 +1637,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1570,6 +1676,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1607,6 +1714,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1644,6 +1752,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1681,6 +1790,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1718,6 +1828,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1755,6 +1866,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1792,6 +1904,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1829,6 +1942,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1866,6 +1980,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1903,6 +2018,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1940,6 +2056,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -1977,6 +2094,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -2014,6 +2132,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -2051,6 +2170,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -2088,6 +2208,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,
@@ -2125,6 +2246,7 @@ function migrate(value: unknown): SaveData {
       transferProofs: {},
       hasChosenJob: true,
       unlockedAchievementIds: [],
+      claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
       hasEverSwitchedJob: false,
       killCount: 0,

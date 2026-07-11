@@ -25,6 +25,11 @@ export interface TabAttentionInput {
   skillBooks: number;
   companionGear: CompanionGearState;
   dungeon: DungeonState;
+  // 成就系統改成手動領取制(見 hooks/useGameState.ts 的 claimAchievement/claimAllAchievements)後,
+  // 「條件已達成但還沒領獎」才是真正的待處理狀態——unlockedAchievementIds 減去
+  // claimedAchievementIds 還有剩就該有提醒角標。
+  unlockedAchievementIds: string[];
+  claimedAchievementIds: string[];
 }
 
 export interface TabAttentionFlags {
@@ -74,9 +79,9 @@ export function computeTabAttentionFlags(input: TabAttentionInput): TabAttention
     equipment: input.enhanceStones > 0 || Object.values(input.gemCounts).some((count) => count > 0),
     inventory: hasAnyEmptySlot(input.equipment),
     skill: hasAnySkillUpgrade(input.hasChosenJob, input.jobTier, input.activeSkillLevels, input.skillBooks),
-    // 成就是擊殺後自動發放、不需要玩家手動領取(見 hooks/useGameState.ts checkAndGrantAchievements),
-    // 沒有「待處理」的狀態可以提醒,故意不給角標。
-    achievement: false,
+    // 成就改成手動領取制(見 hooks/useGameState.ts 的 claimAchievement/claimAllAchievements):
+    // 有任何「條件已達成但還沒領獎」的成就就該提醒。
+    achievement: input.unlockedAchievementIds.some((id) => !input.claimedAchievementIds.includes(id)),
     companion: hasAnyCompanionGearUpgrade(input.companionGear, input.level, input.coins),
     dungeon: applyDungeonTicketRegen(input.dungeon).tickets > 0,
   };

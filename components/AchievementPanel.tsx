@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   ACHIEVEMENTS,
@@ -46,6 +46,9 @@ export function AchievementPanel() {
   const hasEverAssembledTransferProof = useGameState((state) => state.hasEverAssembledTransferProof);
   const hasEverSwitchedJob = useGameState((state) => state.hasEverSwitchedJob);
   const unlockedAchievementIds = useGameState((state) => state.unlockedAchievementIds);
+  const claimedAchievementIds = useGameState((state) => state.claimedAchievementIds);
+  const claimAchievement = useGameState((state) => state.claimAchievement);
+  const claimAllAchievements = useGameState((state) => state.claimAllAchievements);
 
   const progress = computeAchievementProgress({
     killCount,
@@ -57,6 +60,7 @@ export function AchievementPanel() {
     hasEverSwitchedJob,
   });
 
+  const claimableIds = unlockedAchievementIds.filter((id) => !claimedAchievementIds.includes(id));
   const unlockedCount = unlockedAchievementIds.length;
   const totalCount = Object.keys(ACHIEVEMENTS).length;
 
@@ -66,26 +70,44 @@ export function AchievementPanel() {
         已解鎖 {unlockedCount}/{totalCount}
       </Text>
 
+      {claimableIds.length > 0 && (
+        <Pressable style={styles.claimAllButton} onPress={() => claimAllAchievements()}>
+          <Text style={styles.claimAllButtonText}>一鍵領取全部({claimableIds.length})</Text>
+        </Pressable>
+      )}
+
       {CATEGORY_ORDER.map((category) => {
         const defs = Object.values(ACHIEVEMENTS).filter((def) => def.category === category);
         return (
           <View key={category} style={styles.categorySection}>
             <Text style={styles.categoryTitle}>{CATEGORY_LABELS[category]}</Text>
             {defs.map((def) => {
+              // 三態:未達成(unlocked=false)/已達成未領取(unlocked但!claimed)/已領取(claimed)。
               const unlocked = unlockedAchievementIds.includes(def.id);
+              const claimed = claimedAchievementIds.includes(def.id);
               const display = getAchievementProgressDisplay(def.id, progress);
               return (
-                <View key={def.id} style={[styles.card, unlocked && styles.cardUnlocked]}>
+                <View
+                  key={def.id}
+                  style={[styles.card, claimed && styles.cardUnlocked, unlocked && !claimed && styles.cardClaimable]}
+                >
                   <View style={styles.cardHeader}>
-                    <Text style={[styles.title, unlocked && styles.titleUnlocked]}>
-                      {unlocked ? '✓ ' : ''}
+                    <Text style={[styles.title, claimed && styles.titleUnlocked]}>
+                      {claimed ? '✓ ' : ''}
                       {def.title}
                     </Text>
-                    {unlocked && <Text style={styles.unlockedBadge}>已解鎖</Text>}
+                    {claimed && <Text style={styles.unlockedBadge}>已解鎖</Text>}
                   </View>
                   <Text style={styles.description}>{def.description}</Text>
-                  {unlocked ? (
+                  {claimed ? (
                     <Text style={styles.rewardText}>獎勵:{formatReward(def)}</Text>
+                  ) : unlocked ? (
+                    <View style={styles.claimRow}>
+                      <Text style={styles.rewardText}>獎勵:{formatReward(def)}</Text>
+                      <Pressable style={styles.claimButton} onPress={() => claimAchievement(def.id)}>
+                        <Text style={styles.claimButtonText}>領取</Text>
+                      </Pressable>
+                    </View>
                   ) : display ? (
                     <Text style={styles.progressText}>
                       {display.current}/{display.target}
@@ -115,6 +137,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 4,
   },
+  claimAllButton: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#c9a94f',
+    marginBottom: 8,
+  },
+  claimAllButtonText: {
+    color: '#1c1c24',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   categorySection: {
     gap: 6,
     marginBottom: 10,
@@ -133,6 +167,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#3a3320',
     borderWidth: 1,
     borderColor: '#c9a94f',
+  },
+  cardClaimable: {
+    backgroundColor: '#2a2412',
+    borderWidth: 1,
+    borderColor: '#8a7020',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -158,6 +197,23 @@ const styles = StyleSheet.create({
   rewardText: {
     color: '#c9a94f',
     fontSize: 11,
+  },
+  claimRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 6,
+  },
+  claimButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#c9a94f',
+  },
+  claimButtonText: {
+    color: '#1c1c24',
+    fontSize: 11,
+    fontWeight: '700',
   },
   progressText: {
     color: '#6a7078',

@@ -242,10 +242,14 @@ interface GameState {
   // 學生身份(見 game/leveling.ts):false=Lv1-29學生期,尚未套用任何職業戰鬥加成、技能分頁
   // 鎖定;true=Lv30畢業已選定主職。
   hasChosenJob: boolean;
-  // 成就系統(見 game/achievements.ts):unlockedAchievementIds 是已解鎖成就 id 的持久化清單。
+  // 成就系統(見 game/achievements.ts):unlockedAchievementIds 是「條件已達成」成就 id 的持久化
+  // 清單。v26 起改成手動領取制,獎勵不再隨條件達成自動發放——claimedAchievementIds 是「已經按過
+  // 領取按鈕、拿到獎勵」的 id 清單,unlockedAchievementIds 減去 claimedAchievementIds 就是玩家
+  // 在成就分頁看到的「待領取」清單。
   // hasEverAssembledTransferProof/hasEverSwitchedJob 是給轉職類成就用的一次性旗標,設為 true
   // 後永不重置(轉職證明會被 setJob 消耗,單看當下數值看不出「有沒有發生過」)。
   unlockedAchievementIds: string[];
+  claimedAchievementIds: string[];
   hasEverAssembledTransferProof: boolean;
   hasEverSwitchedJob: boolean;
   lastDailyLoginBonus: { coins: number; exp: number } | null;
@@ -299,6 +303,8 @@ interface GameState {
   socketGem: (itemId: string, socketIndex: number, gemType: GemType) => void;
   unsocketGem: (itemId: string, socketIndex: number) => void;
   claimDailyQuest: () => void;
+  claimAchievement: (id: string) => void;
+  claimAllAchievements: () => void;
 }
 
 type PersistableState = Pick<
@@ -329,6 +335,7 @@ type PersistableState = Pick<
   | 'transferProofs'
   | 'hasChosenJob'
   | 'unlockedAchievementIds'
+  | 'claimedAchievementIds'
   | 'hasEverAssembledTransferProof'
   | 'hasEverSwitchedJob'
   | 'killCount'
@@ -365,6 +372,7 @@ function persist(state: PersistableState): void {
     transferProofs: state.transferProofs,
     hasChosenJob: state.hasChosenJob,
     unlockedAchievementIds: state.unlockedAchievementIds,
+    claimedAchievementIds: state.claimedAchievementIds,
     hasEverAssembledTransferProof: state.hasEverAssembledTransferProof,
     hasEverSwitchedJob: state.hasEverSwitchedJob,
     killCount: state.killCount,
@@ -375,7 +383,7 @@ function persist(state: PersistableState): void {
 }
 
 // 從即時遊戲狀態算出成就系統要的那份扁平快照(見 game/achievements.ts 的 AchievementProgress),
-// 純粹讀取不修改,方便 checkAndGrantAchievements 每次呼叫都重新算一份最新的;
+// 純粹讀取不修改,方便 checkAndUnlockAchievements 每次呼叫都重新算一份最新的;
 // 額外 export 出去給 components/AchievementPanel.tsx 算「locked 項目的進度條」用,同一套邏輯不重複。
 export function computeAchievementProgress(state: {
   killCount: number;
@@ -407,44 +415,29 @@ export function computeAchievementProgress(state: {
   };
 }
 
-// 成就評估+發獎的共用入口:每次呼叫都是全量重新計算(見 evaluateUnlockedAchievementIds 的
-// 註解),跟已持久化的 unlockedAchievementIds 做 diff 找出「這次新解鎖」的項目,逐一發獎並
-// 一次性 set()。刻意不在這裡呼叫 persist(get())——呼叫端每個 mutation 本來就會在自己的
-// set() 後面接一次 persist(get()),這裡的 set() 只要發生在那之前,獎勵就會被一起存進去。
-function checkAndGrantAchievements(get: () => GameState, set: (partial: Partial<GameState>) => void): void {
+// 成就偵測的共用入口:每次呼叫都是全量重新計算(見 evaluateUnlockedAchievementIds 的註解),
+// 跟已持久化的 unlockedAchievementIds 做 diff 找出「這次新達成」的項目,更新 unlockedAchievementIds
+// 並跳 toast 提示。v26 起改成手動領取制,這裡只負責「偵測條件達成」,不再自動發獎勵——
+// 獎勵改由玩家在成就分頁按「領取」觸發(見 claimAchievement/claimAllAchievements),避免玩家
+// 沒注意到就被動拿走獎勵。刻意不在這裡呼叫 persist(get())——呼叫端每個 mutation 本來就會在
+// 自己的 set() 後面接一次 persist(get()),這裡的 set() 只要發生在那之前,新達成清單就會被
+// 一起存進去。
+function checkAndUnlockAchievements(get: () => GameState, set: (partial: Partial<GameState>) => void): void {
   const state = get();
   const progress = computeAchievementProgress(state);
   const unlockedNow = evaluateUnlockedAchievementIds(progress);
   const newlyUnlocked = unlockedNow.filter((id) => !state.unlockedAchievementIds.includes(id));
   if (newlyUnlocked.length === 0) return;
 
-  let coins = state.coins;
-  let enhanceStones = state.enhanceStones;
-  const gemCounts: GemCounts = { ...state.gemCounts };
-  for (const id of newlyUnlocked) {
-    const reward = ACHIEVEMENTS[id].reward;
-    coins += reward.coins;
-    enhanceStones += reward.enhanceStones ?? 0;
-    if (reward.gems) {
-      for (const gemType of GEM_TYPES) {
-        const amount = reward.gems[gemType];
-        if (amount) gemCounts[gemType] += amount;
-      }
-    }
-  }
-
   set({
-    coins,
-    enhanceStones,
-    gemCounts,
     unlockedAchievementIds: [...state.unlockedAchievementIds, ...newlyUnlocked],
   });
 
   if (newlyUnlocked.length > 1) {
-    useToast.getState().show(`解鎖了 ${newlyUnlocked.length} 個成就!`);
+    useToast.getState().show(`達成了 ${newlyUnlocked.length} 個成就(可到成就分頁領取獎勵)`);
   } else {
     const def = ACHIEVEMENTS[newlyUnlocked[0]];
-    useToast.getState().show(`解鎖成就:${def.title}(+${def.reward.coins}金幣)`);
+    useToast.getState().show(`達成成就:${def.title}(可到成就分頁領取獎勵)`);
   }
 }
 
@@ -476,6 +469,7 @@ export const useGameState = create<GameState>((set, get) => ({
   transferProofs: {},
   hasChosenJob: false,
   unlockedAchievementIds: [],
+  claimedAchievementIds: [],
   hasEverAssembledTransferProof: false,
   hasEverSwitchedJob: false,
   lastDailyLoginBonus: null,
@@ -565,6 +559,7 @@ export const useGameState = create<GameState>((set, get) => ({
       transferProofs: save.transferProofs,
       hasChosenJob: save.hasChosenJob,
       unlockedAchievementIds: save.unlockedAchievementIds,
+      claimedAchievementIds: save.claimedAchievementIds,
       hasEverAssembledTransferProof: save.hasEverAssembledTransferProof,
       hasEverSwitchedJob: save.hasEverSwitchedJob,
       killCount: save.killCount,
@@ -583,7 +578,7 @@ export const useGameState = create<GameState>((set, get) => ({
     });
     // 全量重新計算:讓存檔本身已經達標的成就(不論是老存檔在這個功能上線前就已經達成,
     // 還是離線期間的升級/掉落剛好跨過門檻)在載入當下立刻被追溯性授予。
-    checkAndGrantAchievements(get, set);
+    checkAndUnlockAchievements(get, set);
     persist(get());
   },
 
@@ -592,7 +587,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const result = applyLevelUp(level, times);
 
     set({ level: result.state });
-    checkAndGrantAchievements(get, set);
+    checkAndUnlockAchievements(get, set);
     persist(get());
     if (result.state.level > level.level) playLevelUp();
   },
@@ -860,7 +855,7 @@ export const useGameState = create<GameState>((set, get) => ({
     });
     // 這一擊可能同時動到擊殺數/等級/裝備解鎖(掉落)/寵物坐騎解鎖(掉落)/轉職證明,
     // 全部收斂到這一個共用檢查點,不用在上面每個掉落判定各自插一次。
-    checkAndGrantAchievements(get, set);
+    checkAndUnlockAchievements(get, set);
     persist(get());
     playEvent(state.currentEncounter.rarity);
   },
@@ -907,7 +902,7 @@ export const useGameState = create<GameState>((set, get) => ({
       hasEverAssembledTransferProof: nextHasEverAssembledTransferProof,
       lastTransferFragmentArchetype: archetype,
     });
-    checkAndGrantAchievements(get, set);
+    checkAndUnlockAchievements(get, set);
     persist(get());
   },
 
@@ -949,7 +944,7 @@ export const useGameState = create<GameState>((set, get) => ({
         hasChosenJob: true,
         equipment: filterLoadoutForArchetype(equipment, archetype),
       });
-      checkAndGrantAchievements(get, set);
+      checkAndUnlockAchievements(get, set);
       persist(get());
       return;
     }
@@ -981,7 +976,7 @@ export const useGameState = create<GameState>((set, get) => ({
           }
         : {}),
     });
-    checkAndGrantAchievements(get, set);
+    checkAndUnlockAchievements(get, set);
     persist(get());
   },
 
@@ -1099,7 +1094,7 @@ export const useGameState = create<GameState>((set, get) => ({
       unlockedItemIds: nextUnlockedItemIds,
       lastEnhanceOutcome: message,
     });
-    checkAndGrantAchievements(get, set);
+    checkAndUnlockAchievements(get, set);
     persist(get());
   },
 
@@ -1134,7 +1129,7 @@ export const useGameState = create<GameState>((set, get) => ({
       gemCounts: { ...gemCounts, [gemType]: gemCounts[gemType] - 1 },
       itemInstances: { ...itemInstances, [itemId]: { ...instance, socketedGems: nextSockets } },
     });
-    checkAndGrantAchievements(get, set);
+    checkAndUnlockAchievements(get, set);
     persist(get());
   },
 
@@ -1223,7 +1218,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     const unlocked = unlockCompanion(companions, id);
     set({ coins: coins - companion.price, companions: equipCompanion(unlocked, id) });
-    checkAndGrantAchievements(get, set);
+    checkAndUnlockAchievements(get, set);
     persist(get());
   },
 
@@ -1263,5 +1258,65 @@ export const useGameState = create<GameState>((set, get) => ({
       dailyQuestClaimed: true,
     });
     persist(get());
+  },
+
+  // 成就手動領取(見成就系統改成手動領取制):條件達成(unlockedAchievementIds)只是「可以領」,
+  // 要玩家在成就分頁按這個才真的發獎勵並記進 claimedAchievementIds。發獎邏輯照抄舊版
+  // checkAndUnlockAchievements 自動發獎年代的那段計算。
+  claimAchievement: (id) => {
+    const { unlockedAchievementIds, claimedAchievementIds, coins, enhanceStones, gemCounts } = get();
+    if (!unlockedAchievementIds.includes(id) || claimedAchievementIds.includes(id)) return;
+    const def = ACHIEVEMENTS[id];
+    if (!def) return;
+
+    const reward = def.reward;
+    const nextGemCounts: GemCounts = { ...gemCounts };
+    if (reward.gems) {
+      for (const gemType of GEM_TYPES) {
+        const amount = reward.gems[gemType];
+        if (amount) nextGemCounts[gemType] += amount;
+      }
+    }
+
+    set({
+      coins: coins + reward.coins,
+      enhanceStones: enhanceStones + (reward.enhanceStones ?? 0),
+      gemCounts: nextGemCounts,
+      claimedAchievementIds: [...claimedAchievementIds, id],
+    });
+    persist(get());
+    useToast.getState().show(`領取成就獎勵:${def.title}(+${reward.coins}金幣)`);
+  },
+
+  // 一鍵領取全部:找出「條件達成但還沒領」的全部id,一次性 set()+persist(),不逐筆各自 set()
+  // (效能跟reduce邏輯都比較乾淨)。
+  claimAllAchievements: () => {
+    const { unlockedAchievementIds, claimedAchievementIds, coins, enhanceStones, gemCounts } = get();
+    const claimableIds = unlockedAchievementIds.filter((id) => !claimedAchievementIds.includes(id));
+    if (claimableIds.length === 0) return;
+
+    let nextCoins = coins;
+    let nextEnhanceStones = enhanceStones;
+    const nextGemCounts: GemCounts = { ...gemCounts };
+    for (const id of claimableIds) {
+      const reward = ACHIEVEMENTS[id].reward;
+      nextCoins += reward.coins;
+      nextEnhanceStones += reward.enhanceStones ?? 0;
+      if (reward.gems) {
+        for (const gemType of GEM_TYPES) {
+          const amount = reward.gems[gemType];
+          if (amount) nextGemCounts[gemType] += amount;
+        }
+      }
+    }
+
+    set({
+      coins: nextCoins,
+      enhanceStones: nextEnhanceStones,
+      gemCounts: nextGemCounts,
+      claimedAchievementIds: [...claimedAchievementIds, ...claimableIds],
+    });
+    persist(get());
+    useToast.getState().show(`一次領取了 ${claimableIds.length} 個成就獎勵`);
   },
 }));
