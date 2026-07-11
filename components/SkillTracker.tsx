@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
-import { Archetype } from '../game/combat';
+import { Archetype, getCurrentTier, JobTier } from '../game/combat';
 import {
   ACTIVE_SLOT_IDS,
   ActiveSkillSlotId,
@@ -27,6 +27,7 @@ interface SkillTileProps {
   slot: SkillSlotId;
   label: string;
   level: number;
+  tier: JobTier;
   timerStartedAt: number;
   intervalSeconds: number;
   justTriggered: boolean;
@@ -73,9 +74,9 @@ function CircularCountdown({ progress }: { progress: number }) {
   );
 }
 
-function SkillTile({ tag, archetype, slot, label, level, timerStartedAt, intervalSeconds, justTriggered, now }: SkillTileProps) {
+function SkillTile({ tag, archetype, slot, label, level, tier, timerStartedAt, intervalSeconds, justTriggered, now }: SkillTileProps) {
   'use no memo';
-  const icon = getSkillIcon(archetype, slot, level);
+  const icon = getSkillIcon(archetype, slot, tier);
   const intervalMs = intervalSeconds * 1000;
   const elapsedMs = Math.max(0, Math.min(intervalMs, now - timerStartedAt));
   const progress = intervalMs > 0 ? elapsedMs / intervalMs : 1;
@@ -131,6 +132,9 @@ export function SkillTracker() {
   const now = Date.now();
   const primaryJustTriggered = lastSkillTriggerAt !== null && now - lastSkillTriggerAt < FLASH_WINDOW_MS;
   const secondaryJustTriggered = lastSecondarySkillTriggerAt !== null && now - lastSecondarySkillTriggerAt < FLASH_WINDOW_MS;
+  // 圖示現在直接吃真正的職業階級(JobTier),不是技能等級——跟下面 SkillTile 顯示的
+  // 「Lv.X」技能等級數字是兩件事,那個數字繼續吃 slotLevel,不受這裡影響。
+  const tier = getCurrentTier(level.level);
 
   return (
     <View style={styles.wrapper}>
@@ -147,6 +151,7 @@ export function SkillTracker() {
               slot={slot}
               label={label}
               level={slotLevel}
+              tier={tier}
               timerStartedAt={activeSkillTimers[slot]}
               intervalSeconds={activeSkillTriggerIntervalSeconds(slot, slotLevel)}
               justTriggered={primaryJustTriggered}
@@ -166,6 +171,7 @@ export function SkillTracker() {
             slot="active1"
             label={SKILL_SLOT_NAMES[secondaryJob].active1}
             level={skillTree[secondaryJob].active1}
+            tier={tier}
             timerStartedAt={secondarySkillTimerStartedAt}
             intervalSeconds={secondaryActiveSkillTriggerIntervalSeconds(skillTree[secondaryJob].active1)}
             justTriggered={secondaryJustTriggered}

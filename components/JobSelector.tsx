@@ -78,7 +78,7 @@ function ArchetypeGrid({
   return (
     <View style={styles.archetypeGrid}>
       {ARCHETYPES.map((archetype) => {
-        const icon = getSkillIcon(archetype, 'active1', 0);
+        const icon = getSkillIcon(archetype, 'active1', 1);
         const isPrimary = hasChosenJob && job === archetype;
         const isSecondary = hasChosenJob && secondaryJob === archetype;
         return (
@@ -145,7 +145,7 @@ function TierList({
   onToggleSecondary,
   onSelectTier,
 }: TierListProps) {
-  const icon = getSkillIcon(archetype, 'active1', 0);
+  const icon = getSkillIcon(archetype, 'active1', 1);
   const combatBonusPct = Math.round((calcCombatMultiplier(archetype, currentTier) - 1) * 100);
   const canGraduate = currentLevel >= graduateLevel;
 
@@ -279,7 +279,7 @@ function SkillDetailPanel({
       <View style={styles.previewGrid}>
         {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
           const slotLevel = skillLevels[slot];
-          const icon = getSkillIcon(archetype, slot, slotLevel);
+          const icon = getSkillIcon(archetype, slot, tier);
           const isSelected = slot === previewSlot;
           return (
             <Pressable
