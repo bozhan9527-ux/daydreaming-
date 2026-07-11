@@ -88,9 +88,11 @@ export default function HomeScreen() {
     previousLevelRef.current = level.level;
   }, [isLoaded, level.level, showToast]);
 
-  // 掉落通知原本是常駐主畫面的固定高度區塊,現在改成 toast 跳出後自動消失——killCount 每次
-  // 擊殺成功才會變(戰敗不算,見 game/heroHealth.ts),用它當「這次擊殺剛結算」的觸發點,
-  // 避免同一個 dropBannerText 值在無關的重渲染時重複跳 toast。
+  // 掉落通知直接疊在關卡卡片(MainVisual/戰鬥場景)上面,顯示一陣子後自動消失,不佔用
+  // 主畫面固定高度、也不跟畫面最下面的全域 toast(分頁鎖定提示等)搶同一個位置。
+  // killCount 每次擊殺成功才會變(戰敗不算,見 game/heroHealth.ts),用它當「這次擊殺剛
+  // 結算」的觸發點,避免同一個 dropBannerText 值在無關的重渲染時重複跳出來。
+  const [stageDropBanner, setStageDropBanner] = useState<string | null>(null);
   const previousKillCountRef = useRef<number | null>(null);
   useEffect(() => {
     if (!isLoaded) return;
@@ -99,10 +101,13 @@ export default function HomeScreen() {
       return;
     }
     if (killCount !== previousKillCountRef.current && dropBannerText) {
-      showToast(dropBannerText);
+      setStageDropBanner(dropBannerText);
+      const timer = setTimeout(() => setStageDropBanner(null), 2800);
+      previousKillCountRef.current = killCount;
+      return () => clearTimeout(timer);
     }
     previousKillCountRef.current = killCount;
-  }, [isLoaded, killCount, dropBannerText, showToast]);
+  }, [isLoaded, killCount, dropBannerText]);
 
   if (!isLoaded) {
     return (
@@ -122,7 +127,12 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-    <View style={styles.container}>
+    {/* 整頁內容量已經壓到單一手機螢幕塞得下、正常情況不需要滑動,但外層還是要用 ScrollView
+        (不能改回純 View)——Expo Web 預設把 body 設成 overflow:hidden,所有捲動都要靠 App
+        內部某個 ScrollView 承接,拿掉它會連瀏覽器原生的「下拉刷新」手勢都一起失效
+        (瀏覽器判斷能不能下拉刷新是看「手指底下那個可捲動元素」的捲動狀態,body 不能捲、
+        又沒有 ScrollView 可以承接時,等於整頁沒有任何東西吃得到那個手勢)。 */}
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* 頂部資源列放最上面,一眼就看得到等級/金幣,不用往下找。 */}
       <TopResourceBar level={level.level} coins={coins} />
 
@@ -138,7 +148,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.resultTextCol}>
               <Text style={styles.resultRarity}>{RARITY_LABEL[lastEvent.rarity]}</Text>
-              <Text style={styles.resultText} numberOfLines={1} ellipsizeMode="tail">
+              <Text style={styles.resultText} numberOfLines={2} ellipsizeMode="tail">
                 {lastEvent.payload}
               </Text>
             </View>
@@ -148,14 +158,12 @@ export default function HomeScreen() {
         )}
       </View>
 
-      <MainVisual>
+      <MainVisual dropBannerText={stageDropBanner}>
         <BattleScene />
 
         <HeroHealthBar />
 
         <SkillTracker />
-
-        {/* 掉落通知改用 toast 跳出後自動消失(見上面的 useEffect),不再常駐佔用一個固定高度區塊。 */}
 
         <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} levelsAvailable={availableLevels} />
 
@@ -238,7 +246,7 @@ export default function HomeScreen() {
           <ToastHost />
         </View>
       </Modal>
-    </View>
+    </ScrollView>
 
     {/* Toast 提示(分頁鎖定提示/新分頁解鎖公告)要在主畫面就能跳出來,不能只綁在分頁 Modal 底下——
         跟主畫面內容同層放在共用的 flex:1 root 裡,不會像 Modal 那樣疊出一層擋住底下按鈕點擊的
@@ -258,11 +266,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#0f0f14',
   },
-  // 整頁不能滾動(手機螢幕多高,畫面就是多高),container 用 flex:1 撐滿 root、不能再用
-  // ScrollView 那種「內容多高就多高」的邏輯——上面每個區塊都要精算過高度預算,加新東西
-  // 之前務必先確認總高度沒有超過手機螢幕。
-  container: {
+  scroll: {
     flex: 1,
+    backgroundColor: '#0f0f14',
+  },
+  // 內容量壓在單一手機螢幕塞得下,正常情況不需要滑動,但外層容器維持 ScrollView
+  // (見上面 JSX 的註解)——這裡不能加 flex:1,contentContainerStyle 要讓內容照自然高度排列。
+  container: {
     alignItems: 'center',
     backgroundColor: '#0f0f14',
     gap: 6,
@@ -279,17 +289,17 @@ const styles = StyleSheet.create({
   resultBox: {
     width: '100%',
     maxWidth: 280,
-    height: 46,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    overflow: 'hidden',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#3a3a45',
     backgroundColor: 'rgba(28, 28, 36, 0.6)',
     paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   resultIconWrap: {
     width: 36,
