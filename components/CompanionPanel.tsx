@@ -18,6 +18,7 @@ import {
   getCompanionsByKind,
   isCompanionUnlocked,
 } from '../game/companions';
+import { getCompanionGearIcon } from '../game/sprites/companionGear';
 import { getCompanionFrame, RARITY_BORDER_COLOR } from '../game/sprites/companions';
 import { Rarity } from '../game/trigger';
 import { useToast } from '../hooks/useToast';
@@ -73,6 +74,11 @@ const CODEX_ICON_PIXEL_SIZE = 1.3;
 const CODEX_CELL_ICON_WIDTH = 56;
 const CODEX_CELL_ICON_HEIGHT = 34;
 const CODEX_LOCKED_BORDER = '#3a3a45';
+
+// 裝備列圖示:跟 EquipmentPanel/InventoryPanel 的 ICON_PIXEL_SIZE(2/3)同一套比例,
+// 12x12 畫布 x 放大3倍(見 game/sprites/companionGear.ts)在這個縮放下顯示約 24x24,
+// 放在文字列最前面剛好一小塊,不會撐爆這個面板 maxWidth 280 的版面。
+const GEAR_ICON_PIXEL_SIZE = 2 / 3;
 
 function codexUnlockedCount(state: CompanionState, kind: CompanionKind): number {
   return getCompanionsByKind(kind).filter((c) => isCompanionUnlocked(state, c.id)).length;
@@ -208,10 +214,14 @@ export function CompanionPanel() {
               const requiredLevel = companionGearUpgradeRequiredLevel(slotLevel + 1);
               const coinCost = companionGearUpgradeCoinCost(slotLevel);
               const canUpgrade = canUpgradeCompanionGearSlot(slotLevel, level.level, coins);
+              const gearIcon = getCompanionGearIcon(kind, slot);
               return (
                 <View key={slot} style={styles.gearRow}>
                   <View style={styles.gearRowHeader}>
-                    <Text style={styles.label}>{GEAR_SLOT_LABELS[slot]}</Text>
+                    <View style={styles.gearRowLabelGroup}>
+                      <PixelSprite frame={gearIcon.frame} palette={gearIcon.palette} pixelSize={GEAR_ICON_PIXEL_SIZE} />
+                      <Text style={styles.label}>{GEAR_SLOT_LABELS[slot]}</Text>
+                    </View>
                     <Text style={styles.cost}>
                       {slotLevel}/{COMPANION_GEAR_MAX_LEVEL} 級 · {formatBonus(stat, bonusValue)}
                     </Text>
@@ -376,6 +386,12 @@ const styles = StyleSheet.create({
   gearRowHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gearRowLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   upgradeButton: {
     marginTop: 2,
