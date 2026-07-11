@@ -6,12 +6,15 @@ import {
   calcCombatMultiplier,
   canUnlockDualClass,
   DUAL_CLASS_UNLOCK_LEVEL,
+  getArchetypeComposition,
   getCurrentTier,
   getJobTitle,
   JobBranch,
   JobTier,
   TIER_UNLOCK_LEVELS,
 } from '../game/combat';
+import { getEquipmentBonusTotalsFull, getSubstatTotals } from '../game/equipment';
+import { heroDefensePower, heroMaxHp } from '../game/heroHealth';
 import {
   ACTIVE_SLOT_IDS,
   getSkillSlotBonusDescription,
@@ -60,6 +63,51 @@ function getSlotFlavor(archetype: Archetype, tier: JobTier, slot: SkillSlotId): 
     return { name: SKILL_SLOT_NAMES[archetype][slot], description: SKILL_SLOT_DESCRIPTIONS[archetype][slot] };
   }
   return getTierSkillFlavor(archetype, tier, slot);
+}
+
+// 角色狀態面板:只在第一層(archetypes)顯示,獨立呼叫 useGameState 抓自己需要的資料——
+// 這一層本來就沒有像 TierList/SkillDetailPanel 那樣被父層挑選/篩選過的資料要傳,
+// 直接在元件內部訂閱比多繞一層 props 更直接,跟 JobSelector() 本體的寫法一致。
+// 物理/魔法爆擊數字兩邊都顯示(不管玩家現在主職是哪邊),只有跟目前職業系別相符的
+// 那個區塊套金色高亮,呼應 archetypeIconWrapPrimary 既有的金框視覺語彙。
+function HeroStatusPanel() {
+  const heroHp = useGameState((state) => state.heroHp);
+  const equipment = useGameState((state) => state.equipment);
+  const itemInstances = useGameState((state) => state.itemInstances);
+  const level = useGameState((state) => state.level);
+  const job = useGameState((state) => state.job);
+
+  const currentTier = getCurrentTier(level.level);
+  const substatTotals = getSubstatTotals(equipment, itemInstances);
+  const bonusTotals = getEquipmentBonusTotalsFull(equipment, itemInstances);
+  const heroSchool = getArchetypeComposition(job.archetype).damageType;
+  const isPhysical = heroSchool === 'physical';
+
+  return (
+    <View style={styles.statusCard}>
+      <Text style={styles.statusTitle}>角色狀態</Text>
+      <Text style={styles.statusLine}>
+        Lv{level.level} · HP {heroHp}/{heroMaxHp(level.level)}
+      </Text>
+      <Text style={styles.statusLine}>
+        物理防禦 {Math.round(heroDefensePower(level.level, currentTier, substatTotals.physicalResistance))}　魔法防禦{' '}
+        {Math.round(heroDefensePower(level.level, currentTier, substatTotals.magicResistance))}
+      </Text>
+      <Text style={[styles.statusLine, isPhysical && styles.statusLineHighlight]}>
+        物理:爆擊率 {Math.round(substatTotals.physicalCritRate * 100)}% / 爆擊傷害 +
+        {Math.round(substatTotals.physicalCritDamage * 100)}%
+      </Text>
+      <Text style={[styles.statusLine, !isPhysical && styles.statusLineHighlight]}>
+        魔法:爆擊率 {Math.round(substatTotals.magicCritRate * 100)}% / 爆擊傷害 +
+        {Math.round(substatTotals.magicCritDamage * 100)}%
+      </Text>
+      <Text style={styles.statusLine}>
+        總加成:經驗+{Math.round(bonusTotals.exp * 100)}% / 金幣+{Math.round(bonusTotals.coins * 100)}% / 速度+
+        {Math.round(bonusTotals.speed * 100)}%
+      </Text>
+      <Text style={styles.statusLine}>職業階級倍率 x{calcCombatMultiplier(job.archetype, currentTier).toFixed(2)}</Text>
+    </View>
+  );
 }
 
 // 第一層:6個職業各自一個icon,不再用「物理/魔法 x 近戰/遠程/輔助」的文字分組樹狀圖——
@@ -359,15 +407,18 @@ export function JobSelector() {
       <Text style={styles.currentTitle}>{title}</Text>
 
       {view === 'archetypes' && (
-        <ArchetypeGrid
-          job={job.archetype}
-          secondaryJob={secondaryJob}
-          hasChosenJob={hasChosenJob}
-          onSelect={(archetype) => {
-            setViewingArchetype(archetype);
-            setView('tiers');
-          }}
-        />
+        <>
+          <HeroStatusPanel />
+          <ArchetypeGrid
+            job={job.archetype}
+            secondaryJob={secondaryJob}
+            hasChosenJob={hasChosenJob}
+            onSelect={(archetype) => {
+              setViewingArchetype(archetype);
+              setView('tiers');
+            }}
+          />
+        </>
       )}
 
       {view === 'tiers' && (
@@ -421,6 +472,29 @@ const styles = StyleSheet.create({
   currentTitle: {
     color: '#c9a94f',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  statusCard: {
+    width: '100%',
+    gap: 3,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#1c1c24',
+    borderWidth: 1,
+    borderColor: '#2a2a35',
+  },
+  statusTitle: {
+    color: '#f2f2f2',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  statusLine: {
+    color: '#c8c8d0',
+    fontSize: 11,
+  },
+  statusLineHighlight: {
+    color: '#c9a94f',
     fontWeight: '600',
   },
   archetypeGrid: {

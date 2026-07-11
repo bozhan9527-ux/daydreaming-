@@ -21,7 +21,7 @@ import {
   unequipCompanion,
   unlockCompanion,
 } from '../game/companions';
-import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDualClass, getCurrentTier, JobBranch, TIER_UNLOCK_LEVELS } from '../game/combat';
+import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDualClass, getArchetypeComposition, getCurrentTier, JobBranch, oppositeDamageType, TIER_UNLOCK_LEVELS } from '../game/combat';
 import {
   applyGenderDefault,
   canEquipItem,
@@ -671,12 +671,15 @@ export const useGameState = create<GameState>((set, get) => ({
     // 跟結算擊殺獎勵同一個時間點一次做完,不拆到下一個 tick。substatTotals 在這裡算一次,
     // 下面爆擊率判定共用同一份,不重複呼叫。
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    const monsterSchool = state.currentEncounter.monster.damageType;
+    const matchingResistance =
+      monsterSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
     const healthResult = resolveFightHealth(
       state.heroHp,
       heroMaxHp(state.level.level),
       state.level.level,
       getCurrentTier(state.level.level),
-      substatTotals.resistance,
+      matchingResistance,
       state.currentEncounter.rarity,
       difficultyMultiplier
     );
@@ -765,10 +768,16 @@ export const useGameState = create<GameState>((set, get) => ({
     }
 
     // 裝備隨機/隱藏素質的爆擊率:獨立於技能觸發之外的機率,額外翻倍這次擊殺獎勵。
-    // substatTotals 已經在上面血量判定時算過一份,這裡共用不重算。
-    if (Math.random() < substatTotals.critRate) {
-      exp *= 2;
-      coins *= 2;
+    // substatTotals 已經在上面血量判定時算過一份,這裡共用不重算。爆擊率/爆擊傷害吃
+    // 勇者本職的物理/魔法系,不是怪物那邊——所以是另一條軸線,跟上面防禦側判定的
+    // matchingResistance(吃怪物的系別)刻意不同。
+    const heroSchool = getArchetypeComposition(state.job.archetype).damageType;
+    const critChance = heroSchool === 'physical' ? substatTotals.physicalCritRate : substatTotals.magicCritRate;
+    const critDamageBonus = heroSchool === 'physical' ? substatTotals.physicalCritDamage : substatTotals.magicCritDamage;
+    if (Math.random() < critChance) {
+      const critMultiplier = 2 + critDamageBonus;
+      exp = Math.round(exp * critMultiplier);
+      coins = Math.round(coins * critMultiplier);
     }
 
     // 寵物/坐騎額外掉落:跟主要稀有度事件的保底機制完全獨立判定,多數時候不會掉落。
@@ -869,12 +878,18 @@ export const useGameState = create<GameState>((set, get) => ({
     if (spent === null) return; // 沒票,UI 按鈕本來就該 disabled,這裡是防呆。
 
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    // 副本沒有真的 MonsterSpec,設計上刻意用「被打的目標職業」的相反系別當這場試煉的怪物系別,
+    // 逼玩家不能只堆單一系抗性就通吃所有副本(見 CLAUDE.md 派工單的取捨說明)。
+    const targetSchool = getArchetypeComposition(archetype).damageType;
+    const dungeonMonsterSchool = oppositeDamageType(targetSchool);
+    const matchingResistance =
+      dungeonMonsterSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
     const healthResult = resolveFightHealth(
       state.heroHp,
       heroMaxHp(state.level.level),
       state.level.level,
       getCurrentTier(state.level.level),
-      substatTotals.resistance,
+      matchingResistance,
       'legendary',
       dungeonDifficultyMultiplier(state.level.level)
     );
