@@ -1,4 +1,5 @@
 import { Archetype, getCurrentTier, getJobTitle, JobTier } from './combat';
+import { MAX_LEVEL } from './leveling';
 
 export type EquipmentSlot =
   | 'back'
@@ -73,6 +74,108 @@ const LEGACY_EQUIPMENT_ITEMS: EquipmentItem[] = [
   },
 ];
 
+// 「學生」期(Lv1-29,見 hasChosenJob)第二組專屬裝備,呼應「10級做一組,共兩組」的需求——
+// 填補 Lv10~29 的空窗,不限職業(學生還沒選職業,故意不設 archetype)、不設 bracket(不是生成式
+// 目錄的一員)。加成比 LEGACY_EQUIPMENT_ITEMS 的 -02 付費款(0.05)高一點,體現「升級了」的
+// 成長感,但明顯低於職業鎖裝 bracket1(Lv30)的成長曲線起點(見 bracketBonusValue),
+// 避免學生期裝備蓋過畢業後職業裝的定位。命名走「國高中生」口吻,不是 -02 那套上班族語彙。
+const STUDENT_TIER2_LEVEL = 10;
+const STUDENT_TIER2_BONUS_VALUE = 0.06;
+
+const STUDENT_TIER2_EQUIPMENT_ITEMS: EquipmentItem[] = [
+  {
+    id: 'back-student2',
+    slot: 'back',
+    name: '帆布後背包',
+    color: '#4a7a6a',
+    price: 45,
+    bonus: { stat: 'speed', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+  },
+  {
+    id: 'bottom-student2',
+    slot: 'bottom',
+    name: '運動長褲',
+    color: '#2a4a6a',
+    price: 42,
+    bonus: { stat: 'speed', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+  },
+  {
+    id: 'top-student2',
+    slot: 'top',
+    name: '班服外套',
+    color: '#c94a3a',
+    price: 48,
+    bonus: { stat: 'exp', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+  },
+  {
+    id: 'belt-student2',
+    slot: 'belt',
+    name: '悠遊卡腰包',
+    color: '#3aa070',
+    price: 44,
+    bonus: { stat: 'coins', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+  },
+  {
+    id: 'headwear-student2',
+    slot: 'headwear',
+    name: '鴨舌帽',
+    color: '#e0a030',
+    price: 40,
+    bonus: { stat: 'exp', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+  },
+  {
+    id: 'face-student2',
+    slot: 'face',
+    name: '粗框眼鏡',
+    color: '#2a2520',
+    price: 46,
+    bonus: { stat: 'speed', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+  },
+  {
+    id: 'gloves-student2',
+    slot: 'gloves',
+    name: '半指手套',
+    color: '#8a6a4a',
+    price: 43,
+    bonus: { stat: 'exp', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+  },
+  {
+    id: 'offhand-student2',
+    slot: 'offhand',
+    name: '精裝課本',
+    color: '#d4622a',
+    price: 47,
+    bonus: { stat: 'coins', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+  },
+  {
+    id: 'mainhand-student2-1h',
+    slot: 'mainhand',
+    name: '木劍(升級版)',
+    color: '#a87840',
+    price: 45,
+    bonus: { stat: 'speed', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+  },
+  {
+    id: 'mainhand-student2-2h',
+    slot: 'mainhand',
+    name: '竹槍',
+    color: '#8fae4a',
+    price: 50,
+    bonus: { stat: 'speed', value: STUDENT_TIER2_BONUS_VALUE },
+    requiredLevel: STUDENT_TIER2_LEVEL,
+    twoHanded: true,
+  },
+];
+
 // ---- 職業鎖裝生成式目錄 ----
 // 9 個槽位(主手拆成單手/雙手兩條線)各自 50 個等級檔(Lv10~500,每 10 等一檔) × 6 職業,
 // 單一槽位剛好 300 款,主手單手 300 款 + 雙手 300 款。用生成而非手打,避免 3000 筆物件字面量。
@@ -95,10 +198,13 @@ const QUALITY_WORDS = ['簡易', '耐用', '精良', '強化', '特製', '稀有
 function qualityWordForBracket(bracket: number): string {
   return QUALITY_WORDS[(bracket - 1) % QUALITY_WORDS.length];
 }
-const LEVELS_PER_BRACKET = 10;
+// 職業鎖裝呼應「畢業才穿職業裝」的身分設定,從 Lv30(畢業,見 TIER_UNLOCK_LEVELS[2])才開始解鎖,
+// 50 個等級檔(bracket 1~50)平均分佈在 Lv30~MAX_LEVEL 之間,bracket1=Lv30、bracket50=MAX_LEVEL。
+const MIN_BRACKET_LEVEL = 30;
+const MAX_BRACKET_LEVEL = MAX_LEVEL;
 
 function bracketRequiredLevel(bracket: number): number {
-  return bracket * LEVELS_PER_BRACKET;
+  return Math.round(MIN_BRACKET_LEVEL + ((bracket - 1) * (MAX_BRACKET_LEVEL - MIN_BRACKET_LEVEL)) / (BRACKET_COUNT - 1));
 }
 
 // 前快後慢(對數收斂):bracket=1(Lv10)貼近舊制免費款的 2%,bracket=50(Lv500)收斂到上限 30%。
@@ -955,7 +1061,11 @@ const GENERATED_EQUIPMENT_ITEMS: EquipmentItem[] = [
   ...generateMainhandItems(),
 ];
 
-export const EQUIPMENT_ITEMS: EquipmentItem[] = [...LEGACY_EQUIPMENT_ITEMS, ...GENERATED_EQUIPMENT_ITEMS];
+export const EQUIPMENT_ITEMS: EquipmentItem[] = [
+  ...LEGACY_EQUIPMENT_ITEMS,
+  ...STUDENT_TIER2_EQUIPMENT_ITEMS,
+  ...GENERATED_EQUIPMENT_ITEMS,
+];
 
 export type EquipmentLoadout = Partial<Record<EquipmentSlot, string>>;
 
@@ -1193,7 +1303,10 @@ function rollSubstat(bracket: number, rng: () => number): Substat {
 
 // 第一次裝備某款裝備時呼叫一次,擲出這件的隨機/隱藏素質並固定下來,之後不會再重擲。
 export function rollItemInstance(item: EquipmentItem, rng: () => number = Math.random): ItemInstanceData {
-  const bracket = item.requiredLevel !== undefined ? Math.max(1, Math.round(item.requiredLevel / LEVELS_PER_BRACKET)) : 1;
+  // 生成式目錄的裝備一律已經帶著自己的 bracket 序數(1-50),直接用它算副素質強度;
+  // 不限等級檔的起始款/學生款(bracket undefined)一律當 bracket=1 處理。
+  // (bracketRequiredLevel 調整成 Lv30起跳的非等距公式後,不能再用 requiredLevel 反推 bracket。)
+  const bracket = item.bracket ?? 1;
   return {
     randomSubstat: rollSubstat(bracket, rng),
     hiddenSubstat: rollSubstat(bracket, rng),

@@ -89,6 +89,12 @@ import {
 } from '../game/skillTree';
 import { BodyType } from '../game/sprites/heroSilhouette';
 import {
+  canUpgradeStudentSkillSlot,
+  createInitialStudentSkillTreeLevels,
+  getStudentActiveEffectKind,
+  upgradeStudentSkillSlot as nextStudentSkillSlotLevel,
+} from '../game/studentSkillTree';
+import {
   advanceStageProgress,
   createInitialStageProgress,
   getStageDifficultyMultiplier,
@@ -131,8 +137,14 @@ interface RewardMultipliers {
 
 // 職業倍率只影響經驗;裝備(含強化+鑲嵌寶石)、寵物/坐騎、被動技能的 exp/coins/speed 加成
 // 疊加在職業倍率之上。被動技能只吃主職那份(呼應「技能書頁內只顯示本身職業的技能」的定位)。
-function computePassiveSkillBonus(job: JobSelection, skillTree: SkillTreeLevels): { exp: number; coins: number } {
-  const slots = skillTree[job.archetype];
+// 學生期(!hasChosenJob)還沒有主職可吃,改讀學生技能樹自己的 passive1/passive2。
+function computePassiveSkillBonus(
+  job: JobSelection,
+  skillTree: SkillTreeLevels,
+  studentSkillTree: Record<SkillSlotId, number>,
+  hasChosenJob: boolean
+): { exp: number; coins: number } {
+  const slots = hasChosenJob ? skillTree[job.archetype] : studentSkillTree;
   return {
     exp: getPassiveBonusValue(slots.passive1),
     coins: getPassiveBonusValue(slots.passive2),
@@ -147,12 +159,13 @@ function computeRewardMultipliers(
   secondaryJob: Archetype | null,
   itemInstances: ItemInstances,
   skillTree: SkillTreeLevels,
+  studentSkillTree: Record<SkillSlotId, number>,
   hasChosenJob: boolean
 ): RewardMultipliers {
   const jobMultiplier = currentJobMultiplier(job, level, secondaryJob, hasChosenJob);
   const equipmentBonus = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const companionBonus = getCompanionBonusTotals(companions);
-  const passiveBonus = computePassiveSkillBonus(job, skillTree);
+  const passiveBonus = computePassiveSkillBonus(job, skillTree, studentSkillTree, hasChosenJob);
   return {
     expMultiplier: jobMultiplier * (1 + equipmentBonus.exp + companionBonus.exp + passiveBonus.exp),
     coinMultiplier: 1 + equipmentBonus.coins + companionBonus.coins + passiveBonus.coins,
@@ -182,6 +195,9 @@ interface GameState {
   equipment: EquipmentLoadout;
   bodyType: BodyType;
   skillTree: SkillTreeLevels;
+  // 「學生」期(!hasChosenJob)專屬技能樹(見 game/studentSkillTree.ts):獨立於 skillTree
+  // 之外,只有一套 6 格,不分職業。
+  studentSkillTree: Record<SkillSlotId, number>;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -246,6 +262,7 @@ interface GameState {
   purchaseItem: (itemId: string) => void;
   setBodyType: (bodyType: BodyType) => void;
   upgradeSkillSlot: (archetype: Archetype, slot: SkillSlotId) => void;
+  upgradeStudentSkillSlot: (slot: SkillSlotId) => void;
   setGender: (gender: Gender) => void;
   purchaseCompanion: (id: string) => void;
   unequipCompanionSlot: (kind: CompanionKind) => void;
@@ -266,6 +283,7 @@ type PersistableState = Pick<
   | 'equipment'
   | 'bodyType'
   | 'skillTree'
+  | 'studentSkillTree'
   | 'gender'
   | 'coins'
   | 'unlockedItemIds'
@@ -298,6 +316,7 @@ function persist(state: PersistableState): void {
     equipment: state.equipment,
     bodyType: state.bodyType,
     skillTree: state.skillTree,
+    studentSkillTree: state.studentSkillTree,
     gender: state.gender,
     coins: state.coins,
     unlockedItemIds: state.unlockedItemIds,
@@ -405,6 +424,7 @@ export const useGameState = create<GameState>((set, get) => ({
   equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
   bodyType: DEFAULT_BODY_TYPE,
   skillTree: createInitialSkillTreeLevels(),
+  studentSkillTree: createInitialStudentSkillTreeLevels(),
   gender: DEFAULT_GENDER,
   coins: 0,
   unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -464,6 +484,7 @@ export const useGameState = create<GameState>((set, get) => ({
       save.secondaryJob,
       itemInstances,
       save.skillTree,
+      save.studentSkillTree,
       save.hasChosenJob
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
@@ -486,6 +507,7 @@ export const useGameState = create<GameState>((set, get) => ({
       equipment: save.equipment,
       bodyType: save.bodyType,
       skillTree: save.skillTree,
+      studentSkillTree: save.studentSkillTree,
       gender: save.gender,
       coins,
       unlockedItemIds: save.unlockedItemIds,
@@ -553,6 +575,7 @@ export const useGameState = create<GameState>((set, get) => ({
         state.secondaryJob,
         state.itemInstances,
         state.skillTree,
+        state.studentSkillTree,
         state.hasChosenJob
       );
       const isBoss = isBossSubStage(state.stageProgress.subStage);
@@ -598,6 +621,7 @@ export const useGameState = create<GameState>((set, get) => ({
       state.secondaryJob,
       state.itemInstances,
       state.skillTree,
+      state.studentSkillTree,
       state.hasChosenJob
     );
     // 關卡難度倍率:跟這隻怪生成當下用的是同一份 stageProgress(這次擊殺才會讓它晉級,
@@ -646,14 +670,16 @@ export const useGameState = create<GameState>((set, get) => ({
     let lastSkillTriggerAt = state.lastSkillTriggerAt;
     const nextActiveSkillTimers = { ...state.activeSkillTimers };
     let anySkillTriggered = false;
+    // 學生期(!hasChosenJob)還沒有主職可以套用,整組主動技能觸發判定改吃 studentSkillTree
+    // (見 game/studentSkillTree.ts),效果種類固定用 getStudentActiveEffectKind,不吃 archetype。
     for (const slot of ACTIVE_SLOT_IDS) {
-      const slotLevel = state.skillTree[state.job.archetype][slot];
+      const slotLevel = state.hasChosenJob ? state.skillTree[state.job.archetype][slot] : state.studentSkillTree[slot];
       const intervalMs = activeSkillTriggerIntervalSeconds(slot, slotLevel) * 1000;
       const triggered = now - state.activeSkillTimers[slot] >= intervalMs;
       if (!triggered) continue;
       nextActiveSkillTimers[slot] = now;
       anySkillTriggered = true;
-      const effect = getActiveEffectKind(state.job.archetype, slot);
+      const effect = state.hasChosenJob ? getActiveEffectKind(state.job.archetype, slot) : getStudentActiveEffectKind(slot);
       if (effect === 'doubleReward') {
         exp *= 2;
         coins *= 2;
@@ -1058,6 +1084,27 @@ export const useGameState = create<GameState>((set, get) => ({
     };
 
     set({ level: nextLevel, skillTree: nextSkillTree, coins: coins - coinCost });
+    persist(get());
+    playSkillUpgrade();
+  },
+
+  // 學生期(!hasChosenJob)專屬技能樹的升級 action,邏輯比照 upgradeSkillSlot,只是操作對象換成
+  // studentSkillTree,upgrade/cost 函式換成 game/studentSkillTree.ts 那組(等級上限固定
+  // STUDENT_SKILL_LEVEL_CAP,不吃 JobTier)。
+  upgradeStudentSkillSlot: (slot) => {
+    const { level, studentSkillTree, coins } = get();
+    const currentSlotLevel = studentSkillTree[slot];
+    if (!canUpgradeStudentSkillSlot(currentSlotLevel, level.bankedExp, coins)) return;
+
+    const expCost = skillSlotUpgradeCost(currentSlotLevel);
+    const coinCost = skillSlotUpgradeCoinCost(currentSlotLevel);
+    const nextLevel: LevelState = { level: level.level, bankedExp: level.bankedExp - expCost };
+    const nextStudentSkillTree: Record<SkillSlotId, number> = {
+      ...studentSkillTree,
+      [slot]: nextStudentSkillSlotLevel(currentSlotLevel),
+    };
+
+    set({ level: nextLevel, studentSkillTree: nextStudentSkillTree, coins: coins - coinCost });
     persist(get());
     playSkillUpgrade();
   },

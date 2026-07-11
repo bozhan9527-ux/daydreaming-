@@ -15,12 +15,10 @@ export function tabUnlockLevel(tabId: string): number {
   return TAB_UNLOCK_LEVELS[tabId] ?? 1;
 }
 
-// 技能分頁額外多一道「學生畢業」門檻(見 hasChosenJob,game/leveling.ts 練等曲線註解旁的說明):
-// 學生期間就算等級已經過了 TAB_UNLOCK_LEVELS.skill,也還不能真的進去技能分頁操作,
-// 因為根本還沒有主職可以升技能。其餘分頁不受這個額外條件影響。
+// 學生期(見 hasChosenJob)現在有自己專屬的技能樹(見 game/studentSkillTree.ts),技能分頁
+// 不再需要「畢業」這道額外門檻,跟其餘分頁一樣單純只看等級。
 export function isTabUnlocked(tabId: string, level: number, hasChosenJob: boolean): boolean {
   if (level < tabUnlockLevel(tabId)) return false;
-  if (tabId === 'skill' && !hasChosenJob) return false;
   return true;
 }
 

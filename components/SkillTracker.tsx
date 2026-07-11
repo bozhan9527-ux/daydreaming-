@@ -12,6 +12,7 @@ import {
   SkillSlotId,
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
+import { getStudentSkillFlavor } from '../game/studentSkillTree';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
 
@@ -110,9 +111,12 @@ export function SkillTracker() {
   // forceTick 重算,會把整棵JSX樹凍結在第一次渲染的結果,所以整個 component 選擇跳出編譯優化。
   'use no memo';
 
+  const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const job = useGameState((state) => state.job);
   const secondaryJob = useGameState((state) => state.secondaryJob);
   const skillTree = useGameState((state) => state.skillTree);
+  const studentSkillTree = useGameState((state) => state.studentSkillTree);
+  const level = useGameState((state) => state.level);
   const activeSkillTimers = useGameState((state) => state.activeSkillTimers);
   const secondarySkillTimerStartedAt = useGameState((state) => state.secondarySkillTimerStartedAt);
   const lastSkillTriggerAt = useGameState((state) => state.lastSkillTriggerAt);
@@ -131,19 +135,25 @@ export function SkillTracker() {
   return (
     <View style={styles.wrapper}>
       <View style={styles.container}>
-        {ACTIVE_SLOT_IDS.map((slot: ActiveSkillSlotId) => (
-          <SkillTile
-            key={slot}
-            archetype={job.archetype}
-            slot={slot}
-            label={SKILL_SLOT_NAMES[job.archetype][slot]}
-            level={skillTree[job.archetype][slot]}
-            timerStartedAt={activeSkillTimers[slot]}
-            intervalSeconds={activeSkillTriggerIntervalSeconds(slot, skillTree[job.archetype][slot])}
-            justTriggered={primaryJustTriggered}
-            now={now}
-          />
-        ))}
+        {ACTIVE_SLOT_IDS.map((slot: ActiveSkillSlotId) => {
+          // 學生期(!hasChosenJob)還沒有主職,job.archetype 只是佔位值不代表真的職業——
+          // 名稱/等級/倒數秒數改吃 studentSkillTree,圖示照樣借用 job.archetype 當視覺樣板即可。
+          const slotLevel = hasChosenJob ? skillTree[job.archetype][slot] : studentSkillTree[slot];
+          const label = hasChosenJob ? SKILL_SLOT_NAMES[job.archetype][slot] : getStudentSkillFlavor(level.level, slot).name;
+          return (
+            <SkillTile
+              key={slot}
+              archetype={job.archetype}
+              slot={slot}
+              label={label}
+              level={slotLevel}
+              timerStartedAt={activeSkillTimers[slot]}
+              intervalSeconds={activeSkillTriggerIntervalSeconds(slot, slotLevel)}
+              justTriggered={primaryJustTriggered}
+              now={now}
+            />
+          );
+        })}
       </View>
       {/* 副職輔助技能獨立一排、有自己的標籤,不跟主職的4顆混在同一排自動換行——
           4顆主動剛好能塞滿一行,加上第5顆會在窄螢幕上擠成3+2或4+1,版面亂掉。 */}

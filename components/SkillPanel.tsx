@@ -16,33 +16,55 @@ import {
   SkillSlotId,
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
+import {
+  canUpgradeStudentSkillSlot,
+  getStudentSkillFlavor,
+  getStudentSkillSlotBonusDescription,
+  STUDENT_SKILL_LEVEL_CAP,
+} from '../game/studentSkillTree';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
 
 const TILE_SIZE = 56;
 
 export function SkillPanel() {
+  const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const archetype = useGameState((state) => state.job.archetype);
   const skillTree = useGameState((state) => state.skillTree);
+  const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const level = useGameState((state) => state.level);
   const coins = useGameState((state) => state.coins);
   const upgradeSkillSlot = useGameState((state) => state.upgradeSkillSlot);
+  const upgradeStudentSkillSlot = useGameState((state) => state.upgradeStudentSkillSlot);
 
   const [selectedSlot, setSelectedSlot] = useState<SkillSlotId>('active1');
 
+  // 學生期(!hasChosenJob)還沒有主職可以查職業技能樹,整個畫面改吃 studentSkillTree,
+  // 圖示一樣可以借用目前 job.archetype(佔位值)當視覺樣板,不是重點。
   const tier = getCurrentTier(level.level);
-  const slotLevels = skillTree[archetype];
-  const cap = skillSlotLevelCap(tier);
+  const slotLevels = hasChosenJob ? skillTree[archetype] : studentSkillTree;
+  const cap = hasChosenJob ? skillSlotLevelCap(tier) : STUDENT_SKILL_LEVEL_CAP;
 
   const selectedLevel = slotLevels[selectedSlot];
   const selectedCost = skillSlotUpgradeCost(selectedLevel);
   const selectedCoinCost = skillSlotUpgradeCoinCost(selectedLevel);
-  const canUpgradeSelected = canUpgradeSkillSlot(selectedLevel, tier, level.bankedExp, coins);
+  const canUpgradeSelected = hasChosenJob
+    ? canUpgradeSkillSlot(selectedLevel, tier, level.bankedExp, coins)
+    : canUpgradeStudentSkillSlot(selectedLevel, level.bankedExp, coins);
   const selectedAtCap = selectedLevel >= cap;
+
+  const selectedFlavor = getStudentSkillFlavor(level.level, selectedSlot);
+  const selectedName = hasChosenJob ? SKILL_SLOT_NAMES[archetype][selectedSlot] : selectedFlavor.name;
+  const selectedDesc = hasChosenJob ? SKILL_SLOT_DESCRIPTIONS[archetype][selectedSlot] : selectedFlavor.description;
+  const selectedBonusDesc = hasChosenJob
+    ? getSkillSlotBonusDescription(archetype, selectedSlot, selectedLevel)
+    : getStudentSkillSlotBonusDescription(selectedSlot, selectedLevel);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.hint}>技能書只顯示目前職業的技能;切換職業後這裡會跟著換一套</Text>
+      <Text style={styles.hint}>
+        {hasChosenJob ? '技能書只顯示目前職業的技能;切換職業後這裡會跟著換一套' : '這是你的學生技能,畢業選定職業後會換成職業技能樹'}
+      </Text>
 
       <View style={styles.grid}>
         {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
@@ -73,17 +95,17 @@ export function SkillPanel() {
         <View style={styles.detailHeader}>
           <Text style={styles.detailKind}>{isPassiveSlot(selectedSlot) ? '被動技能' : '主動技能'}</Text>
           <Text style={styles.detailName}>
-            {SKILL_SLOT_NAMES[archetype][selectedSlot]} Lv.{selectedLevel}
+            {selectedName} Lv.{selectedLevel}
             {selectedAtCap ? '(已達本階上限)' : ''}
           </Text>
         </View>
-        <Text style={styles.detailDesc}>{SKILL_SLOT_DESCRIPTIONS[archetype][selectedSlot]}</Text>
-        <Text style={styles.detailBonus}>{getSkillSlotBonusDescription(archetype, selectedSlot, selectedLevel)}</Text>
-        <Text style={styles.detailCap}>目前階級上限:{cap} 級(升階可再提高)</Text>
+        <Text style={styles.detailDesc}>{selectedDesc}</Text>
+        <Text style={styles.detailBonus}>{selectedBonusDesc}</Text>
+        <Text style={styles.detailCap}>目前階級上限:{cap} 級{hasChosenJob ? '(升階可再提高)' : ''}</Text>
 
         <Pressable
           style={[styles.upgradeButton, !canUpgradeSelected && styles.upgradeButtonDisabled]}
-          onPress={() => upgradeSkillSlot(archetype, selectedSlot)}
+          onPress={() => (hasChosenJob ? upgradeSkillSlot(archetype, selectedSlot) : upgradeStudentSkillSlot(selectedSlot))}
           disabled={!canUpgradeSelected}
         >
           <Text style={styles.upgradeLabel}>

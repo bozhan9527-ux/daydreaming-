@@ -19,13 +19,14 @@ import {
 } from '../game/equipment';
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { SkillLevels, SKILL_IDS } from '../game/skills';
-import { createInitialSkillTreeLevels, SKILL_SLOT_IDS, SkillTreeLevels } from '../game/skillTree';
+import { createInitialSkillTreeLevels, SKILL_SLOT_IDS, SkillSlotId, SkillTreeLevels } from '../game/skillTree';
 import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialStageProgress, StageProgress } from '../game/stages';
+import { createInitialStudentSkillTreeLevels } from '../game/studentSkillTree';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 21;
+export const SCHEMA_VERSION = 22;
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -90,6 +91,9 @@ export interface SaveData {
   // defeatRecoveryUntil 是戰敗倒地恢復到什麼時間戳(null = 沒有在恢復中,正常繼續戰鬥)。
   heroHp: number;
   defeatRecoveryUntil: number | null;
+  // 「學生」期專屬技能樹(見 game/studentSkillTree.ts):6 格各自的等級,獨立於 skillTree
+  // (職業技能樹)之外——學生還沒選職業,不能借用那套 Record<Archetype, ...> 的形狀。
+  studentSkillTree: Record<SkillSlotId, number>;
   lastActiveAt: number;
 }
 
@@ -123,6 +127,7 @@ export function createInitialSaveData(): SaveData {
     killCount: 0,
     heroHp: 50 + createInitialLevelState().level * 2,
     defeatRecoveryUntil: null,
+    studentSkillTree: createInitialStudentSkillTreeLevels(),
     lastActiveAt: Date.now(),
   };
 }
@@ -168,6 +173,13 @@ function isSkillTreeLevels(value: unknown): value is SkillTreeLevels {
     const slotRecord = slots as Record<string, unknown>;
     return SKILL_SLOT_IDS.every((slotId) => typeof slotRecord[slotId] === 'number');
   });
+}
+
+// 學生技能樹只有「一套」6 格(不像 skillTree 要先展開 6 個職業 key),直接檢查 6 個欄位皆為數字。
+function isStudentSkillTreeLevels(value: unknown): value is Record<SkillSlotId, number> {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return SKILL_SLOT_IDS.every((slotId) => typeof record[slotId] === 'number');
 }
 
 // v8 以前的 skills 是完全不同的形狀(5 個通用技能 id,不是 6 職業 id),
@@ -994,11 +1006,43 @@ function isSaveDataV20(value: unknown): value is SaveDataV20 {
   );
 }
 
-function isSaveDataV21(value: unknown): value is SaveData {
+interface SaveDataV21 {
+  version: 21;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  stageProgress: StageProgress;
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
+  hasChosenJob: boolean;
+  unlockedAchievementIds: string[];
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
+  killCount: number;
+  heroHp: number;
+  defeatRecoveryUntil: number | null;
+  lastActiveAt: number;
+}
+
+function isSaveDataV21(value: unknown): value is SaveDataV21 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 21 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -1030,6 +1074,43 @@ function isSaveDataV21(value: unknown): value is SaveData {
   );
 }
 
+function isSaveDataV22(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    isStageProgress(record.stageProgress) &&
+    typeof record.lastDailyResetAt === 'string' &&
+    typeof record.dailyKillCount === 'number' &&
+    typeof record.dailyQuestClaimed === 'boolean' &&
+    isTransferCounts(record.transferFragments) &&
+    isTransferCounts(record.transferProofs) &&
+    typeof record.hasChosenJob === 'boolean' &&
+    isUnlockedAchievementIds(record.unlockedAchievementIds) &&
+    typeof record.hasEverAssembledTransferProof === 'boolean' &&
+    typeof record.hasEverSwitchedJob === 'boolean' &&
+    typeof record.killCount === 'number' &&
+    typeof record.heroHp === 'number' &&
+    (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
+    isStudentSkillTreeLevels(record.studentSkillTree)
+  );
+}
+
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
 // v4 沒有 bodyType,補標準體型;v5 沒有 skills,補全部技能 Lv1;v6 沒有 gender,補預設性別;
 // v7 沒有 coins/unlockedItemIds,補 0 貨幣與該存檔性別對應的免費解鎖項目;
@@ -1055,14 +1136,32 @@ function isSaveDataV21(value: unknown): value is SaveData {
 // v20 沒有勇者血量/戰敗風險系統欄位(見 game/heroHealth.ts),補 heroHp = 50 + 目前等級*2
 // (呼應 heroMaxHp 公式,滿血站起來,不會平白把老玩家一登入就變殘血)、defeatRecoveryUntil = null
 // (沒有在恢復中)。
+// v21 沒有 studentSkillTree(見 game/studentSkillTree.ts),補全 0 的空技能樹物件——舊存檔
+// (不論還在學生期還是早就畢業)一律從零開始點學生技能,不影響其餘任何既有進度。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV21(value)) return value;
+  if (isSaveDataV22(value)) return value;
+  if (isSaveDataV21(value)) {
+    return { ...value, version: SCHEMA_VERSION, studentSkillTree: createInitialStudentSkillTreeLevels() };
+  }
   if (isSaveDataV20(value)) {
-    return { ...value, version: SCHEMA_VERSION, heroHp: 50 + value.level.level * 2, defeatRecoveryUntil: null };
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      heroHp: 50 + value.level.level * 2,
+      defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
+    };
   }
   if (isSaveDataV19(value)) {
-    return { ...value, version: SCHEMA_VERSION, killCount: 0, heroHp: 50 + value.level.level * 2, defeatRecoveryUntil: null };
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      killCount: 0,
+      heroHp: 50 + value.level.level * 2,
+      defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
+    };
   }
   if (isSaveDataV18(value)) {
     return {
@@ -1074,6 +1173,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
     };
   }
   if (isSaveDataV17(value)) {
@@ -1087,6 +1187,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
     };
   }
   if (isSaveDataV16(value)) {
@@ -1119,6 +1220,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1152,6 +1254,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1185,6 +1288,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1218,6 +1322,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1251,6 +1356,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1284,6 +1390,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1317,6 +1424,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1350,6 +1458,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1383,6 +1492,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1416,6 +1526,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1449,6 +1560,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1482,6 +1594,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1515,6 +1628,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1548,6 +1662,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1581,6 +1696,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1614,6 +1730,7 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
+      studentSkillTree: createInitialStudentSkillTreeLevels(),
       lastActiveAt: value.lastActiveAt,
     };
   }

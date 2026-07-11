@@ -29,17 +29,14 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, onSelect }: TabBar
         const active = tab.id === activeId;
         const unlockLevel = tabUnlockLevel(tab.id);
         const unlocked = isTabUnlocked(tab.id, level, hasChosenJob);
-        // 技能分頁在學生期就算等級已經到了 Lv5(TAB_UNLOCK_LEVELS.skill),還是被 hasChosenJob
-        // 多擋一層,這時候顯示「Lv5」會誤導(看起來應該解鎖了卻沒有),改顯示畢業門檻。
-        const lockedBySkillGraduation = tab.id === 'skill' && level >= unlockLevel && !hasChosenJob;
-        const lockedLabel = lockedBySkillGraduation ? '畢業解鎖' : `Lv${unlockLevel}`;
+        const lockedLabel = `Lv${unlockLevel}`;
         return (
           <Pressable
             key={tab.id}
             style={[styles.tab, active && styles.tabActive, !unlocked && styles.tabLocked]}
             onPress={() => {
               if (!unlocked) {
-                showToast(lockedBySkillGraduation ? `選定主職畢業後才能解鎖「${tab.label}」` : `Lv${unlockLevel} 解鎖「${tab.label}」`);
+                showToast(`Lv${unlockLevel} 解鎖「${tab.label}」`);
                 return;
               }
               onSelect(tab.id);
