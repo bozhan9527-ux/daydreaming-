@@ -20,6 +20,15 @@ const RARITY_SCALE: Record<Rarity, number> = {
 const DEFAULT_OUTLINE = '#3a3542';
 const LEGENDARY_OUTLINE = '#f5d060';
 
+// 給 UI(圖鑑格子邊框等)用的完整稀有度色階:common/legendary 直接沿用上面兩個既有外框色,
+// rare/epic 從既有科屬色盤裡挑一個代表色(aquatic 的藍、mythic 的紫),不另外發明新色系。
+export const RARITY_BORDER_COLOR: Record<Rarity, string> = {
+  common: '#5a5a68',
+  rare: '#3a7ac9',
+  epic: '#8a5cd6',
+  legendary: LEGENDARY_OUTLINE,
+};
+
 const K = 'K';
 
 interface RowSpec {
