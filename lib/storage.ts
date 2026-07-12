@@ -683,6 +683,8 @@ const CURRENT_SUBSTAT_TYPES = [
   'magicCritDamage',
   'physicalAttack',
   'magicAttack',
+  'lifesteal',
+  'hpRegen',
 ];
 
 function isCurrentSubstat(value: unknown): boolean {
