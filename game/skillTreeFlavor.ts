@@ -1,5 +1,9 @@
 import { Archetype, JobTier } from './combat';
-import { SkillSlotId } from './skillTree';
+import {
+  SKILL_SLOT_DESCRIPTIONS,
+  SKILL_SLOT_NAMES,
+  SkillSlotId,
+} from './skillTree';
 
 export interface TierSkillFlavor {
   name: string;
@@ -7,7 +11,11 @@ export interface TierSkillFlavor {
 }
 
 // tier1 沿用 game/skillTree.ts 既有的 SKILL_SLOT_NAMES/SKILL_SLOT_DESCRIPTIONS,這裡只需要 2~5 階。
-type TierBranchContent = Record<Exclude<JobTier, 1>, Record<SkillSlotId, TierSkillFlavor>>;
+// passive3(吸血+自動回血)刻意排除在外——這格名稱/敘述全職業全階級都是同一份鎖定文案
+// (見 SKILL_SLOT_NAMES/SKILL_SLOT_DESCRIPTIONS 的 passive3),不像 passive1/passive2 每階
+// 都要換一套「職業分支」敘述,所以不需要也不應該在這裡幫它多寫 2~5 階的版本。
+type TierBranchSlotId = Exclude<SkillSlotId, 'passive3'>;
+type TierBranchContent = Record<Exclude<JobTier, 1>, Record<TierBranchSlotId, TierSkillFlavor>>;
 
 // 每一階(2/3/4/5)6 個技能格描述,結尾都會統一附上該階新解鎖的疊加效果說明——
 // 數值對應 game/skillTree.ts 的 TIER2_BONUS_COIN_MULT(10%)/TIER3_BONUS_EXP_MULT(10%)/
@@ -244,5 +252,10 @@ const TIER_SKILL_FLAVOR: Record<Archetype, TierBranchContent> = {
 
 // tier=1 時呼叫端應改用 game/skillTree.ts 的 SKILL_SLOT_NAMES/SKILL_SLOT_DESCRIPTIONS,這個函式只處理 2~5。
 export function getTierSkillFlavor(archetype: Archetype, tier: Exclude<JobTier, 1>, slot: SkillSlotId): TierSkillFlavor {
+  // passive3 沒有 tier2~5 專屬敘述(見上面 TierBranchSlotId 的說明),不管玩家目前在看哪一階,
+  // 一律回傳 game/skillTree.ts 那份全職業全階級共用的鎖定文案。
+  if (slot === 'passive3') {
+    return { name: SKILL_SLOT_NAMES[archetype].passive3, description: SKILL_SLOT_DESCRIPTIONS[archetype].passive3 };
+  }
   return TIER_SKILL_FLAVOR[archetype][tier][slot];
 }

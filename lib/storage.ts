@@ -38,7 +38,7 @@ import { createInitialStudentSkillTreeLevels, STUDENT_SKILL_LEVEL_CAP } from '..
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 26;
+export const SCHEMA_VERSION = 27;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -50,13 +50,18 @@ function migrateSkillLevel(oldLevel: number, newCap: number, oldToNewRatio: numb
   return Math.min(newCap, Math.round(oldLevel / oldToNewRatio));
 }
 
+// slots[slotId] ?? 0:SKILL_SLOT_IDS 是「現在」的欄位清單(v27起含 passive3),但呼叫這兩個函式
+// 的舊存檔(v20~v24 那個年代)壓根不知道 passive3 存在,slots['passive3'] 會是 undefined——
+// 沒有這個防呆,migrateSkillLevel(undefined, ...) 會算出 NaN,把整份技能樹污染成 NaN。
+// 用 ?? 0 讓「這格在舊存檔裡根本不存在」等同「這格是0級」,新格 passive3 换算完自然落在0級,
+// 不會是 NaN 也不會意外繼承到別格的數值。
 function migrateSkillTreeLevels(skillTree: SkillTreeLevels): SkillTreeLevels {
   const result = {} as SkillTreeLevels;
   (Object.keys(skillTree) as Archetype[]).forEach((archetype) => {
     const slots = skillTree[archetype];
     const convertedSlots = {} as Record<SkillSlotId, number>;
     SKILL_SLOT_IDS.forEach((slotId) => {
-      convertedSlots[slotId] = migrateSkillLevel(slots[slotId], SKILL_LEVEL_CAP, LEGACY_SKILL_LEVEL_TO_NEW_RATIO);
+      convertedSlots[slotId] = migrateSkillLevel(slots[slotId] ?? 0, SKILL_LEVEL_CAP, LEGACY_SKILL_LEVEL_TO_NEW_RATIO);
     });
     result[archetype] = convertedSlots;
   });
@@ -66,10 +71,18 @@ function migrateSkillTreeLevels(skillTree: SkillTreeLevels): SkillTreeLevels {
 function migrateStudentSkillTreeLevels(studentSkillTree: Record<SkillSlotId, number>): Record<SkillSlotId, number> {
   const result = {} as Record<SkillSlotId, number>;
   SKILL_SLOT_IDS.forEach((slotId) => {
-    result[slotId] = migrateSkillLevel(studentSkillTree[slotId], STUDENT_SKILL_LEVEL_CAP, LEGACY_SKILL_LEVEL_TO_NEW_RATIO);
+    result[slotId] = migrateSkillLevel(studentSkillTree[slotId] ?? 0, STUDENT_SKILL_LEVEL_CAP, LEGACY_SKILL_LEVEL_TO_NEW_RATIO);
   });
   return result;
 }
+
+// passive3(吸血/回血)上線前(v15~v26)skillTree/studentSkillTree 每個職業/欄位只有6格
+// (passive1/passive2/active1-4),沒有 passive3。這裡刻意凍結一份固定清單,不能跟著
+// game/skillTree.ts 現在(v27起)已經變成7格的 SKILL_SLOT_IDS 走——不然舊存檔本來合法的形狀
+// 會因為缺這個新欄位被 isSkillTreeLevels/isStudentSkillTreeLevels 誤判成「格式不對」,
+// migrate() 整條 cascade 找不到吻合的版本一路 fallthrough 到 createInitialSaveData(),
+// 這是比 NaN 更嚴重的靜默資料遺失——舊玩家的等級/裝備/金幣全部歸零。
+const LEGACY_SKILL_SLOT_IDS_PRE_PASSIVE3: SkillSlotId[] = ['passive1', 'passive2', 'active1', 'active2', 'active3', 'active4'];
 
 const DEFAULT_ARCHETYPE: Archetype = 'physicalMelee';
 const DEFAULT_BRANCH: JobBranch = 'A';
@@ -148,6 +161,10 @@ export interface SaveData {
   // 轉職試煉副本(見 game/dungeon.ts):tickets/lastTicketRegenAt 是入場券張數與回補計時基準,
   // 6 個職業各自的副本共用同一份入場券池,不分職業各自計次。
   dungeon: DungeonState;
+  // 回血(hpRegen,見 game/heroHealth.ts 的 applyHpRegenTick):時間制被動回血機制上次「往前推進」
+  // 的計時基準時間戳,跟 heroHp 一樣要存檔——不存檔的話每次重開 App 都會被當成新的起算點,
+  // 離線期間本來該累積的回血 tick 會不見。
+  lastHpRegenTickAt: number;
   lastActiveAt: number;
 }
 
@@ -186,6 +203,7 @@ export function createInitialSaveData(): SaveData {
     studentSkillTree: createInitialStudentSkillTreeLevels(),
     companionGear: createEmptyCompanionGearState(),
     dungeon: createInitialDungeonState(),
+    lastHpRegenTickAt: Date.now(),
     lastActiveAt: Date.now(),
   };
 }
@@ -222,7 +240,29 @@ function isSkillLevels(value: unknown): value is SkillLevels {
   return SKILL_IDS.every((id) => typeof record[id] === 'number');
 }
 
+// 給 v15~v26(passive3 上線前)的舊存檔驗證用:刻意吃 LEGACY_SKILL_SLOT_IDS_PRE_PASSIVE3
+// (固定6格)而不是現在的 SKILL_SLOT_IDS(7格),理由見上面該常數的註解。
 function isSkillTreeLevels(value: unknown): value is SkillTreeLevels {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return SKILL_IDS.every((archetypeId) => {
+    const slots = record[archetypeId];
+    if (typeof slots !== 'object' || slots === null) return false;
+    const slotRecord = slots as Record<string, unknown>;
+    return LEGACY_SKILL_SLOT_IDS_PRE_PASSIVE3.every((slotId) => typeof slotRecord[slotId] === 'number');
+  });
+}
+
+// 學生技能樹只有「一套」6 格(不像 skillTree 要先展開 6 個職業 key),直接檢查舊制6個欄位皆為數字。
+function isStudentSkillTreeLevels(value: unknown): value is Record<SkillSlotId, number> {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return LEGACY_SKILL_SLOT_IDS_PRE_PASSIVE3.every((slotId) => typeof record[slotId] === 'number');
+}
+
+// v27(passive3/吸血/回血上線後)的現制驗證:吃現在的 SKILL_SLOT_IDS(7格,含 passive3),
+// 只給 isSaveDataV27 這個新的 passthrough 檢查用。
+function isCurrentSkillTreeLevels(value: unknown): value is SkillTreeLevels {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return SKILL_IDS.every((archetypeId) => {
@@ -233,8 +273,7 @@ function isSkillTreeLevels(value: unknown): value is SkillTreeLevels {
   });
 }
 
-// 學生技能樹只有「一套」6 格(不像 skillTree 要先展開 6 個職業 key),直接檢查 6 個欄位皆為數字。
-function isStudentSkillTreeLevels(value: unknown): value is Record<SkillSlotId, number> {
+function isCurrentStudentSkillTreeLevels(value: unknown): value is Record<SkillSlotId, number> {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return SKILL_SLOT_IDS.every((slotId) => typeof record[slotId] === 'number');
@@ -1479,11 +1518,53 @@ function isSaveDataV25(value: unknown): value is SaveDataV25 {
   );
 }
 
-function isSaveDataV26(value: unknown): value is SaveData {
+// v26(passive3/吸血/回血上線前的最後一版):skillTree/studentSkillTree 每個職業/欄位只有6格
+// (passive1/passive2/active1-4),沒有 passive3;沒有 lastHpRegenTickAt。凍結成明確獨立的
+// interface+literal版本號檢查(不再動態比對 SCHEMA_VERSION,SCHEMA_VERSION 現在已經是27),
+// 呼應這個檔案「每個舊版本都是固定形狀」的既有慣例——同時避免不小心要求舊版存檔也要有
+// 新欄位(passive3/lastHpRegenTickAt)。
+interface SaveDataV26 {
+  version: 26;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  skillBooks: number;
+  stageProgress: StageProgress;
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
+  hasChosenJob: boolean;
+  unlockedAchievementIds: string[];
+  claimedAchievementIds: string[];
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
+  killCount: number;
+  heroHp: number;
+  defeatRecoveryUntil: number | null;
+  studentSkillTree: Record<SkillSlotId, number>;
+  companionGear: CompanionGearState;
+  dungeon: DungeonState;
+  lastActiveAt: number;
+}
+
+function isSaveDataV26(value: unknown): value is SaveDataV26 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 26 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -1518,6 +1599,66 @@ function isSaveDataV26(value: unknown): value is SaveData {
     isCompanionGearState(record.companionGear) &&
     isDungeonState(record.dungeon)
   );
+}
+
+// v27(passive3/吸血/回血上線):現在的 SaveData 完整形狀,skillTree/studentSkillTree 每個
+// 職業/欄位變成7格(含 passive3),新增 lastHpRegenTickAt。這是 migrate() 的第一道
+// passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
+function isSaveDataV27(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    typeof record.lastActiveAt === 'number' &&
+    isLevelState(record.level) &&
+    isTriggerState(record.trigger) &&
+    isJobSelection(record.job) &&
+    isEquipmentLoadout(record.equipment) &&
+    isBodyType(record.bodyType) &&
+    isCurrentSkillTreeLevels(record.skillTree) &&
+    isGender(record.gender) &&
+    typeof record.coins === 'number' &&
+    isUnlockedItemIds(record.unlockedItemIds) &&
+    isCompanionState(record.companions) &&
+    isArchetypeOrNull(record.secondaryJob) &&
+    isItemInstances(record.itemInstances) &&
+    typeof record.enhanceStones === 'number' &&
+    isGemCounts(record.gemCounts) &&
+    typeof record.skillBooks === 'number' &&
+    isStageProgress(record.stageProgress) &&
+    typeof record.lastDailyResetAt === 'string' &&
+    typeof record.dailyKillCount === 'number' &&
+    typeof record.dailyQuestClaimed === 'boolean' &&
+    isTransferCounts(record.transferFragments) &&
+    isTransferCounts(record.transferProofs) &&
+    typeof record.hasChosenJob === 'boolean' &&
+    isUnlockedAchievementIds(record.unlockedAchievementIds) &&
+    isUnlockedAchievementIds(record.claimedAchievementIds) &&
+    typeof record.hasEverAssembledTransferProof === 'boolean' &&
+    typeof record.hasEverSwitchedJob === 'boolean' &&
+    typeof record.killCount === 'number' &&
+    typeof record.heroHp === 'number' &&
+    (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
+    isCurrentStudentSkillTreeLevels(record.studentSkillTree) &&
+    isCompanionGearState(record.companionGear) &&
+    isDungeonState(record.dungeon) &&
+    typeof record.lastHpRegenTickAt === 'number'
+  );
+}
+
+// passive3(見 game/skillTree.ts 的 passive3/lifeMastery)是 v27 新增的第3個被動欄位,v27之前
+// 全部存檔的 skillTree/studentSkillTree 都沒有這個 key。下面兩個 helper 給 migrate() 的每一條
+// 分支(不論是舊版本各自建構出全新 SaveData 形狀、還是走 migrateSkillTreeLevels 縮放過的)統一
+// 補上 passive3:0,不用在 ~20 條分支裡各自手動改 object literal(容易漏改)。
+function withPassive3(skillTree: Record<Archetype, Record<SkillSlotId, number>>): SkillTreeLevels {
+  const result = {} as SkillTreeLevels;
+  (Object.keys(skillTree) as Archetype[]).forEach((archetype) => {
+    result[archetype] = { ...skillTree[archetype], passive3: skillTree[archetype].passive3 ?? 0 };
+  });
+  return result;
+}
+function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Record<SkillSlotId, number> {
+  return { ...studentSkillTree, passive3: studentSkillTree.passive3 ?? 0 };
 }
 
 // v1 沒有 trigger,補保底狀態;v2 沒有 job,補預設職業;v3 沒有 equipment,補空裝備欄;
@@ -1558,24 +1699,42 @@ function isSaveDataV26(value: unknown): value is SaveData {
 // 空陣列!),不然老玩家一登入會看到一堆「未領取」但其實金幣早就已經拿過的成就,點領取就會
 // 重複發獎勵。v24 以前的版本本來就沒有成就系統(unlockedAchievementIds 補空陣列),
 // claimedAchievementIds 同步補空陣列即可。
+// v26→v27 沒有 passive3(見 game/skillTree.ts 的吸血/回血合一被動)、沒有 lastHpRegenTickAt
+// (見 game/heroHealth.ts 的時間制回血):skillTree 每個職業、studentSkillTree 都補
+// passive3=0(玩家還沒投資這格,就是0級,不是什麼特殊值),lastHpRegenTickAt 補 Date.now()
+// (呼應 hpRegenTotal<=0 時 applyHpRegenTick 也是直接推進到 now 的既有慣例,不會讓完全沒有
+// hpRegen 投資的老玩家一登入就補一段「追溯回血」)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV26(value)) return value;
+  if (isSaveDataV27(value)) return value;
+  if (isSaveDataV26(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      skillTree: withPassive3(value.skillTree),
+      studentSkillTree: withStudentPassive3(value.studentSkillTree),
+      lastHpRegenTickAt: Date.now(),
+    };
+  }
   if (isSaveDataV25(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      skillTree: withPassive3(value.skillTree),
+      studentSkillTree: withStudentPassive3(value.studentSkillTree),
+      lastHpRegenTickAt: Date.now(),
     };
   }
   if (isSaveDataV24(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
-      skillTree: migrateSkillTreeLevels(value.skillTree),
-      studentSkillTree: migrateStudentSkillTreeLevels(value.studentSkillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
+      studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      lastHpRegenTickAt: Date.now(),
     };
   }
   if (isSaveDataV23(value)) {
@@ -1583,10 +1742,11 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       dungeon: createInitialDungeonState(),
-      skillTree: migrateSkillTreeLevels(value.skillTree),
-      studentSkillTree: migrateStudentSkillTreeLevels(value.studentSkillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
+      studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      lastHpRegenTickAt: Date.now(),
     };
   }
   if (isSaveDataV22(value)) {
@@ -1595,22 +1755,24 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
-      skillTree: migrateSkillTreeLevels(value.skillTree),
-      studentSkillTree: migrateStudentSkillTreeLevels(value.studentSkillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
+      studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      lastHpRegenTickAt: Date.now(),
     };
   }
   if (isSaveDataV21(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
-      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      lastHpRegenTickAt: Date.now(),
     };
   }
   if (isSaveDataV20(value)) {
@@ -1619,12 +1781,13 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
-      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      lastHpRegenTickAt: Date.now(),
     };
   }
   if (isSaveDataV19(value)) {
@@ -1634,12 +1797,13 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
-      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      lastHpRegenTickAt: Date.now(),
     };
   }
   if (isSaveDataV18(value)) {
@@ -1653,11 +1817,12 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
-      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
+      lastHpRegenTickAt: Date.now(),
     };
   }
   if (isSaveDataV17(value)) {
@@ -1672,11 +1837,12 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
-      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
+      lastHpRegenTickAt: Date.now(),
     };
   }
   if (isSaveDataV16(value)) {
@@ -1687,7 +1853,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1711,9 +1877,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1725,7 +1892,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: migrateSkillTreeLevels(value.skillTree),
+      skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1749,9 +1916,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1763,7 +1931,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1787,9 +1955,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1801,7 +1970,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1825,9 +1994,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1839,7 +2009,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1863,9 +2033,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1877,7 +2048,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1901,9 +2072,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1915,7 +2087,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1939,9 +2111,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1953,7 +2126,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -1977,9 +2150,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -1991,7 +2165,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -2015,9 +2189,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -2029,7 +2204,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: value.gender,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(value.gender),
@@ -2053,9 +2228,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -2067,7 +2243,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -2091,9 +2267,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -2105,7 +2282,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -2129,9 +2306,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -2143,7 +2321,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: DEFAULT_BODY_TYPE,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -2167,9 +2345,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -2181,7 +2360,7 @@ function migrate(value: unknown): SaveData {
       job: value.job,
       equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
       bodyType: DEFAULT_BODY_TYPE,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -2205,9 +2384,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -2219,7 +2399,7 @@ function migrate(value: unknown): SaveData {
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
       equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
       bodyType: DEFAULT_BODY_TYPE,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -2243,9 +2423,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }
@@ -2257,7 +2438,7 @@ function migrate(value: unknown): SaveData {
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
       equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
       bodyType: DEFAULT_BODY_TYPE,
-      skillTree: createInitialSkillTreeLevels(),
+      skillTree: withPassive3(createInitialSkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -2281,9 +2462,10 @@ function migrate(value: unknown): SaveData {
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
-      studentSkillTree: createInitialStudentSkillTreeLevels(),
+      studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
   }

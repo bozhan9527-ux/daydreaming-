@@ -1278,7 +1278,9 @@ export type SubstatType =
   | 'physicalResistance' | 'magicResistance'
   | 'physicalCritRate' | 'physicalCritDamage'
   | 'magicCritRate' | 'magicCritDamage'
-  | 'physicalAttack' | 'magicAttack';
+  | 'physicalAttack' | 'magicAttack'
+  // 吸血/回血(見 game/heroHealth.ts):跟其餘素質不同,不分物理/魔法,是全職業共用的單一維度。
+  | 'lifesteal' | 'hpRegen';
 
 export interface Substat {
   type: SubstatType;
@@ -1298,6 +1300,7 @@ const SUBSTAT_TYPES: SubstatType[] = [
   'physicalCritRate', 'physicalCritDamage',
   'magicCritRate', 'magicCritDamage',
   'physicalAttack', 'magicAttack',
+  'lifesteal', 'hpRegen',
 ];
 const SUBSTAT_MAGNITUDE = 0.6; // 副素質整體比主加成弱一截,不會喧賓奪主
 const SUBSTAT_VARIANCE_MIN = 0.7;
@@ -1358,6 +1361,8 @@ export interface SubstatTotals {
   magicCritDamage: number;
   physicalAttack: number;
   magicAttack: number;
+  lifesteal: number;
+  hpRegen: number;
 }
 
 function addSubstatToTotals(totals: SubstatTotals, substat: Substat): void {
@@ -1370,6 +1375,8 @@ function addSubstatToTotals(totals: SubstatTotals, substat: Substat): void {
     case 'magicCritDamage': totals.magicCritDamage += substat.value; break;
     case 'physicalAttack': totals.physicalAttack += substat.value; break;
     case 'magicAttack': totals.magicAttack += substat.value; break;
+    case 'lifesteal': totals.lifesteal += substat.value; break;
+    case 'hpRegen': totals.hpRegen += substat.value; break;
     // 舊資料相容:改版前掉落的裝備只有籠統的「抗性」/「爆擊率」,兩池都算數,
     // 老玩家的既有投資不會因為改版突然貶值。
     case 'resistance':
@@ -1390,6 +1397,7 @@ export function getSubstatTotals(loadout: EquipmentLoadout, instances: ItemInsta
     physicalCritRate: 0, physicalCritDamage: 0,
     magicCritRate: 0, magicCritDamage: 0,
     physicalAttack: 0, magicAttack: 0,
+    lifesteal: 0, hpRegen: 0,
   };
   for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
     const itemId = loadout[slot];

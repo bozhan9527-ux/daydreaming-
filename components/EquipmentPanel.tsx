@@ -62,6 +62,8 @@ const SUBSTAT_LABELS: Record<SubstatType, string> = {
   magicCritDamage: '魔法爆擊傷害',
   physicalAttack: '物理攻擊力',
   magicAttack: '魔法攻擊力',
+  lifesteal: '吸血',
+  hpRegen: '自動回血',
 };
 
 // 角色紙娃娃兩側各一欄圖示按鈕:武器(主手/副手)對放最上排,其餘裝備往下排。
@@ -202,8 +204,8 @@ export function EquipmentPanel() {
         總加成:{formatBonus('exp', totals.exp)} / {formatBonus('coins', totals.coins)} /{' '}
         {formatBonus('speed', totals.speed)}
       </Text>
-      {/* 素質總和改成 2x4 格子,取代原本一整行斜線分隔的長文字——物理/魔法各自4種素質已經
-          累積到密到要換行才塞得下,格子讓每個數字獨立佔一塊,掃視速度比逐字讀完一整行快。 */}
+      {/* 素質總和改成格子,取代原本一整行斜線分隔的長文字——物理/魔法各自4種素質+通用2種
+          已經累積到密到要換行才塞得下,格子讓每個數字獨立佔一塊,掃視速度比逐字讀完一整行快。 */}
       <View style={styles.substatGrid}>
         <View style={styles.substatRow}>
           <Text style={styles.substatRowLabel}>物理</Text>
@@ -241,6 +243,18 @@ export function EquipmentPanel() {
           <View style={styles.substatCell}>
             <Text style={styles.substatCellLabel}>爆傷</Text>
             <Text style={styles.substatCellValue}>+{Math.round(substatTotals.magicCritDamage * 100)}%</Text>
+          </View>
+        </View>
+        {/* 吸血/自動回血是通用素質(不分物理/魔法),只用一行、兩格,格子寬度自然比上面寬一倍。 */}
+        <View style={styles.substatRow}>
+          <Text style={styles.substatRowLabel}>通用</Text>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>吸血</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.lifesteal * 100)}%</Text>
+          </View>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>回血</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.hpRegen * 100)}%</Text>
           </View>
         </View>
       </View>
