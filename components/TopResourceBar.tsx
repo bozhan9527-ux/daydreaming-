@@ -6,9 +6,13 @@ import { StyleSheet, Text, View } from 'react-native';
 interface TopResourceBarProps {
   level: number;
   coins: number;
+  skillBooks: number;
 }
 
-export function TopResourceBar({ level, coins }: TopResourceBarProps) {
+// 技能書是每次升技能都要看的資源,但原本只有背包分頁看得到庫存,玩家很容易忘記手上有多少——
+// 跟等級/金幣一樣提到常駐列,其餘強化石/寶石維持收在背包(不是每次操作都要看,常駐列放太多
+// 反而稀釋掉等級/金幣這兩個最核心的資訊)。
+export function TopResourceBar({ level, coins, skillBooks }: TopResourceBarProps) {
   return (
     <View style={styles.row}>
       <View style={styles.pill}>
@@ -18,6 +22,10 @@ export function TopResourceBar({ level, coins }: TopResourceBarProps) {
       <View style={styles.pill}>
         <View style={[styles.dot, styles.coinDot]} />
         <Text style={styles.pillText}>{coins.toLocaleString()}</Text>
+      </View>
+      <View style={styles.pill}>
+        <View style={[styles.dot, styles.skillBookDot]} />
+        <Text style={styles.pillText}>技能書 {skillBooks}</Text>
       </View>
     </View>
   );
@@ -50,6 +58,9 @@ const styles = StyleSheet.create({
   },
   coinDot: {
     backgroundColor: '#c9a94f',
+  },
+  skillBookDot: {
+    backgroundColor: '#8fbfe0',
   },
   pillText: {
     color: '#f2f2f2',

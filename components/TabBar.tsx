@@ -26,7 +26,9 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, attention, onSelec
         const active = tab.id === activeId;
         const unlockLevel = tabUnlockLevel(tab.id);
         const unlocked = isTabUnlocked(tab.id, level, hasChosenJob);
-        const lockedLabel = `Lv${unlockLevel}`;
+        // 鎖住的分頁原本只標等級數字,不知道解鎖了是什麼——圖示本來就有畫(只是靠 tabLocked
+        // 的透明度降低變暗示意),名字也一起露出來,玩家才知道在等待什麼、值不值得去衝等級。
+        const lockedLabel = `${tab.label}\nLv${unlockLevel}`;
         // 已解鎖才顯示提醒角標——鎖住的分頁本來就有 Lv 門檻字樣提示,不用重複疊加。
         const showDot = unlocked && (attention[tab.id as keyof TabAttentionFlags] ?? false);
         return (
@@ -45,7 +47,7 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, attention, onSelec
               <PixelSprite frame={frame} palette={palette} pixelSize={4} />
               {showDot && <View style={styles.attentionDot} />}
             </View>
-            <Text style={styles.label} numberOfLines={1}>
+            <Text style={styles.label} numberOfLines={unlocked ? 1 : 2}>
               {unlocked ? tab.label : lockedLabel}
             </Text>
           </Pressable>

@@ -202,12 +202,48 @@ export function EquipmentPanel() {
         總加成:{formatBonus('exp', totals.exp)} / {formatBonus('coins', totals.coins)} /{' '}
         {formatBonus('speed', totals.speed)}
       </Text>
-      <Text style={styles.totalsText}>
-        物理:{formatSubstat('physicalAttack', substatTotals.physicalAttack)} / {formatSubstat('physicalResistance', substatTotals.physicalResistance)} / {formatSubstat('physicalCritRate', substatTotals.physicalCritRate)} / {formatSubstat('physicalCritDamage', substatTotals.physicalCritDamage)}
-      </Text>
-      <Text style={styles.totalsText}>
-        魔法:{formatSubstat('magicAttack', substatTotals.magicAttack)} / {formatSubstat('magicResistance', substatTotals.magicResistance)} / {formatSubstat('magicCritRate', substatTotals.magicCritRate)} / {formatSubstat('magicCritDamage', substatTotals.magicCritDamage)}
-      </Text>
+      {/* 素質總和改成 2x4 格子,取代原本一整行斜線分隔的長文字——物理/魔法各自4種素質已經
+          累積到密到要換行才塞得下,格子讓每個數字獨立佔一塊,掃視速度比逐字讀完一整行快。 */}
+      <View style={styles.substatGrid}>
+        <View style={styles.substatRow}>
+          <Text style={styles.substatRowLabel}>物理</Text>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>攻擊</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.physicalAttack * 100)}%</Text>
+          </View>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>抗性</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.physicalResistance * 100)}%</Text>
+          </View>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>爆率</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.physicalCritRate * 100)}%</Text>
+          </View>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>爆傷</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.physicalCritDamage * 100)}%</Text>
+          </View>
+        </View>
+        <View style={styles.substatRow}>
+          <Text style={styles.substatRowLabel}>魔法</Text>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>攻擊</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.magicAttack * 100)}%</Text>
+          </View>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>抗性</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.magicResistance * 100)}%</Text>
+          </View>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>爆率</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.magicCritRate * 100)}%</Text>
+          </View>
+          <View style={styles.substatCell}>
+            <Text style={styles.substatCellLabel}>爆傷</Text>
+            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.magicCritDamage * 100)}%</Text>
+          </View>
+        </View>
+      </View>
 
       <View style={styles.subNav}>
         {SUB_VIEWS.map((view) => (
@@ -307,6 +343,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     marginBottom: 4,
+  },
+  substatGrid: {
+    width: '100%',
+    gap: 4,
+    marginBottom: 8,
+  },
+  substatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  substatRowLabel: {
+    width: 28,
+    color: '#8fbfe0',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  substatCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#1c1c24',
+    borderWidth: 1,
+    borderColor: '#2a2a35',
+  },
+  substatCellLabel: {
+    color: '#8a8a95',
+    fontSize: 9,
+  },
+  substatCellValue: {
+    color: '#c9a94f',
+    fontSize: 11,
+    fontWeight: '600',
   },
   subNav: {
     flexDirection: 'row',

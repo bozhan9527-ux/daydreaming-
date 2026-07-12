@@ -261,7 +261,12 @@ function TierList({
       <Text style={styles.detailCombatBonus}>
         職業戰鬥加成:+{combatBonusPct}%{!hasChosenJob && '(畢業後生效)'}
       </Text>
-      <Text style={styles.detailDesc}>點下面的階級可以看那一階的技能敘述,不管解鎖了沒都能先看。</Text>
+      <View style={styles.previewBadgeRow}>
+        <View style={styles.previewBadge}>
+          <Text style={styles.previewBadgeText}>預覽</Text>
+        </View>
+        <Text style={styles.previewBadgeDesc}>點下面的階級可以看那一階的技能敘述,不管解鎖了沒都能先看。</Text>
+      </View>
 
       <View style={styles.tierRow}>
         {TIERS.map((tier) => {
@@ -761,6 +766,32 @@ const styles = StyleSheet.create({
     color: '#c8c8d0',
     fontSize: 12,
     lineHeight: 17,
+  },
+  // 下面的階級/技能敘述都是「畢業後才會拿到」的預覽,不是玩家現在真正在投資的技能——
+  // 用跟成就分頁一樣視覺語彙的小標籤明確標出「這是預覽」,避免跟真正在升級的技能搞混。
+  // 這裡不能重用 detailDesc(它在別處是獨立區塊裡的純文字,不在 row 容器內,加 flex:1
+  // 會在那邊變成沿著 column 主軸吃掉多餘高度,把下面的技能清單擠開),另開一個專用樣式。
+  previewBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  previewBadgeDesc: {
+    flex: 1,
+    color: '#c8c8d0',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  previewBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    backgroundColor: 'rgba(143, 191, 224, 0.2)',
+  },
+  previewBadgeText: {
+    color: '#8fbfe0',
+    fontSize: 10,
+    fontWeight: '700',
   },
   detailCombatBonus: {
     color: '#c9a94f',

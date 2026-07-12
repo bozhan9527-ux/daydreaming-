@@ -159,7 +159,7 @@ export default function HomeScreen() {
         又沒有 ScrollView 可以承接時,等於整頁沒有任何東西吃得到那個手勢)。 */}
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* 頂部資源列放最上面,一眼就看得到等級/金幣,不用往下找。 */}
-      <TopResourceBar level={level.level} coins={coins} />
+      <TopResourceBar level={level.level} coins={coins} skillBooks={skillBooks} />
 
       {/* 彩蛋反應框縮小+加外框+改橫向排版——原本100px高、直向堆疊圖示+兩行文字,縮到46px高
           時圖示本身(48px)就已經比整個框還高,彩蛋內容直接被裁掉看不見。改成「圖示在左、
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
   modalSheet: {
-    maxHeight: '75%',
+    maxHeight: '90%',
     backgroundColor: '#17171f',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
