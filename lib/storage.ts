@@ -626,10 +626,39 @@ function isGemType(value: unknown): boolean {
   return value === 'expGem' || value === 'coinGem' || value === 'speedGem';
 }
 
+// 現行(v13起,強化/鑲嵌上線後)判定要接受「歷史上出現過的所有副素質種類」,不能沿用
+// isSubstat——isSubstat 是刻意凍結給 v12 那個時間點用的(v12 存檔本來就只可能有
+// critRate/resistance),但後來 isItemInstanceDataV13 直接疊在 isItemInstanceDataV12 之上,
+// 導致每次擴充 SubstatType(見 game/equipment.ts)新增的種類都不在這個名單裡——玩家身上只要
+// 有一件裝備擲到新種類的副素質,這裡就會判定失敗,現行版本的存檔守衛全部連鎖失敗,一路
+// 掉到 migrate() 最底的 createInitialSaveData(),直接把存檔洗成全新角色。這裡因此不重用
+// isItemInstanceDataV12/isSubstat,改成獨立維護一份完整清單。
+const CURRENT_SUBSTAT_TYPES = [
+  'critRate',
+  'resistance',
+  'physicalResistance',
+  'magicResistance',
+  'physicalCritRate',
+  'physicalCritDamage',
+  'magicCritRate',
+  'magicCritDamage',
+  'physicalAttack',
+  'magicAttack',
+];
+
+function isCurrentSubstat(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return CURRENT_SUBSTAT_TYPES.includes(record.type as string) && typeof record.value === 'number';
+}
+
 function isItemInstanceDataV13(value: unknown): boolean {
-  if (!isItemInstanceDataV12(value)) return false;
+  if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
+    isCurrentSubstat(record.randomSubstat) &&
+    isCurrentSubstat(record.hiddenSubstat) &&
+    typeof record.identified === 'boolean' &&
     typeof record.enhanceLevel === 'number' &&
     Array.isArray(record.socketedGems) &&
     record.socketedGems.every((g) => g === null || isGemType(g))
