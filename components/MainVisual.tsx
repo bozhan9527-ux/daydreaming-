@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { getCycleCount } from '../game/ascension';
 import { getCurrentTier } from '../game/combat';
 import { getJobBackdropColor, getJobBackground } from '../game/sprites/backgrounds';
 import { useGameState } from '../hooks/useGameState';
@@ -21,10 +22,12 @@ export function MainVisual({ children }: MainVisualProps) {
   const job = useGameState((state) => state.job);
   const level = useGameState((state) => state.level);
   const stageProgress = useGameState((state) => state.stageProgress);
+  const totalStagesCleared = useGameState((state) => state.totalStagesCleared);
 
   const tier = getCurrentTier(level.level);
   const background = getJobBackground(job.archetype, job.branch, tier, EXTENDED_ROWS);
   const backdropColor = getJobBackdropColor(job.archetype, job.branch, tier);
+  const cycleCount = getCycleCount(totalStagesCleared);
 
   return (
     <View style={[styles.wrap, { backgroundColor: backdropColor }]}>
@@ -33,7 +36,7 @@ export function MainVisual({ children }: MainVisualProps) {
       </View>
 
       <Text style={styles.stageLabel}>
-        第 {stageProgress.stage} 關 - 第 {stageProgress.subStage} 小關
+        第 {stageProgress.stage} 關 - 第 {stageProgress.subStage} 小關 · 第 {cycleCount + 1} 輪
       </Text>
 
       <View style={styles.content}>{children}</View>
