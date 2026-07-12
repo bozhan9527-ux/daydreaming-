@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 
 import { ACHIEVEMENTS, AchievementProgress, evaluateUnlockedAchievementIds } from '../game/achievements';
+import {
+  ASCENSION_POINTS_PER_CYCLE,
+  ascensionUpgradeCost,
+  AscensionUpgradeId,
+  canUpgradeAscension,
+  getAscensionBonusTotal,
+} from '../game/ascension';
 import { calcKillReward, Encounter, estimateOfflineBattleResult, generateEncounter } from '../game/battle';
 import {
   canUpgradeCompanionGearSlot,
@@ -179,18 +186,26 @@ function computeRewardMultipliers(
   itemInstances: ItemInstances,
   skillTree: SkillTreeLevels,
   studentSkillTree: Record<SkillSlotId, number>,
-  hasChosenJob: boolean
+  hasChosenJob: boolean,
+  ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>
 ): RewardMultipliers {
   const jobMultiplier = currentJobMultiplier(job, level, secondaryJob, hasChosenJob);
   const equipmentBonus = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const companionBonus = getCompanionBonusTotals(companions);
   const companionGearBonus = getCompanionGearBonusTotals(companionGear);
   const passiveBonus = computePassiveSkillBonus(job, skillTree, studentSkillTree, hasChosenJob);
+  // 輪迴/轉生加成(見 game/ascension.ts):永久疊加在所有其他加成之上,不受裝備/寵物坐騎
+  // 更換影響,是唯一不會因為玩家調整build而變動的加成來源。
+  const ascensionExp = getAscensionBonusTotal('exp', ascensionUpgrades);
+  const ascensionCoins = getAscensionBonusTotal('coins', ascensionUpgrades);
+  const ascensionSpeed = getAscensionBonusTotal('speed', ascensionUpgrades);
   return {
     expMultiplier:
-      jobMultiplier * (1 + equipmentBonus.exp + companionBonus.exp + companionGearBonus.exp + passiveBonus.exp),
-    coinMultiplier: 1 + equipmentBonus.coins + companionBonus.coins + companionGearBonus.coins + passiveBonus.coins,
-    speedMultiplier: 1 + equipmentBonus.speed + companionBonus.speed + companionGearBonus.speed,
+      jobMultiplier *
+      (1 + equipmentBonus.exp + companionBonus.exp + companionGearBonus.exp + passiveBonus.exp + ascensionExp),
+    coinMultiplier:
+      1 + equipmentBonus.coins + companionBonus.coins + companionGearBonus.coins + passiveBonus.coins + ascensionCoins,
+    speedMultiplier: 1 + equipmentBonus.speed + companionBonus.speed + companionGearBonus.speed + ascensionSpeed,
   };
 }
 
@@ -238,6 +253,10 @@ interface GameState {
   // 3000 關里程碑成就(見 game/achievements.ts 的 'stage' 分類)靠這個數字判定,不能直接看
   // stageProgress.stage,因為破完第300大關後 stageProgress 會繞回第1關,這個欄位不會。
   totalStagesCleared: number;
+  // 輪迴/轉生系統(見 game/ascension.ts):破完一整輪 3000 關拿到的可花費點數,
+  // ascensionUpgrades 是永久加成樹各節點目前等級。第幾輪不存檔,直接用 totalStagesCleared 算。
+  ascensionPoints: number;
+  ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>;
   // 每日內容:見 game/daily.ts。lastDailyLoginBonus 不存檔,只給 UI 顯示一次性登入獎勵彈窗用。
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -318,6 +337,7 @@ interface GameState {
   unsocketGem: (itemId: string, socketIndex: number) => void;
   claimDailyQuest: () => void;
   claimDailyTask: (id: DailyTaskId) => void;
+  upgradeAscension: (id: AscensionUpgradeId) => void;
   claimAchievement: (id: string) => void;
   claimAllAchievements: () => void;
 }
@@ -344,6 +364,8 @@ type PersistableState = Pick<
   | 'skillBooks'
   | 'stageProgress'
   | 'totalStagesCleared'
+  | 'ascensionPoints'
+  | 'ascensionUpgrades'
   | 'lastDailyResetAt'
   | 'dailyKillCount'
   | 'dailyQuestClaimed'
@@ -385,6 +407,8 @@ function persist(state: PersistableState): void {
     skillBooks: state.skillBooks,
     stageProgress: state.stageProgress,
     totalStagesCleared: state.totalStagesCleared,
+    ascensionPoints: state.ascensionPoints,
+    ascensionUpgrades: state.ascensionUpgrades,
     lastDailyResetAt: state.lastDailyResetAt,
     dailyKillCount: state.dailyKillCount,
     dailyQuestClaimed: state.dailyQuestClaimed,
@@ -498,6 +522,8 @@ export const useGameState = create<GameState>((set, get) => ({
   skillBooks: 0,
   stageProgress: createInitialStageProgress(),
   totalStagesCleared: 0,
+  ascensionPoints: 0,
+  ascensionUpgrades: {},
   lastDailyResetAt: '',
   dailyKillCount: 0,
   dailyQuestClaimed: false,
@@ -554,7 +580,8 @@ export const useGameState = create<GameState>((set, get) => ({
       itemInstances,
       save.skillTree,
       save.studentSkillTree,
-      save.hasChosenJob
+      save.hasChosenJob,
+      save.ascensionUpgrades
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
 
@@ -592,6 +619,8 @@ export const useGameState = create<GameState>((set, get) => ({
       skillBooks: save.skillBooks,
       stageProgress: save.stageProgress,
       totalStagesCleared: save.totalStagesCleared,
+      ascensionPoints: save.ascensionPoints,
+      ascensionUpgrades: save.ascensionUpgrades,
       lastDailyResetAt: newDay ? todayDateString() : save.lastDailyResetAt,
       dailyKillCount: newDay ? 0 : save.dailyKillCount,
       dailyQuestClaimed: newDay ? false : save.dailyQuestClaimed,
@@ -680,7 +709,8 @@ export const useGameState = create<GameState>((set, get) => ({
         state.itemInstances,
         state.skillTree,
         state.studentSkillTree,
-        state.hasChosenJob
+        state.hasChosenJob,
+        state.ascensionUpgrades
       );
       const isBoss = isBossSubStage(state.stageProgress.subStage);
       const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
@@ -734,7 +764,8 @@ export const useGameState = create<GameState>((set, get) => ({
       state.itemInstances,
       state.skillTree,
       state.studentSkillTree,
-      state.hasChosenJob
+      state.hasChosenJob,
+      state.ascensionUpgrades
     );
     // 關卡難度倍率:跟這隻怪生成當下用的是同一份 stageProgress(這次擊殺才會讓它晉級,
     // 所以算獎勵的當下它還沒變),疊加在等級/裝備既有的獎勵倍率之上,是完全獨立的另一條軸線。
@@ -922,6 +953,9 @@ export const useGameState = create<GameState>((set, get) => ({
       // 魔王小關(isBoss)只需要1擊就晉級(見 game/stages.ts),所以「這隻是魔王」跟「這一擊
       // 剛清完一個大關」是同一件事,不用另外比對 stageProgress 前後差異。
       totalStagesCleared: state.totalStagesCleared + (state.currentEncounter.isBoss ? 1 : 0),
+      // 輪迴/轉生點數(見 game/ascension.ts):isFinalBoss 專指第300大關的大魔王,打贏這一擊
+      // 才算破完整輪 3000 關,固定發放,不隨輪次遞增/遞減。
+      ascensionPoints: state.ascensionPoints + (state.currentEncounter.isFinalBoss ? ASCENSION_POINTS_PER_CYCLE : 0),
       killCount: state.killCount + 1,
       dailyKillCount: state.dailyKillCount + 1,
       lastEvent: event,
@@ -1384,6 +1418,20 @@ export const useGameState = create<GameState>((set, get) => ({
       enhanceStones: enhanceStones + (reward.enhanceStones ?? 0),
       skillBooks: skillBooks + (reward.skillBooks ?? 0),
       dailyTaskClaimedIds: [...dailyTaskClaimedIds, id],
+    });
+    persist(get());
+  },
+
+  // 輪迴/轉生加成樹(見 game/ascension.ts):花轉生點數把某個節點升1級,金幣/bankedExp
+  // 都不吃,是轉生點數這條獨立經濟軸線唯一的消耗管道。
+  upgradeAscension: (id) => {
+    const { ascensionPoints, ascensionUpgrades } = get();
+    if (!canUpgradeAscension(id, ascensionUpgrades, ascensionPoints)) return;
+    const currentLevel = ascensionUpgrades[id] ?? 0;
+    const cost = ascensionUpgradeCost(currentLevel);
+    set({
+      ascensionPoints: ascensionPoints - cost,
+      ascensionUpgrades: { ...ascensionUpgrades, [id]: currentLevel + 1 },
     });
     persist(get());
   },

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { AscensionUpgradeId } from '../game/ascension';
 import { Archetype, JobBranch } from '../game/combat';
 import {
   CompanionGearState,
@@ -39,7 +40,7 @@ import { createInitialStudentSkillTreeLevels, STUDENT_SKILL_LEVEL_CAP } from '..
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 29;
+export const SCHEMA_VERSION = 30;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -175,6 +176,12 @@ export interface SaveData {
   // 破完一輪會繞回第1關第1小關,靠這個永不歸零的欄位判定「關卡里程碑」成就(見
   // game/achievements.ts 的 'stage' 分類),不能直接看 stageProgress.stage。
   totalStagesCleared: number;
+  // 輪迴/轉生系統(見 game/ascension.ts):破完一整輪 3000 關(第300大關的大魔王)發放的
+  // 可花費點數,跟金幣是兩條獨立的經濟軸線。ascensionUpgrades 是永久加成樹各節點目前等級,
+  // 缺少的 key 一律視為 0 級。輪次數(第幾輪)不存檔,直接用 totalStagesCleared 算,見
+  // game/ascension.ts 的 getCycleCount。
+  ascensionPoints: number;
+  ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>;
   lastActiveAt: number;
 }
 
@@ -216,6 +223,8 @@ export function createInitialSaveData(): SaveData {
     totalStagesCleared: 0,
     dailyTaskProgress: {},
     dailyTaskClaimedIds: [],
+    ascensionPoints: 0,
+    ascensionUpgrades: {},
     lastHpRegenTickAt: Date.now(),
     lastActiveAt: Date.now(),
   };
@@ -1049,6 +1058,16 @@ function isDailyTaskClaimedIds(value: unknown): value is DailyTaskId[] {
   return Array.isArray(value) && value.every((id) => DAILY_TASK_IDS.includes(id));
 }
 
+const ASCENSION_UPGRADE_IDS: AscensionUpgradeId[] = ['exp', 'coins', 'speed'];
+
+function isAscensionUpgrades(value: unknown): value is Partial<Record<AscensionUpgradeId, number>> {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return Object.entries(record).every(
+    ([key, level]) => ASCENSION_UPGRADE_IDS.includes(key as AscensionUpgradeId) && typeof level === 'number'
+  );
+}
+
 interface SaveDataV19 {
   version: 19;
   level: LevelState;
@@ -1732,16 +1751,36 @@ function isSaveDataV28(value: unknown): value is SaveDataV28 {
   );
 }
 
-// v29(任務池上線):現在的 SaveData 完整形狀,比 v28 多了 dailyTaskProgress/dailyTaskClaimedIds。
+// v29(任務池上線,輪迴系統上線前的最後一版):比 v28 多了 dailyTaskProgress/
+// dailyTaskClaimedIds,沒有 ascensionPoints/ascensionUpgrades。凍結成明確獨立的
+// interface+literal版本號檢查,形狀直接繼承 SaveDataV28(只換 version 字面量、疊加新欄位)。
+interface SaveDataV29 extends Omit<SaveDataV28, 'version'> {
+  version: 29;
+  dailyTaskProgress: Partial<Record<DailyTaskId, number>>;
+  dailyTaskClaimedIds: DailyTaskId[];
+}
+
+function isSaveDataV29(value: unknown): value is SaveDataV29 {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 29 &&
+    isSaveDataV28({ ...record, version: 28 }) &&
+    isDailyTaskProgress(record.dailyTaskProgress) &&
+    isDailyTaskClaimedIds(record.dailyTaskClaimedIds)
+  );
+}
+
+// v30(輪迴系統上線):現在的 SaveData 完整形狀,比 v29 多了 ascensionPoints/ascensionUpgrades。
 // 這是 migrate() 的第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
-function isSaveDataV29(value: unknown): value is SaveData {
+function isSaveDataV30(value: unknown): value is SaveData {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
     record.version === SCHEMA_VERSION &&
-    isSaveDataV28({ ...record, version: 28 }) &&
-    isDailyTaskProgress(record.dailyTaskProgress) &&
-    isDailyTaskClaimedIds(record.dailyTaskClaimedIds)
+    isSaveDataV29({ ...record, version: 29 }) &&
+    typeof record.ascensionPoints === 'number' &&
+    isAscensionUpgrades(record.ascensionUpgrades)
   );
 }
 
@@ -1810,15 +1849,28 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // v28→v29 沒有 dailyTaskProgress/dailyTaskClaimedIds(見 game/daily.ts 的任務池):都補空
 // (物件/陣列),等同「今天還沒做任何一項新任務」——跨日重置(見 hooks/useGameState.ts 的
 // load())本來就會把這兩個欄位歸零,所以舊存檔不管是不是剛好在當天載入都不會有異常狀態。
+// v29→v30 沒有 ascensionPoints/ascensionUpgrades(見 game/ascension.ts 的輪迴/轉生系統):
+// 補 0/空物件——這個功能上線前的存檔沒有「輪迴過」這個概念,一律視為還沒轉生過,只能重新
+// 累積(呼應 totalStagesCleared 當初上線時同樣選擇補 0 的既有慣例)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV29(value)) return value;
+  if (isSaveDataV30(value)) return value;
+  if (isSaveDataV29(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
+    };
+  }
   if (isSaveDataV28(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
     };
   }
   if (isSaveDataV27(value)) {
@@ -1828,6 +1880,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
     };
   }
   if (isSaveDataV26(value)) {
@@ -1839,6 +1893,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1852,6 +1908,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1866,6 +1924,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1881,6 +1941,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1897,6 +1959,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1913,6 +1977,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1931,6 +1997,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1950,6 +2018,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1972,6 +2042,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1995,6 +2067,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -2036,6 +2110,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2078,6 +2154,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2120,6 +2198,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2162,6 +2242,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2204,6 +2286,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2246,6 +2330,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2288,6 +2374,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2330,6 +2418,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2372,6 +2462,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2414,6 +2506,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2456,6 +2550,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2498,6 +2594,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2540,6 +2638,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2582,6 +2682,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2624,6 +2726,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2666,6 +2770,8 @@ function migrate(value: unknown): SaveData {
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
+      ascensionPoints: 0,
+      ascensionUpgrades: {},
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };

@@ -2,6 +2,7 @@ import { ComponentType } from 'react';
 
 import { TabIconId } from '../game/sprites/tabIcons';
 import { AchievementPanel } from './AchievementPanel';
+import { AscensionPanel } from './AscensionPanel';
 import { CompanionPanel } from './CompanionPanel';
 import { DungeonPanel } from './DungeonPanel';
 import { EquipmentPanel } from './EquipmentPanel';
@@ -29,4 +30,5 @@ export const PANEL_TABS: PanelTab[] = [
   { id: 'achievement', label: '成就', icon: 'achievement', Component: AchievementPanel },
   { id: 'companion', label: '寵物坐騎', icon: 'companion', Component: CompanionPanel },
   { id: 'dungeon', label: '副本', icon: 'dungeon', Component: DungeonPanel },
+  { id: 'ascension', label: '轉生', icon: 'ascension', Component: AscensionPanel },
 ];

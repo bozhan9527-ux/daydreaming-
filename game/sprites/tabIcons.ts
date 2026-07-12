@@ -10,7 +10,8 @@ export type TabIconId =
   | 'codex'
   | 'achievement'
   | 'inventory'
-  | 'dungeon';
+  | 'dungeon'
+  | 'ascension';
 
 const ICON_COLOR = '#f2f2f2';
 
@@ -171,6 +172,23 @@ const DUNGEON_ICON_FRAME = [
   '............',
 ];
 
+// 轉生:環狀箭頭造型(缺一角的圓環+箭頭),呼應「輪迴一圈again」的意象,跟副本的
+// 拱門/圖鑑的書本區隔開來,一眼看得出是循環而不是進入某個空間。
+const ASCENSION_ICON_FRAME = [
+  '....XXXX....',
+  '..XX....XX..',
+  '.X........X.',
+  'X..........X',
+  'X..........X',
+  'X....XX...X.',
+  'X....XX..X..',
+  'X..........X',
+  '.X........X.',
+  '..XX....XX..',
+  '....XXXX....',
+  '............',
+];
+
 const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   job: JOB_ICON_FRAME,
   equipment: EQUIPMENT_ICON_FRAME,
@@ -182,6 +200,7 @@ const TAB_ICON_FRAMES: Record<TabIconId, string[]> = {
   achievement: ACHIEVEMENT_ICON_FRAME,
   inventory: INVENTORY_ICON_FRAME,
   dungeon: DUNGEON_ICON_FRAME,
+  ascension: ASCENSION_ICON_FRAME,
 };
 
 export interface TabIconData {
