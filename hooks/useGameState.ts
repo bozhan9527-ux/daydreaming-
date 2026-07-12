@@ -81,7 +81,7 @@ import {
   todayDateString,
 } from '../game/daily';
 import { getRandomEvent, GameEvent } from '../game/events';
-import { heroAttackPower, heroMaxHp, RECOVERY_DELAY_MS, resolveFightHealth } from '../game/heroHealth';
+import { applyHpRegenTick, heroAttackPower, heroMaxHp, RECOVERY_DELAY_MS, resolveFightHealth } from '../game/heroHealth';
 import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
 import {
   activeSkillTriggerIntervalSeconds,
@@ -266,6 +266,10 @@ interface GameState {
   // defeatRecoveryUntil 是戰敗倒地恢復到什麼時間戳(null = 沒有在恢復中)。
   heroHp: number;
   defeatRecoveryUntil: number | null;
+  // 回血(hpRegen,見 game/heroHealth.ts 的 applyHpRegenTick):上一次時間推進 tick 的基準時間戳,
+  // 跟 activeSkillTimers 那組「不存檔、重開就重算」的計時器不同——這個要存檔,不然每次重開
+  // App 都會被視為「剛好經過一個新的起算點」,離線期間累積的回血 tick 會憑空消失或重算錯誤。
+  lastHpRegenTickAt: number;
   lastEvent: GameEvent | null;
   lastCompanionDropId: string | null;
   lastEquipmentDropId: string | null;
@@ -341,6 +345,7 @@ type PersistableState = Pick<
   | 'killCount'
   | 'heroHp'
   | 'defeatRecoveryUntil'
+  | 'lastHpRegenTickAt'
 >;
 
 function persist(state: PersistableState): void {
@@ -378,6 +383,7 @@ function persist(state: PersistableState): void {
     killCount: state.killCount,
     heroHp: state.heroHp,
     defeatRecoveryUntil: state.defeatRecoveryUntil,
+    lastHpRegenTickAt: state.lastHpRegenTickAt,
     lastActiveAt: Date.now(),
   });
 }
@@ -484,6 +490,7 @@ export const useGameState = create<GameState>((set, get) => ({
   killCount: 0,
   heroHp: heroMaxHp(1),
   defeatRecoveryUntil: null,
+  lastHpRegenTickAt: Date.now(),
   lastEvent: null,
   lastCompanionDropId: null,
   lastEquipmentDropId: null,
@@ -565,6 +572,7 @@ export const useGameState = create<GameState>((set, get) => ({
       killCount: save.killCount,
       heroHp: save.heroHp,
       defeatRecoveryUntil: save.defeatRecoveryUntil,
+      lastHpRegenTickAt: save.lastHpRegenTickAt,
       lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,
@@ -598,6 +606,30 @@ export const useGameState = create<GameState>((set, get) => ({
     const state = get();
     if (!state.isLoaded) return;
 
+    // 吸血(lifesteal)/回血(hpRegen)的合併素質+passive3被動加成:兩者都吃同一份 substatTotals
+    // 跟同一格 passive3 等級(見 game/skillTree.ts 的 getPassiveEffectKind 'lifeMastery'),
+    // 在這裡算一次給下面全部用到,不用在每個分支各自重算。
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    const passive3Level = state.hasChosenJob
+      ? state.skillTree[state.job.archetype].passive3
+      : state.studentSkillTree.passive3;
+    const lifestealBonus = substatTotals.lifesteal + getPassiveBonusValue(passive3Level);
+    const hpRegenTotal = substatTotals.hpRegen + getPassiveBonusValue(passive3Level);
+
+    // 回血(hpRegen,見 game/heroHealth.ts 的 applyHpRegenTick):跟戰鬥狀態完全無關,不管目前
+    // 有沒有生成中的戰鬥、戰鬥進行到哪,每次 tick 都先無條件推進一次——所以特意放在最上面,
+    // 在下面 currentEncounter/fightStartedAt 的任何分支判斷之前執行,不會因為戰鬥還在跑
+    // 或剛好在生成下一場而被跳過。
+    const hpRegenResult = applyHpRegenTick(
+      state.heroHp,
+      heroMaxHp(state.level.level),
+      state.lastHpRegenTickAt,
+      hpRegenTotal
+    );
+    if (hpRegenResult.heroHp !== state.heroHp || hpRegenResult.lastHpRegenTickAt !== state.lastHpRegenTickAt) {
+      set({ heroHp: hpRegenResult.heroHp, lastHpRegenTickAt: hpRegenResult.lastHpRegenTickAt });
+    }
+
     if (!state.currentEncounter || state.fightStartedAt === null) {
       // 戰敗倒地恢復:這段時間內不生成新戰鬥,呈現「倒地恢復中」的空檔,恢復期過了才照常生成下一場戰鬥。
       if (state.defeatRecoveryUntil !== null && Date.now() < state.defeatRecoveryUntil) {
@@ -619,7 +651,6 @@ export const useGameState = create<GameState>((set, get) => ({
       const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
       const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress);
       const bossTier = getCurrentTier(state.level.level);
-      const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
       const heroSchool = getArchetypeComposition(state.job.archetype).damageType;
       const attackPower = heroAttackPower(
         state.level.level,
@@ -676,20 +707,22 @@ export const useGameState = create<GameState>((set, get) => ({
     const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, expMultiplier, coinMultiplier, difficultyMultiplier);
 
     // 勇者血量/戰敗風險判定(見 game/heroHealth.ts):在這場戰鬥開始「前」的血量基礎上計算,
-    // 跟結算擊殺獎勵同一個時間點一次做完,不拆到下一個 tick。substatTotals 在這裡算一次,
-    // 下面爆擊率判定共用同一份,不重複呼叫。
-    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    // 跟結算擊殺獎勵同一個時間點一次做完,不拆到下一個 tick。substatTotals 已經在函式最上面
+    // 算過一份(跟 hpRegen tick 共用),下面爆擊率判定也共用同一份,不重複呼叫。
+    // currentHp 用 hpRegenResult.heroHp(這個 tick 剛推進過回血 tick 之後的血量),不是
+    // 前面快照下來就沒再更新的 state.heroHp,不然這次 hpRegen tick 剛回的血會被漏算。
     const monsterSchool = state.currentEncounter.monster.damageType;
     const matchingResistance =
       monsterSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
     const healthResult = resolveFightHealth(
-      state.heroHp,
+      hpRegenResult.heroHp,
       heroMaxHp(state.level.level),
       state.level.level,
       getCurrentTier(state.level.level),
       matchingResistance,
       state.currentEncounter.rarity,
-      difficultyMultiplier
+      difficultyMultiplier,
+      lifestealBonus
     );
 
     if (healthResult.defeated) {
@@ -892,6 +925,12 @@ export const useGameState = create<GameState>((set, get) => ({
     const dungeonMonsterSchool = oppositeDamageType(targetSchool);
     const matchingResistance =
       dungeonMonsterSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
+    // 吸血加成跟 tickBattle 同一套算法(裝備素質+玩家目前主職 passive3 等級),副本沒有
+    // hpRegen tick(見 hooks/useGameState.ts 的 tickBattle 說明,只有一般戰鬥迴圈才會推進時間制回血)。
+    const passive3Level = state.hasChosenJob
+      ? state.skillTree[state.job.archetype].passive3
+      : state.studentSkillTree.passive3;
+    const lifestealBonus = substatTotals.lifesteal + getPassiveBonusValue(passive3Level);
     const healthResult = resolveFightHealth(
       state.heroHp,
       heroMaxHp(state.level.level),
@@ -899,7 +938,8 @@ export const useGameState = create<GameState>((set, get) => ({
       getCurrentTier(state.level.level),
       matchingResistance,
       'legendary',
-      dungeonDifficultyMultiplier(state.level.level)
+      dungeonDifficultyMultiplier(state.level.level),
+      lifestealBonus
     );
 
     if (healthResult.defeated) {

@@ -42,6 +42,19 @@ const SPARK_COLOR = '#f2d675';
 const HEAL_COLOR = '#9fd9a0';
 const STAR_COLOR = '#ffffff';
 
+// passive3(吸血+自動回血,見 game/skillTree.ts 的 passive3/lifeMastery):愛心剪影,象徵血量
+// 恢復,6 個職業共用同一個形狀(統一用 HEAL_COLOR,呼應這個顏色本來就是「治療/回血」語意),
+// 不像其餘 36 格各自量身訂做剪影——passive3 本身也沒有 tier2~5 專屬敘述(名稱/描述全職業
+// 全階級固定不變,見 SKILL_SLOT_NAMES/SKILL_SLOT_DESCRIPTIONS),沒有 evolution 增量,
+// 純靠 tierPalette 既有的「越高階越飽和明亮、5階混金」機制表現階級感就夠。
+const HEART_PASSIVE3: Mark[] = [
+  { x: 3, y: 2, c: 'H' }, { x: 4, y: 2, c: 'H' }, { x: 7, y: 2, c: 'H' }, { x: 8, y: 2, c: 'H' },
+  ...rect(2, 3, 9, 4, 'H'),
+  ...rect(3, 5, 8, 5, 'H'),
+  ...rect(4, 6, 7, 6, 'H'),
+  { x: 5, y: 7, c: 'H' }, { x: 6, y: 7, c: 'H' },
+];
+
 // ===== physicalMelee(工地/扛貨風味,身分軌跡:工讀生→搬運工→工地師傅→消防員→特種部隊)=====
 
 // 扛貨練出的體感:紙箱剪影 + 一條斜背帶。
@@ -606,6 +619,10 @@ const SKILL_ICON_SPECS: Record<Archetype, Record<SkillSlotId, SkillIconSpec>> = 
       palette: { B: PHYSICAL_COLOR, K: '#3a3542' },
       evolution: { 2: PM_PASSIVE2_T2, 3: PM_PASSIVE2_T3, 4: PM_PASSIVE2_T4, 5: PM_PASSIVE2_T5 },
     },
+    passive3: {
+      marks: HEART_PASSIVE3,
+      palette: { H: HEAL_COLOR },
+    },
     active1: {
       marks: PM_ACTIVE1,
       palette: { B: PHYSICAL_COLOR, S: SPARK_COLOR },
@@ -637,6 +654,10 @@ const SKILL_ICON_SPECS: Record<Archetype, Record<SkillSlotId, SkillIconSpec>> = 
       marks: PR_PASSIVE2,
       palette: { A: PHYSICAL_COLOR, S: SPARK_COLOR },
       evolution: { 2: PR_PASSIVE2_T2, 3: PR_PASSIVE2_T3, 4: PR_PASSIVE2_T4, 5: PR_PASSIVE2_T5 },
+    },
+    passive3: {
+      marks: HEART_PASSIVE3,
+      palette: { H: HEAL_COLOR },
     },
     active1: {
       marks: PR_ACTIVE1,
@@ -670,6 +691,10 @@ const SKILL_ICON_SPECS: Record<Archetype, Record<SkillSlotId, SkillIconSpec>> = 
       palette: { R: PHYSICAL_COLOR },
       evolution: { 2: PS_PASSIVE2_T2, 3: PS_PASSIVE2_T3, 4: PS_PASSIVE2_T4, 5: PS_PASSIVE2_T5 },
     },
+    passive3: {
+      marks: HEART_PASSIVE3,
+      palette: { H: HEAL_COLOR },
+    },
     active1: {
       marks: PS_ACTIVE1,
       palette: { R: PHYSICAL_COLOR, H: HEAL_COLOR },
@@ -701,6 +726,10 @@ const SKILL_ICON_SPECS: Record<Archetype, Record<SkillSlotId, SkillIconSpec>> = 
       marks: MM_PASSIVE2,
       palette: { W: STAR_COLOR },
       evolution: { 2: MM_PASSIVE2_T2, 3: MM_PASSIVE2_T3, 4: MM_PASSIVE2_T4, 5: MM_PASSIVE2_T5 },
+    },
+    passive3: {
+      marks: HEART_PASSIVE3,
+      palette: { H: HEAL_COLOR },
     },
     active1: {
       marks: MM_ACTIVE1,
@@ -734,6 +763,10 @@ const SKILL_ICON_SPECS: Record<Archetype, Record<SkillSlotId, SkillIconSpec>> = 
       palette: { O: RANGED_MAGIC_COLOR },
       evolution: { 2: MR_PASSIVE2_T2, 3: MR_PASSIVE2_T3, 4: MR_PASSIVE2_T4, 5: MR_PASSIVE2_T5 },
     },
+    passive3: {
+      marks: HEART_PASSIVE3,
+      palette: { H: HEAL_COLOR },
+    },
     active1: {
       marks: MR_ACTIVE1,
       palette: { O: RANGED_MAGIC_COLOR, K: '#3a3542' },
@@ -765,6 +798,10 @@ const SKILL_ICON_SPECS: Record<Archetype, Record<SkillSlotId, SkillIconSpec>> = 
       marks: MS_PASSIVE2,
       palette: { G: SUPPORT_MAGIC_COLOR, P: STAR_COLOR },
       evolution: { 2: MS_PASSIVE2_T2, 3: MS_PASSIVE2_T3, 4: MS_PASSIVE2_T4, 5: MS_PASSIVE2_T5 },
+    },
+    passive3: {
+      marks: HEART_PASSIVE3,
+      palette: { H: HEAL_COLOR },
     },
     active1: {
       marks: MS_ACTIVE1,

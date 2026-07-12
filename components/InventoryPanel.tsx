@@ -57,6 +57,8 @@ const SUBSTAT_LABELS: Record<SubstatType, string> = {
   magicCritDamage: '魔法爆擊傷害',
   physicalAttack: '物理攻擊力',
   magicAttack: '魔法攻擊力',
+  lifesteal: '吸血',
+  hpRegen: '自動回血',
 };
 
 // 9個部位排成一列橫向選槽,不需要像裝備分頁那樣圍著紙娃娃排兩欄——這裡的重點是

@@ -1,10 +1,12 @@
 import { Archetype, getArchetypeComposition, JobTier, Subtype } from './combat';
 
-// 每個職業 6 個技能欄位:2 被動(永久數值加成)+ 4 主動(各自獨立冷卻,同時運作)。
-export type SkillSlotId = 'passive1' | 'passive2' | 'active1' | 'active2' | 'active3' | 'active4';
+// 每個職業 7 個技能欄位:3 被動(永久數值加成)+ 4 主動(各自獨立冷卻,同時運作)。
+// passive3 是吸血(lifesteal)+回血(hpRegen)雙效合一的通用被動,見 getPassiveEffectKind 的
+// 'lifeMastery' 分類與 game/heroHealth.ts 的實際套用點。
+export type SkillSlotId = 'passive1' | 'passive2' | 'passive3' | 'active1' | 'active2' | 'active3' | 'active4';
 export type ActiveSkillSlotId = 'active1' | 'active2' | 'active3' | 'active4';
 
-export const PASSIVE_SLOT_IDS: SkillSlotId[] = ['passive1', 'passive2'];
+export const PASSIVE_SLOT_IDS: SkillSlotId[] = ['passive1', 'passive2', 'passive3'];
 export const ACTIVE_SLOT_IDS: ActiveSkillSlotId[] = ['active1', 'active2', 'active3', 'active4'];
 export const SKILL_SLOT_IDS: SkillSlotId[] = [...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS];
 
@@ -15,7 +17,7 @@ export function isPassiveSlot(slot: SkillSlotId): boolean {
 export type SkillTreeLevels = Record<Archetype, Record<SkillSlotId, number>>;
 
 export function createInitialSkillTreeLevels(): SkillTreeLevels {
-  const emptySlots = { passive1: 0, passive2: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
+  const emptySlots = { passive1: 0, passive2: 0, passive3: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
   return {
     physicalMelee: { ...emptySlots },
     physicalRanged: { ...emptySlots },
@@ -76,7 +78,7 @@ export function activeSkillTriggerIntervalSeconds(slot: ActiveSkillSlotId, level
 }
 
 export type ActiveEffectKind = 'instantFinish' | 'doubleReward' | 'bonusCoins' | 'expBoost';
-export type PassiveEffectKind = 'expMastery' | 'coinMastery';
+export type PassiveEffectKind = 'expMastery' | 'coinMastery' | 'lifeMastery';
 
 const BONUS_COINS_AMOUNT = 20;
 const EXP_BOOST_AMOUNT = 30;
@@ -146,9 +148,12 @@ export function secondaryActiveSkillTriggerIntervalSeconds(level: number): numbe
   return activeSkillTriggerIntervalSeconds('active1', level) * SECONDARY_SKILL_INTERVAL_MULTIPLIER;
 }
 
-// 被動一律是 passive1=經驗系、passive2=金幣系,所有職業共用同一套分類,靠名稱/描述表現職業風味。
+// 被動一律是 passive1=經驗系、passive2=金幣系、passive3=吸血+回血雙效合一系,所有職業共用
+// 同一套分類,靠名稱/描述表現職業風味。
 export function getPassiveEffectKind(slot: SkillSlotId): PassiveEffectKind {
-  return slot === 'passive1' ? 'expMastery' : 'coinMastery';
+  if (slot === 'passive1') return 'expMastery';
+  if (slot === 'passive2') return 'coinMastery';
+  return 'lifeMastery';
 }
 
 // 每級 +3% 加成,階5滿級(10級)時最高 +30%(跟舊制「300級封頂30%」戰力對齊,只是刻度從
@@ -164,6 +169,7 @@ export const SKILL_SLOT_NAMES: Record<Archetype, Record<SkillSlotId, string>> = 
   physicalMelee: {
     passive1: '扛貨練出的體感',
     passive2: '工地行情摸透了',
+    passive3: '扛出來的韌性',
     active1: '爆擊一擊',
     active2: '連環出拳',
     active3: '順手清點庫存',
@@ -172,6 +178,7 @@ export const SKILL_SLOT_NAMES: Record<Archetype, Record<SkillSlotId, string>> = 
   physicalRanged: {
     passive1: '抄近路練出的直覺',
     passive2: '跑單跑出的效率',
+    passive3: '跑車練出的耐力',
     active1: '連續多重射擊',
     active2: '順路多接一單',
     active3: '熟門熟路',
@@ -180,6 +187,7 @@ export const SKILL_SLOT_NAMES: Record<Archetype, Record<SkillSlotId, string>> = 
   physicalSupport: {
     passive1: '站櫃練出的觀察力',
     passive2: '會員點數精算術',
+    passive3: '顧客服務練出的抗壓性',
     active1: '治療光環',
     active2: '貼心的叮嚀',
     active3: '速戰速決',
@@ -188,6 +196,7 @@ export const SKILL_SLOT_NAMES: Record<Archetype, Record<SkillSlotId, string>> = 
   magicMelee: {
     passive1: '修煉日常',
     passive2: '香油錢緣分',
+    passive3: '打坐修煉的元氣',
     active1: '能量爆發斬',
     active2: '連環符咒',
     active3: '收驚順便收紅包',
@@ -196,6 +205,7 @@ export const SKILL_SLOT_NAMES: Record<Archetype, Record<SkillSlotId, string>> = 
   magicRanged: {
     passive1: '肝出來的手感',
     passive2: '接案眼光',
+    passive3: '肝出來的恢復力',
     active1: '法術齊射',
     active2: '業配置入',
     active3: '熬夜肝出的心得',
@@ -204,6 +214,7 @@ export const SKILL_SLOT_NAMES: Record<Archetype, Record<SkillSlotId, string>> = 
   magicSupport: {
     passive1: '臨床經驗',
     passive2: '診間人脈',
+    passive3: '行醫累積的養生術',
     active1: '增幅祝福',
     active2: '衛教叮嚀',
     active3: '藥到病除',
@@ -215,6 +226,7 @@ export const SKILL_SLOT_DESCRIPTIONS: Record<Archetype, Record<SkillSlotId, stri
   physicalMelee: {
     passive1: '日復一日扛貨練出的體感,打怪的經驗值吸收得更快。',
     passive2: '在工地行情裡打滾久了,順手多帶一點回家。',
+    passive3: '長期扛重物練出的韌性,讓身體恢復力跟著變好,吸血跟自動回血效果都會提升。',
     active1: '一拳打爆眼前的敵人,直接讓下一場戰鬥瞬間結束。',
     active2: '拳拳到肉,這次擊殺的經驗與金幣獎勵直接翻倍。',
     active3: '收工前順手清點一下庫存,多賺一筆零用錢。',
@@ -223,6 +235,7 @@ export const SKILL_SLOT_DESCRIPTIONS: Record<Archetype, Record<SkillSlotId, stri
   physicalRanged: {
     passive1: '抄近路抄久了,連怎麼打怪都比別人有效率。',
     passive2: '跑單跑出心得,順路的錢也不放過。',
+    passive3: '長時間在外奔波練出的底子耐力,吸血跟自動回血效果都會提升。',
     active1: '連續多重射擊招呼過去,這次擊殺的經驗與金幣獎勵直接翻倍。',
     active2: '順路多接一單,額外進帳一筆金幣。',
     active3: '熟門熟路抄捷徑,額外進帳一筆經驗值。',
@@ -231,6 +244,7 @@ export const SKILL_SLOT_DESCRIPTIONS: Record<Archetype, Record<SkillSlotId, stri
   physicalSupport: {
     passive1: '站櫃檯練出的敏銳觀察力,經驗值吸收得更快。',
     passive2: '會員點數精算到位,順手多換一點回饋金。',
+    passive3: '第一線服務練出的抗壓體質,吸血跟自動回血效果都會提升。',
     active1: '一圈治療光環罩住全場,額外進帳一筆金幣。',
     active2: '貼心叮嚀送到心坎裡,額外進帳一筆經驗值。',
     active3: '手腳俐落速戰速決,直接讓下一場戰鬥瞬間結束。',
@@ -239,6 +253,7 @@ export const SKILL_SLOT_DESCRIPTIONS: Record<Archetype, Record<SkillSlotId, stri
   magicMelee: {
     passive1: '每天固定修煉的日常,經驗值吸收得更快。',
     passive2: '香油錢的緣分到了,順手多收一點。',
+    passive3: '打坐修煉出的元氣底子,吸血跟自動回血效果都會提升。',
     active1: '灌注能量的爆發斬,直接讓下一場戰鬥瞬間結束。',
     active2: '連環符咒一張接一張,這次擊殺的經驗與金幣獎勵直接翻倍。',
     active3: '順便幫怪物收個驚,額外進帳一筆金幣。',
@@ -247,6 +262,7 @@ export const SKILL_SLOT_DESCRIPTIONS: Record<Archetype, Record<SkillSlotId, stri
   magicRanged: {
     passive1: '肝出來的手感就是不一樣,經驗值吸收得更快。',
     passive2: '接案眼光練出來了,順手多賺一點外快。',
+    passive3: '熬夜爆肝練出的恢復本能,吸血跟自動回血效果都會提升。',
     active1: '法術齊射覆蓋戰場,這次擊殺的經驗與金幣獎勵直接翻倍。',
     active2: '業配悄悄置入,額外進帳一筆金幣。',
     active3: '熬夜肝出的心得沒有白費,額外進帳一筆經驗值。',
@@ -255,6 +271,7 @@ export const SKILL_SLOT_DESCRIPTIONS: Record<Archetype, Record<SkillSlotId, stri
   magicSupport: {
     passive1: '看診看出來的臨床經驗,經驗值吸收得更快。',
     passive2: '診間累積的人脈,順手多收一點紅包。',
+    passive3: '行醫多年悟出的養生之道,吸血跟自動回血效果都會提升。',
     active1: '增幅祝福籠罩全隊,額外進帳一筆金幣。',
     active2: '衛教叮嚀說得仔細,額外進帳一筆經驗值。',
     active3: '手起刀落藥到病除,直接讓下一場戰鬥瞬間結束。',
@@ -268,7 +285,9 @@ export function getSkillSlotBonusDescription(archetype: Archetype, slot: SkillSl
   if (isPassiveSlot(slot)) {
     const kind = getPassiveEffectKind(slot);
     const pct = Math.round(getPassiveBonusValue(level) * 1000) / 10;
-    return kind === 'expMastery' ? `永久經驗獲取 +${pct}%` : `永久金幣獲取 +${pct}%`;
+    if (kind === 'expMastery') return `永久經驗獲取 +${pct}%`;
+    if (kind === 'coinMastery') return `永久金幣獲取 +${pct}%`;
+    return `永久吸血+自動回血 +${pct}%`;
   }
   const kind = getActiveEffectKind(archetype, slot);
   // isPassiveSlot(slot) 已經在上面 return 過了,能走到這裡代表 slot 一定是 4 個主動欄位之一。

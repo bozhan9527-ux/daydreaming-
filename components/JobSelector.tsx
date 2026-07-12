@@ -17,6 +17,7 @@ import { getEquipmentBonusTotalsFull, getSubstatTotals } from '../game/equipment
 import { heroAttackPower, heroDefensePower, heroMaxHp } from '../game/heroHealth';
 import {
   ACTIVE_SLOT_IDS,
+  getPassiveBonusValue,
   getSkillSlotBonusDescription,
   isPassiveSlot,
   PASSIVE_SLOT_IDS,
@@ -81,12 +82,20 @@ function HeroStatusPanel() {
   const itemInstances = useGameState((state) => state.itemInstances);
   const level = useGameState((state) => state.level);
   const job = useGameState((state) => state.job);
+  const skillTree = useGameState((state) => state.skillTree);
+  const studentSkillTree = useGameState((state) => state.studentSkillTree);
+  const hasChosenJob = useGameState((state) => state.hasChosenJob);
 
   const currentTier = getCurrentTier(level.level);
   const substatTotals = getSubstatTotals(equipment, itemInstances);
   const bonusTotals = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const heroSchool = getArchetypeComposition(job.archetype).damageType;
   const isPhysical = heroSchool === 'physical';
+  // 吸血/回血:裝備素質+passive3 被動加成的完整合併值(不是只顯示裝備那份),
+  // 跟攻擊力/爆擊等既有幾行一樣顯示「已經算完全部加成」的最終數字。
+  const passive3Level = hasChosenJob ? skillTree[job.archetype].passive3 : studentSkillTree.passive3;
+  const totalLifesteal = substatTotals.lifesteal + getPassiveBonusValue(passive3Level);
+  const totalHpRegen = substatTotals.hpRegen + getPassiveBonusValue(passive3Level);
 
   return (
     <View style={styles.statusCard}>
@@ -111,6 +120,9 @@ function HeroStatusPanel() {
       <Text style={[styles.statusLine, !isPhysical && styles.statusLineHighlight]}>
         魔法:爆擊率 {Math.round(substatTotals.magicCritRate * 100)}% / 爆擊傷害 +
         {Math.round(substatTotals.magicCritDamage * 100)}%
+      </Text>
+      <Text style={styles.statusLine}>
+        吸血 {Math.round(totalLifesteal * 100)}%　自動回血 {Math.round(totalHpRegen * 100)}%
       </Text>
       <Text style={styles.statusLine}>
         總加成:經驗+{Math.round(bonusTotals.exp * 100)}% / 金幣+{Math.round(bonusTotals.coins * 100)}% / 速度+

@@ -57,6 +57,9 @@ export interface FightHealthResult {
 
 // currentHp/maxHp 是這場戰鬥開始「前」的血量(呼叫端在擊殺結算的同一個時間點呼叫,
 // 邏輯上等同「這場戰鬥的傷害在結算擊殺獎勵之前先算」)。
+// lifestealBonus:裝備素質+passive3被動疊加出來的吸血加成(見 game/equipment.ts 的
+// SubstatTotals.lifesteal / game/skillTree.ts 的 passive3),直接疊加在既有的「擊殺成功回血」
+// 基礎值(HP_REGEN_FRACTION_PER_KILL)之上,兩者是同一個機制的疊加,不是兩條獨立回血。
 export function resolveFightHealth(
   currentHp: number,
   maxHp: number,
@@ -64,15 +67,44 @@ export function resolveFightHealth(
   tier: JobTier,
   resistanceSubstatTotal: number,
   rarity: Rarity,
-  difficultyMultiplier: number
+  difficultyMultiplier: number,
+  lifestealBonus: number
 ): FightHealthResult {
   const damage = damageForFight(level, tier, resistanceSubstatTotal, rarity, difficultyMultiplier, maxHp);
   const remaining = currentHp - damage;
   if (remaining <= 0) {
     return { damage, nextHp: Math.round(maxHp * DEFEAT_RECOVERY_FRACTION), defeated: true };
   }
-  const healed = Math.min(maxHp, remaining + Math.round(maxHp * HP_REGEN_FRACTION_PER_KILL));
+  const healed = Math.min(maxHp, remaining + Math.round(maxHp * (HP_REGEN_FRACTION_PER_KILL + lifestealBonus)));
   return { damage, nextHp: healed, defeated: false };
+}
+
+// 回血(hpRegen):跟上面「擊殺成功回血」不同,這是完全獨立於戰鬥結果的被動機制——每隔固定秒數
+// 自動回一點血,沒有任何投資(hpRegenTotal=0)的玩家完全不會觸發,不像吸血是疊加在「一定會發生」
+// 的既有機制上。用跟副本入場券回補(game/dungeon.ts 的 applyDungeonTicketRegen)同一種「往前推進
+// 整數個間隔」寫法,離線很久回來也不會噴一大包血(有 maxHp 上限夾住),也不會因為看了一眼畫面
+// 就把已經累積的零頭時間歸零。
+export const HP_REGEN_TICK_INTERVAL_MS = 10000;
+
+export interface HpRegenTickResult {
+  heroHp: number;
+  lastHpRegenTickAt: number;
+}
+
+export function applyHpRegenTick(
+  heroHp: number,
+  maxHp: number,
+  lastHpRegenTickAt: number,
+  hpRegenTotal: number,
+  now: number = Date.now()
+): HpRegenTickResult {
+  if (hpRegenTotal <= 0) return { heroHp, lastHpRegenTickAt: now };
+  const elapsed = now - lastHpRegenTickAt;
+  if (elapsed < HP_REGEN_TICK_INTERVAL_MS) return { heroHp, lastHpRegenTickAt };
+  const ticks = Math.floor(elapsed / HP_REGEN_TICK_INTERVAL_MS);
+  const consumedMs = ticks * HP_REGEN_TICK_INTERVAL_MS;
+  const healed = Math.min(maxHp, heroHp + Math.round(maxHp * hpRegenTotal * ticks));
+  return { heroHp: healed, lastHpRegenTickAt: lastHpRegenTickAt + consumedMs };
 }
 
 // 攻擊力/怪物血量系統:對稱於上面的防禦/傷害判定,但完全獨立——怪物血量不吃玩家等級

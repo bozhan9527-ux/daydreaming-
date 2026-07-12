@@ -31,7 +31,7 @@ export {
 };
 
 export function createInitialStudentSkillTreeLevels(): Record<SkillSlotId, number> {
-  return { passive1: 0, passive2: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
+  return { passive1: 0, passive2: 0, passive3: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
 }
 
 // 學生沒有 JobTier 概念,等級上限直接開一個新常數,對齊職業樹 tier1 的封頂(2級),
@@ -75,6 +75,10 @@ export const STUDENT_SKILL_FLAVOR: Record<1 | 2, Record<SkillSlotId, StudentSkil
       name: '早餐店熟客價',
       description: '早餐店老闆記得你的臉,順手多找一點零錢回來。',
     },
+    passive3: {
+      name: '課間補眠術',
+      description: '下課十分鐘就能瞬間回血,吸血跟自動回血效果都會提升。',
+    },
     active1: {
       name: '抄筆記抄出心得',
       description: '筆記抄出自己的一套心得,額外進帳一筆經驗值。',
@@ -100,6 +104,10 @@ export const STUDENT_SKILL_FLAVOR: Record<1 | 2, Record<SkillSlotId, StudentSkil
     passive2: {
       name: '班費幹部精算術',
       description: '當上班費幹部練出的精算功力,順手多幫班上多存一點。',
+    },
+    passive3: {
+      name: '萬人迷的好體質',
+      description: '天生好體質加上人緣好心情佳,吸血跟自動回血效果都會提升。',
     },
     active1: {
       name: '重點整理神技',
@@ -132,7 +140,9 @@ export function getStudentSkillSlotBonusDescription(slot: SkillSlotId, level: nu
   if (isPassiveSlot(slot)) {
     const kind = getPassiveEffectKind(slot);
     const pct = Math.round(getPassiveBonusValue(level) * 1000) / 10;
-    return kind === 'expMastery' ? `永久經驗獲取 +${pct}%` : `永久金幣獲取 +${pct}%`;
+    if (kind === 'expMastery') return `永久經驗獲取 +${pct}%`;
+    if (kind === 'coinMastery') return `永久金幣獲取 +${pct}%`;
+    return `永久吸血+自動回血 +${pct}%`;
   }
   const kind = getStudentActiveEffectKind(slot as ActiveSkillSlotId);
   const seconds = activeSkillTriggerIntervalSeconds(slot as ActiveSkillSlotId, level);
