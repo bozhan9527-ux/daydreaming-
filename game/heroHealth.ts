@@ -74,3 +74,28 @@ export function resolveFightHealth(
   const healed = Math.min(maxHp, remaining + Math.round(maxHp * HP_REGEN_FRACTION_PER_KILL));
   return { damage, nextHp: healed, defeated: false };
 }
+
+// 攻擊力/怪物血量系統:對稱於上面的防禦/傷害判定,但完全獨立——怪物血量不吃玩家等級
+// (跟 monsterAttackPower 一樣的既有慣例),勇者攻擊力吃等級+階級+攻擊素質(跟 heroDefensePower
+// 同一種公式形狀)。ATK_BASE 是攻擊力公式的底,避免 Lv1 新手因為等級項趨近 0 而讓戰鬥時長暴增。
+const ATK_BASE = 40;
+
+const MONSTER_BASE_HP: Record<Rarity, number> = {
+  common: 252000,
+  rare: 420000,
+  epic: 672000,
+  legendary: 1260000,
+};
+// 校準基準:Lv30/2階(剛畢業)、完全沒點攻擊素質的玩家,算出來的攻擊力剛好讓上面這組血量值
+// 換算出的戰鬥時長,跟改版前 game/battle.ts 的 BASE_FIGHT_DURATION_MS 查表值完全一致
+// (common 3000ms/rare 5000ms/epic 8000ms/legendary 15000ms)——所以這個基準點的玩家不會感覺
+// 到任何變化,低於這個投資的玩家戰鬥會變慢(但有 ATK_BASE 兜底,Lv1新手最多慢到約1.86倍,
+// 不會誇張),高於這個投資的玩家戰鬥會變快。這組常數是刻意手算校準過的,不要重新推導或調整。
+
+export function monsterHp(rarity: Rarity, difficultyMultiplier: number): number {
+  return MONSTER_BASE_HP[rarity] * difficultyMultiplier;
+}
+
+export function heroAttackPower(level: number, tier: JobTier, attackSubstatTotal: number): number {
+  return (ATK_BASE + level) * (1 + tier * 0.1) * (1 + attackSubstatTotal);
+}
