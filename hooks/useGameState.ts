@@ -72,11 +72,14 @@ import {
 import { applyTransferFragmentGain, rollTransferFragmentDrop, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import {
   canClaimDailyQuest,
+  canClaimDailyTask,
   DAILY_LOGIN_COIN_BONUS,
   DAILY_LOGIN_EXP_BONUS,
   DAILY_QUEST_COIN_REWARD,
   DAILY_QUEST_ENHANCE_STONE_REWARD,
   DAILY_QUEST_SKILL_BOOK_REWARD,
+  DailyTaskId,
+  getDailyTaskDef,
   isNewDay,
   todayDateString,
 } from '../game/daily';
@@ -239,6 +242,9 @@ interface GameState {
   lastDailyResetAt: string;
   dailyKillCount: number;
   dailyQuestClaimed: boolean;
+  // 任務池另外 4 項每日任務(見 game/daily.ts 的 DAILY_TASKS),跟上面兩個欄位一樣跨日歸零。
+  dailyTaskProgress: Partial<Record<DailyTaskId, number>>;
+  dailyTaskClaimedIds: DailyTaskId[];
   // 轉職碎片/證明:見 game/transfer.ts。lastTransferFragmentArchetype 不存檔,只給 UI 顯示這次
   // 掉落通知用,跟 lastCompanionDropId/lastEquipmentDropId/lastCoinWindfall 同一套模式。
   transferFragments: Partial<Record<Archetype, number>>;
@@ -311,6 +317,7 @@ interface GameState {
   socketGem: (itemId: string, socketIndex: number, gemType: GemType) => void;
   unsocketGem: (itemId: string, socketIndex: number) => void;
   claimDailyQuest: () => void;
+  claimDailyTask: (id: DailyTaskId) => void;
   claimAchievement: (id: string) => void;
   claimAllAchievements: () => void;
 }
@@ -340,6 +347,8 @@ type PersistableState = Pick<
   | 'lastDailyResetAt'
   | 'dailyKillCount'
   | 'dailyQuestClaimed'
+  | 'dailyTaskProgress'
+  | 'dailyTaskClaimedIds'
   | 'transferFragments'
   | 'transferProofs'
   | 'hasChosenJob'
@@ -379,6 +388,8 @@ function persist(state: PersistableState): void {
     lastDailyResetAt: state.lastDailyResetAt,
     dailyKillCount: state.dailyKillCount,
     dailyQuestClaimed: state.dailyQuestClaimed,
+    dailyTaskProgress: state.dailyTaskProgress,
+    dailyTaskClaimedIds: state.dailyTaskClaimedIds,
     transferFragments: state.transferFragments,
     transferProofs: state.transferProofs,
     hasChosenJob: state.hasChosenJob,
@@ -427,6 +438,16 @@ export function computeAchievementProgress(state: {
     hasSwitchedJobOnce: state.hasEverSwitchedJob,
     totalStagesCleared: state.totalStagesCleared,
   };
+}
+
+// 任務池 4 項每日任務的共用進度遞增 helper(見 game/daily.ts 的 DAILY_TASKS),避免 4 個
+// 呼叫端(identifyItem/enhanceItem/challengeDungeon/upgradeCompanionGearSlot)各自手刻同一段
+// 「讀目前進度、+1、寫回」邏輯——單純遞增,不做上限判斷(達標與否交給 canClaimDailyTask 比對)。
+function incrementDailyTaskProgress(
+  progress: Partial<Record<DailyTaskId, number>>,
+  id: DailyTaskId
+): Partial<Record<DailyTaskId, number>> {
+  return { ...progress, [id]: (progress[id] ?? 0) + 1 };
 }
 
 // 成就偵測的共用入口:每次呼叫都是全量重新計算(見 evaluateUnlockedAchievementIds 的註解),
@@ -480,6 +501,8 @@ export const useGameState = create<GameState>((set, get) => ({
   lastDailyResetAt: '',
   dailyKillCount: 0,
   dailyQuestClaimed: false,
+  dailyTaskProgress: {},
+  dailyTaskClaimedIds: [],
   transferFragments: {},
   transferProofs: {},
   hasChosenJob: false,
@@ -572,6 +595,8 @@ export const useGameState = create<GameState>((set, get) => ({
       lastDailyResetAt: newDay ? todayDateString() : save.lastDailyResetAt,
       dailyKillCount: newDay ? 0 : save.dailyKillCount,
       dailyQuestClaimed: newDay ? false : save.dailyQuestClaimed,
+      dailyTaskProgress: newDay ? {} : save.dailyTaskProgress,
+      dailyTaskClaimedIds: newDay ? [] : save.dailyTaskClaimedIds,
       transferFragments: save.transferFragments,
       transferProofs: save.transferProofs,
       hasChosenJob: save.hasChosenJob,
@@ -955,11 +980,16 @@ export const useGameState = create<GameState>((set, get) => ({
       lifestealBonus
     );
 
+    // 副本任務(見 game/daily.ts 的 DAILY_TASKS)看的是「有沒有挑戰過」,不看輸贏——
+    // 消耗到入場券(spent !== null,上面已經檢查過)就算數,所以贏/輸兩條分支都要記一次。
+    const nextDailyTaskProgress = incrementDailyTaskProgress(state.dailyTaskProgress, 'dungeon');
+
     if (healthResult.defeated) {
       set({
         heroHp: healthResult.nextHp,
         dungeon: spent,
         defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
+        dailyTaskProgress: nextDailyTaskProgress,
       });
       persist(get());
       return;
@@ -977,6 +1007,7 @@ export const useGameState = create<GameState>((set, get) => ({
       transferProofs: gained.proofs,
       hasEverAssembledTransferProof: nextHasEverAssembledTransferProof,
       lastTransferFragmentArchetype: archetype,
+      dailyTaskProgress: nextDailyTaskProgress,
     });
     checkAndUnlockAchievements(get, set);
     persist(get());
@@ -1110,7 +1141,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
   // 花錢鑑定隱藏素質,鑑定過就永久生效;裝備不存在/沒有素質資料/金幣不夠就靜默不做事。
   identifyItem: (itemId) => {
-    const { coins, itemInstances } = get();
+    const { coins, itemInstances, dailyTaskProgress } = get();
     const item = getItemById(itemId);
     const instance = itemInstances[itemId];
     if (!item || !instance || instance.identified) return;
@@ -1120,6 +1151,7 @@ export const useGameState = create<GameState>((set, get) => ({
     set({
       coins: coins - cost,
       itemInstances: { ...itemInstances, [itemId]: { ...instance, identified: true } },
+      dailyTaskProgress: incrementDailyTaskProgress(dailyTaskProgress, 'identify'),
     });
     persist(get());
   },
@@ -1127,7 +1159,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // 花金幣+強化石嘗試 +1;Lv1~5 失敗只浪費資源,Lv6~10 失敗可能降級或直接損毀(從裝備欄跟
   // 已解鎖清單一併移除)。resistance 素質(裝備自己的,不是全身加總)拉低失敗率。
   enhanceItem: (itemId) => {
-    const { coins, enhanceStones, itemInstances, equipment, unlockedItemIds } = get();
+    const { coins, enhanceStones, itemInstances, equipment, unlockedItemIds, dailyTaskProgress } = get();
     const item = getItemById(itemId);
     const instance = itemInstances[itemId];
     if (!item || !instance) return;
@@ -1169,6 +1201,7 @@ export const useGameState = create<GameState>((set, get) => ({
       equipment: nextEquipment,
       unlockedItemIds: nextUnlockedItemIds,
       lastEnhanceOutcome: message,
+      dailyTaskProgress: incrementDailyTaskProgress(dailyTaskProgress, 'enhance'),
     });
     checkAndUnlockAchievements(get, set);
     persist(get());
@@ -1308,7 +1341,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // 只吃金幣(不吃 bankedExp)——這是寵物系統的加成,定位是「金幣的額外去處」,
   // 不跟主要練等經濟(bankedExp)搶資源。
   upgradeCompanionGearSlot: (kind, slot) => {
-    const { companionGear, level, coins } = get();
+    const { companionGear, level, coins, dailyTaskProgress } = get();
     const currentSlotLevel = companionGear[kind][slot];
     if (!canUpgradeCompanionGearSlot(currentSlotLevel, level.level, coins)) return;
 
@@ -1318,7 +1351,11 @@ export const useGameState = create<GameState>((set, get) => ({
       [kind]: { ...companionGear[kind], [slot]: currentSlotLevel + 1 },
     };
 
-    set({ companionGear: nextCompanionGear, coins: coins - coinCost });
+    set({
+      companionGear: nextCompanionGear,
+      coins: coins - coinCost,
+      dailyTaskProgress: incrementDailyTaskProgress(dailyTaskProgress, 'companionGear'),
+    });
     persist(get());
     playSkillUpgrade();
   },
@@ -1332,6 +1369,21 @@ export const useGameState = create<GameState>((set, get) => ({
       enhanceStones: enhanceStones + DAILY_QUEST_ENHANCE_STONE_REWARD,
       skillBooks: skillBooks + DAILY_QUEST_SKILL_BOOK_REWARD,
       dailyQuestClaimed: true,
+    });
+    persist(get());
+  },
+
+  // 任務池另外 4 項每日任務(見 game/daily.ts 的 DAILY_TASKS):跟上面 claimDailyQuest 同一套
+  // 判定/領取模式,各自獨立,不互相影響。
+  claimDailyTask: (id) => {
+    const { dailyTaskProgress, dailyTaskClaimedIds, coins, enhanceStones, skillBooks } = get();
+    if (!canClaimDailyTask(id, dailyTaskProgress, dailyTaskClaimedIds)) return;
+    const reward = getDailyTaskDef(id).reward;
+    set({
+      coins: coins + reward.coins,
+      enhanceStones: enhanceStones + (reward.enhanceStones ?? 0),
+      skillBooks: skillBooks + (reward.skillBooks ?? 0),
+      dailyTaskClaimedIds: [...dailyTaskClaimedIds, id],
     });
     persist(get());
   },

@@ -22,6 +22,7 @@ import {
   unlockItem,
   upgradeItemInstancesToV13,
 } from '../game/equipment';
+import { DailyTaskId } from '../game/daily';
 import { createInitialDungeonState, DungeonState } from '../game/dungeon';
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { SkillLevels, SKILL_IDS } from '../game/skills';
@@ -38,7 +39,7 @@ import { createInitialStudentSkillTreeLevels, STUDENT_SKILL_LEVEL_CAP } from '..
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 28;
+export const SCHEMA_VERSION = 29;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -126,6 +127,11 @@ export interface SaveData {
   lastDailyResetAt: string;
   dailyKillCount: number;
   dailyQuestClaimed: boolean;
+  // v29 起任務池另外 4 項每日任務(見 game/daily.ts 的 DAILY_TASKS):dailyTaskProgress 是
+  // 「今日各項任務目前進度」,缺少的 key 一律視為 0;dailyTaskClaimedIds 是今日已領過獎勵的
+  // 任務 id 清單。兩者都跟上面 dailyKillCount/dailyQuestClaimed 一樣在跨日時歸零。
+  dailyTaskProgress: Partial<Record<DailyTaskId, number>>;
+  dailyTaskClaimedIds: DailyTaskId[];
   // 轉職碎片/證明(見 game/transfer.ts):缺少的 key 一律視為 0,不需要在存檔裡預先塞滿 6 個key。
   transferFragments: Partial<Record<Archetype, number>>;
   transferProofs: Partial<Record<Archetype, number>>;
@@ -208,6 +214,8 @@ export function createInitialSaveData(): SaveData {
     companionGear: createEmptyCompanionGearState(),
     dungeon: createInitialDungeonState(),
     totalStagesCleared: 0,
+    dailyTaskProgress: {},
+    dailyTaskClaimedIds: [],
     lastHpRegenTickAt: Date.now(),
     lastActiveAt: Date.now(),
   };
@@ -1027,6 +1035,20 @@ function isUnlockedAchievementIds(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((id) => typeof id === 'string');
 }
 
+const DAILY_TASK_IDS: DailyTaskId[] = ['identify', 'dungeon', 'enhance', 'companionGear'];
+
+function isDailyTaskProgress(value: unknown): value is Partial<Record<DailyTaskId, number>> {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return Object.entries(record).every(
+    ([key, count]) => DAILY_TASK_IDS.includes(key as DailyTaskId) && typeof count === 'number'
+  );
+}
+
+function isDailyTaskClaimedIds(value: unknown): value is DailyTaskId[] {
+  return Array.isArray(value) && value.every((id) => DAILY_TASK_IDS.includes(id));
+}
+
 interface SaveDataV19 {
   version: 19;
   level: LevelState;
@@ -1692,15 +1714,34 @@ function isSaveDataV27(value: unknown): value is SaveDataV27 {
   );
 }
 
-// v28(3000關/關卡里程碑成就上線):現在的 SaveData 完整形狀,比 v27 多了 totalStagesCleared。
+// v28(3000關/關卡里程碑成就上線,任務池上線前的最後一版):比 v27 多了 totalStagesCleared,
+// 沒有 dailyTaskProgress/dailyTaskClaimedIds。凍結成明確獨立的 interface+literal版本號檢查。
+// 形狀直接繼承 SaveDataV27(只換 version 字面量、疊加新欄位),不重複列出全部欄位。
+interface SaveDataV28 extends Omit<SaveDataV27, 'version'> {
+  version: 28;
+  totalStagesCleared: number;
+}
+
+function isSaveDataV28(value: unknown): value is SaveDataV28 {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 28 &&
+    isSaveDataV27({ ...record, version: 27 }) &&
+    typeof record.totalStagesCleared === 'number'
+  );
+}
+
+// v29(任務池上線):現在的 SaveData 完整形狀,比 v28 多了 dailyTaskProgress/dailyTaskClaimedIds。
 // 這是 migrate() 的第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
-function isSaveDataV28(value: unknown): value is SaveData {
+function isSaveDataV29(value: unknown): value is SaveData {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
     record.version === SCHEMA_VERSION &&
-    isSaveDataV27({ ...record, version: 27 }) &&
-    typeof record.totalStagesCleared === 'number'
+    isSaveDataV28({ ...record, version: 28 }) &&
+    isDailyTaskProgress(record.dailyTaskProgress) &&
+    isDailyTaskClaimedIds(record.dailyTaskClaimedIds)
   );
 }
 
@@ -1766,14 +1807,27 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // 補 0——這個功能上線前的存檔一律視為「還沒清過任何一個大關」,不會因為玩家過去已經打到
 // 第幾關(stageProgress.stage)就平白預先解鎖後面的里程碑成就,只能重新累積(呼應 killCount
 // 當初上線時同樣選擇補 0、不試圖從其他欄位反推歷史值的既有慣例)。
+// v28→v29 沒有 dailyTaskProgress/dailyTaskClaimedIds(見 game/daily.ts 的任務池):都補空
+// (物件/陣列),等同「今天還沒做任何一項新任務」——跨日重置(見 hooks/useGameState.ts 的
+// load())本來就會把這兩個欄位歸零,所以舊存檔不管是不是剛好在當天載入都不會有異常狀態。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV28(value)) return value;
+  if (isSaveDataV29(value)) return value;
+  if (isSaveDataV28(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
+    };
+  }
   if (isSaveDataV27(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
     };
   }
   if (isSaveDataV26(value)) {
@@ -1783,6 +1837,8 @@ function migrate(value: unknown): SaveData {
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1794,6 +1850,8 @@ function migrate(value: unknown): SaveData {
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1806,6 +1864,8 @@ function migrate(value: unknown): SaveData {
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1819,6 +1879,8 @@ function migrate(value: unknown): SaveData {
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1833,6 +1895,8 @@ function migrate(value: unknown): SaveData {
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1847,6 +1911,8 @@ function migrate(value: unknown): SaveData {
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1863,6 +1929,8 @@ function migrate(value: unknown): SaveData {
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1880,6 +1948,8 @@ function migrate(value: unknown): SaveData {
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1900,6 +1970,8 @@ function migrate(value: unknown): SaveData {
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1921,6 +1993,8 @@ function migrate(value: unknown): SaveData {
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1960,6 +2034,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2000,6 +2076,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2040,6 +2118,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2080,6 +2160,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2120,6 +2202,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2160,6 +2244,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2200,6 +2286,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2240,6 +2328,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2280,6 +2370,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2320,6 +2412,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2360,6 +2454,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2400,6 +2496,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2440,6 +2538,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2480,6 +2580,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2520,6 +2622,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2560,6 +2664,8 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       totalStagesCleared: 0,
+      dailyTaskProgress: {},
+      dailyTaskClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
