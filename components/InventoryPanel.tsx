@@ -111,7 +111,10 @@ export function InventoryPanel() {
 
   function handleEquip(item: EquipmentItem) {
     equip(item.id);
-    showToast(`裝備:${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
+    // 這裡刻意只顯示一行(不像鑑定完成那樣列出隨機/隱藏素質全部細節)——裝備清單本身就在
+    // 螢幕上,提示訊息疊在畫面底部太高的話會蓋住清單最底下那幾列的「點擊裝備」按鈕,
+    // 玩家連續換裝時反而點不到下一件。
+    showToast(`已裝備:${item.name}(${formatBonus(item.bonus.stat, item.bonus.value)})`);
   }
 
   function handleIdentify(item: EquipmentItem) {
