@@ -1277,7 +1277,8 @@ export type SubstatType =
   | 'critRate' | 'resistance' // 舊版素質,只留給改版前已擲出的老裝備讀取,不再新擲出
   | 'physicalResistance' | 'magicResistance'
   | 'physicalCritRate' | 'physicalCritDamage'
-  | 'magicCritRate' | 'magicCritDamage';
+  | 'magicCritRate' | 'magicCritDamage'
+  | 'physicalAttack' | 'magicAttack';
 
 export interface Substat {
   type: SubstatType;
@@ -1296,6 +1297,7 @@ const SUBSTAT_TYPES: SubstatType[] = [
   'physicalResistance', 'magicResistance',
   'physicalCritRate', 'physicalCritDamage',
   'magicCritRate', 'magicCritDamage',
+  'physicalAttack', 'magicAttack',
 ];
 const SUBSTAT_MAGNITUDE = 0.6; // 副素質整體比主加成弱一截,不會喧賓奪主
 const SUBSTAT_VARIANCE_MIN = 0.7;
@@ -1354,6 +1356,8 @@ export interface SubstatTotals {
   physicalCritDamage: number;
   magicCritRate: number;
   magicCritDamage: number;
+  physicalAttack: number;
+  magicAttack: number;
 }
 
 function addSubstatToTotals(totals: SubstatTotals, substat: Substat): void {
@@ -1364,6 +1368,8 @@ function addSubstatToTotals(totals: SubstatTotals, substat: Substat): void {
     case 'physicalCritDamage': totals.physicalCritDamage += substat.value; break;
     case 'magicCritRate': totals.magicCritRate += substat.value; break;
     case 'magicCritDamage': totals.magicCritDamage += substat.value; break;
+    case 'physicalAttack': totals.physicalAttack += substat.value; break;
+    case 'magicAttack': totals.magicAttack += substat.value; break;
     // 舊資料相容:改版前掉落的裝備只有籠統的「抗性」/「爆擊率」,兩池都算數,
     // 老玩家的既有投資不會因為改版突然貶值。
     case 'resistance':
@@ -1383,6 +1389,7 @@ export function getSubstatTotals(loadout: EquipmentLoadout, instances: ItemInsta
     physicalResistance: 0, magicResistance: 0,
     physicalCritRate: 0, physicalCritDamage: 0,
     magicCritRate: 0, magicCritDamage: 0,
+    physicalAttack: 0, magicAttack: 0,
   };
   for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
     const itemId = loadout[slot];

@@ -60,6 +60,8 @@ const SUBSTAT_LABELS: Record<SubstatType, string> = {
   physicalCritDamage: '物理爆擊傷害',
   magicCritRate: '魔法爆擊率',
   magicCritDamage: '魔法爆擊傷害',
+  physicalAttack: '物理攻擊力',
+  magicAttack: '魔法攻擊力',
 };
 
 // 角色紙娃娃兩側各一欄圖示按鈕:武器(主手/副手)對放最上排,其餘裝備往下排。
@@ -201,10 +203,10 @@ export function EquipmentPanel() {
         {formatBonus('speed', totals.speed)}
       </Text>
       <Text style={styles.totalsText}>
-        物理:{formatSubstat('physicalResistance', substatTotals.physicalResistance)} / {formatSubstat('physicalCritRate', substatTotals.physicalCritRate)} / {formatSubstat('physicalCritDamage', substatTotals.physicalCritDamage)}
+        物理:{formatSubstat('physicalAttack', substatTotals.physicalAttack)} / {formatSubstat('physicalResistance', substatTotals.physicalResistance)} / {formatSubstat('physicalCritRate', substatTotals.physicalCritRate)} / {formatSubstat('physicalCritDamage', substatTotals.physicalCritDamage)}
       </Text>
       <Text style={styles.totalsText}>
-        魔法:{formatSubstat('magicResistance', substatTotals.magicResistance)} / {formatSubstat('magicCritRate', substatTotals.magicCritRate)} / {formatSubstat('magicCritDamage', substatTotals.magicCritDamage)}
+        魔法:{formatSubstat('magicAttack', substatTotals.magicAttack)} / {formatSubstat('magicResistance', substatTotals.magicResistance)} / {formatSubstat('magicCritRate', substatTotals.magicCritRate)} / {formatSubstat('magicCritDamage', substatTotals.magicCritDamage)}
       </Text>
 
       <View style={styles.subNav}>

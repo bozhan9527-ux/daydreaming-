@@ -81,7 +81,7 @@ import {
   todayDateString,
 } from '../game/daily';
 import { getRandomEvent, GameEvent } from '../game/events';
-import { heroMaxHp, RECOVERY_DELAY_MS, resolveFightHealth } from '../game/heroHealth';
+import { heroAttackPower, heroMaxHp, RECOVERY_DELAY_MS, resolveFightHealth } from '../game/heroHealth';
 import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
 import {
   activeSkillTriggerIntervalSeconds,
@@ -619,6 +619,13 @@ export const useGameState = create<GameState>((set, get) => ({
       const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
       const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress);
       const bossTier = getCurrentTier(state.level.level);
+      const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+      const heroSchool = getArchetypeComposition(state.job.archetype).damageType;
+      const attackPower = heroAttackPower(
+        state.level.level,
+        getCurrentTier(state.level.level),
+        heroSchool === 'physical' ? substatTotals.physicalAttack : substatTotals.magicAttack
+      );
       const encounter = generateEncounter(
         state.trigger,
         speedMultiplier,
@@ -626,7 +633,8 @@ export const useGameState = create<GameState>((set, get) => ({
         isBoss,
         isFinalBoss,
         difficultyMultiplier,
-        bossTier
+        bossTier,
+        attackPower
       );
       if (state.forceInstantNextFight) {
         encounter.fightDurationMs = 0;

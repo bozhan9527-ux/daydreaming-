@@ -14,7 +14,7 @@ import {
   TIER_UNLOCK_LEVELS,
 } from '../game/combat';
 import { getEquipmentBonusTotalsFull, getSubstatTotals } from '../game/equipment';
-import { heroDefensePower, heroMaxHp } from '../game/heroHealth';
+import { heroAttackPower, heroDefensePower, heroMaxHp } from '../game/heroHealth';
 import {
   ACTIVE_SLOT_IDS,
   getSkillSlotBonusDescription,
@@ -92,6 +92,12 @@ function HeroStatusPanel() {
       <Text style={styles.statusLine}>
         物理防禦 {Math.round(heroDefensePower(level.level, currentTier, substatTotals.physicalResistance))}　魔法防禦{' '}
         {Math.round(heroDefensePower(level.level, currentTier, substatTotals.magicResistance))}
+      </Text>
+      <Text style={[styles.statusLine, isPhysical && styles.statusLineHighlight]}>
+        物理攻擊力 {Math.round(heroAttackPower(level.level, currentTier, substatTotals.physicalAttack))}
+      </Text>
+      <Text style={[styles.statusLine, !isPhysical && styles.statusLineHighlight]}>
+        魔法攻擊力 {Math.round(heroAttackPower(level.level, currentTier, substatTotals.magicAttack))}
       </Text>
       <Text style={[styles.statusLine, isPhysical && styles.statusLineHighlight]}>
         物理:爆擊率 {Math.round(substatTotals.physicalCritRate * 100)}% / 爆擊傷害 +
