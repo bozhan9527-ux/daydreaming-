@@ -27,8 +27,18 @@ export function heroMaxHp(level: number): number {
   return 50 + level * 2;
 }
 
+// DEF_BASE:跟下面 heroAttackPower 的 ATK_BASE 同一個目的——沒有這個底,heroDefensePower
+// 在低等級時會趨近 0,而 MONSTER_BASE_ATTACK 是跟等級無關的固定值,兩者一除比例會爆炸,
+// 造成低等玩家(用真實稀有度機率加權算過,約 Lv1~40)平均每殺一隻怪的期望傷害遠大於
+// HP_REGEN_FRACTION_PER_KILL 那 8% 回血,持續掉血,跟本檔案最上面的設計意圖(平常打
+// 一般小怪基本打平或回血)矛盾,也是造成技能倒數卡在 0s(見 tickBattle 的戰敗提早
+// return)的根源。用 ts-node 對 common/rare/epic/legendary 依 game/trigger.ts 真實機率
+// 加權算過,DEF_BASE=25 能讓 Lv1~Lv100 的平均每殺傷害跟回血基本打平,同時魔王/高倍率戰鬥
+// 依然會逼近 MAX_DAMAGE_FRACTION 上限,不影響既有的「只有推王才有真的戰敗風險」設計。
+const DEF_BASE = 25;
+
 export function heroDefensePower(level: number, tier: JobTier, resistanceSubstatTotal: number): number {
-  return level * (1 + tier * 0.1) * (1 + resistanceSubstatTotal);
+  return (DEF_BASE + level) * (1 + tier * 0.1) * (1 + resistanceSubstatTotal);
 }
 
 export function monsterAttackPower(rarity: Rarity, difficultyMultiplier: number): number {
