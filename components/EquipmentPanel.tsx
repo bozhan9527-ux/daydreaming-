@@ -166,6 +166,9 @@ export function EquipmentPanel() {
         onPress={() => setSelectedSlot(slot)}
       >
         <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+        <Text style={styles.slotButtonLabel} numberOfLines={1}>
+          {SLOT_LABELS[slot]}
+        </Text>
       </Pressable>
     );
   }
@@ -330,15 +333,23 @@ const styles = StyleSheet.create({
   slotColumn: {
     gap: 6,
   },
+  // 原本只有圖示、要點下去才知道是哪個部位——彈窗高度已經拉高有空間,直接把部位名稱
+  // 露在圖示下面,不用點了才知道。寬度加大到48才塞得下4字的「主手武器」不截斷。
   slotButton: {
-    width: 32,
-    height: 32,
+    width: 48,
+    paddingVertical: 4,
+    gap: 2,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#3a3a45',
     backgroundColor: '#1c1c24',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  slotButtonLabel: {
+    color: '#8a8a95',
+    fontSize: 8,
+    textAlign: 'center',
   },
   slotButtonFilled: {
     borderColor: '#6ab0e0',
