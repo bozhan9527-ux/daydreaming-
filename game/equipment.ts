@@ -1273,7 +1273,11 @@ export function getEquipmentBonusTotals(loadout: EquipmentLoadout): EquipmentBon
 // 每件裝備第一次裝備時額外擲兩條這個池子裡的素質:一條「隨機素質」立即生效,一條「隱藏素質」
 // 要花錢鑑定過才會生效,鑑定前數值未知。跟主加成(exp/coins/speed)是完全獨立的維度,
 // critRate 影響戰鬥擊殺獎勵翻倍機率,resistance 留給強化系統用來降低失敗率。
-export type SubstatType = 'critRate' | 'resistance';
+export type SubstatType =
+  | 'critRate' | 'resistance' // 舊版素質,只留給改版前已擲出的老裝備讀取,不再新擲出
+  | 'physicalResistance' | 'magicResistance'
+  | 'physicalCritRate' | 'physicalCritDamage'
+  | 'magicCritRate' | 'magicCritDamage';
 
 export interface Substat {
   type: SubstatType;
@@ -1288,7 +1292,11 @@ export interface ItemInstanceData {
   socketedGems: (GemType | null)[];
 }
 
-const SUBSTAT_TYPES: SubstatType[] = ['critRate', 'resistance'];
+const SUBSTAT_TYPES: SubstatType[] = [
+  'physicalResistance', 'magicResistance',
+  'physicalCritRate', 'physicalCritDamage',
+  'magicCritRate', 'magicCritDamage',
+];
 const SUBSTAT_MAGNITUDE = 0.6; // 副素質整體比主加成弱一截,不會喧賓奪主
 const SUBSTAT_VARIANCE_MIN = 0.7;
 const SUBSTAT_VARIANCE_RANGE = 0.6; // 實際擲出 0.7~1.3 倍的隨機區間
@@ -1340,22 +1348,49 @@ export function createEmptyItemInstances(): ItemInstances {
 }
 
 export interface SubstatTotals {
-  critRate: number;
-  resistance: number;
+  physicalResistance: number;
+  magicResistance: number;
+  physicalCritRate: number;
+  physicalCritDamage: number;
+  magicCritRate: number;
+  magicCritDamage: number;
+}
+
+function addSubstatToTotals(totals: SubstatTotals, substat: Substat): void {
+  switch (substat.type) {
+    case 'physicalResistance': totals.physicalResistance += substat.value; break;
+    case 'magicResistance': totals.magicResistance += substat.value; break;
+    case 'physicalCritRate': totals.physicalCritRate += substat.value; break;
+    case 'physicalCritDamage': totals.physicalCritDamage += substat.value; break;
+    case 'magicCritRate': totals.magicCritRate += substat.value; break;
+    case 'magicCritDamage': totals.magicCritDamage += substat.value; break;
+    // 舊資料相容:改版前掉落的裝備只有籠統的「抗性」/「爆擊率」,兩池都算數,
+    // 老玩家的既有投資不會因為改版突然貶值。
+    case 'resistance':
+      totals.physicalResistance += substat.value;
+      totals.magicResistance += substat.value;
+      break;
+    case 'critRate':
+      totals.physicalCritRate += substat.value;
+      totals.magicCritRate += substat.value;
+      break;
+  }
 }
 
 // 只算目前已裝備的項目;隱藏素質要鑑定過(identified)才計入。
 export function getSubstatTotals(loadout: EquipmentLoadout, instances: ItemInstances): SubstatTotals {
-  const totals: SubstatTotals = { critRate: 0, resistance: 0 };
+  const totals: SubstatTotals = {
+    physicalResistance: 0, magicResistance: 0,
+    physicalCritRate: 0, physicalCritDamage: 0,
+    magicCritRate: 0, magicCritDamage: 0,
+  };
   for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
     const itemId = loadout[slot];
     if (!itemId) continue;
     const instance = instances[itemId];
     if (!instance) continue;
-    totals[instance.randomSubstat.type] += instance.randomSubstat.value;
-    if (instance.identified) {
-      totals[instance.hiddenSubstat.type] += instance.hiddenSubstat.value;
-    }
+    addSubstatToTotals(totals, instance.randomSubstat);
+    if (instance.identified) addSubstatToTotals(totals, instance.hiddenSubstat);
   }
   return totals;
 }
@@ -1395,9 +1430,11 @@ export function getEnhanceStoneCost(currentLevel: number): number {
 }
 
 function itemInstanceResistance(instance: ItemInstanceData): number {
+  const isResistance = (s: Substat) =>
+    s.type === 'resistance' || s.type === 'physicalResistance' || s.type === 'magicResistance';
   let total = 0;
-  if (instance.randomSubstat.type === 'resistance') total += instance.randomSubstat.value;
-  if (instance.identified && instance.hiddenSubstat.type === 'resistance') total += instance.hiddenSubstat.value;
+  if (isResistance(instance.randomSubstat)) total += instance.randomSubstat.value;
+  if (instance.identified && isResistance(instance.hiddenSubstat)) total += instance.hiddenSubstat.value;
   return total;
 }
 

@@ -49,6 +49,12 @@ const STAT_LABELS: Record<EquipmentBonusStat, string> = {
 const SUBSTAT_LABELS: Record<SubstatType, string> = {
   critRate: '爆擊率',
   resistance: '抗性',
+  physicalResistance: '物理抗性',
+  magicResistance: '魔法抗性',
+  physicalCritRate: '物理爆擊率',
+  physicalCritDamage: '物理爆擊傷害',
+  magicCritRate: '魔法爆擊率',
+  magicCritDamage: '魔法爆擊傷害',
 };
 
 // 9個部位排成一列橫向選槽,不需要像裝備分頁那樣圍著紙娃娃排兩欄——這裡的重點是

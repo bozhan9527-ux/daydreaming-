@@ -72,6 +72,10 @@ export function getArchetypeByComposition(damageType: DamageType, subtype: Subty
   return ARCHETYPE_BY_COMPOSITION[damageType][subtype];
 }
 
+export function oppositeDamageType(damageType: DamageType): DamageType {
+  return damageType === 'physical' ? 'magic' : 'physical';
+}
+
 export function canPromoteToTier(tier: JobTier, level: number): boolean {
   return level >= TIER_UNLOCK_LEVELS[tier];
 }
