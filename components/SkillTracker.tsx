@@ -100,7 +100,7 @@ function SkillTile({ tag, archetype, slot, label, level, tier, timerStartedAt, i
           )}
         </View>
       </View>
-      <Text style={styles.caption} numberOfLines={1}>
+      <Text style={styles.caption} numberOfLines={2}>
         {label} Lv.{level}
       </Text>
     </View>

@@ -27,6 +27,11 @@ import {
 } from '../game/skillTree';
 import { getTierSkillFlavor } from '../game/skillTreeFlavor';
 import { getSkillIcon } from '../game/sprites/skillIcons';
+import {
+  getStudentSkillFlavor,
+  getStudentSkillSlotBonusDescription,
+  STUDENT_SKILL_LEVEL_CAP,
+} from '../game/studentSkillTree';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
@@ -172,6 +177,7 @@ interface TierListProps {
   dualClassUnlocked: boolean;
   transferFragmentCount: number;
   transferProofCount: number;
+  studentSkillTree: Record<SkillSlotId, number>;
   onBack: () => void;
   onSetPrimary: () => void;
   onSetBranch: (branch: JobBranch) => void;
@@ -194,6 +200,7 @@ function TierList({
   dualClassUnlocked,
   transferFragmentCount,
   transferProofCount,
+  studentSkillTree,
   onBack,
   onSetPrimary,
   onSetBranch,
@@ -254,7 +261,12 @@ function TierList({
       <Text style={styles.detailCombatBonus}>
         職業戰鬥加成:+{combatBonusPct}%{!hasChosenJob && '(畢業後生效)'}
       </Text>
-      <Text style={styles.detailDesc}>點下面的階級可以看那一階的技能敘述,不管解鎖了沒都能先看。</Text>
+      <View style={styles.previewBadgeRow}>
+        <View style={styles.previewBadge}>
+          <Text style={styles.previewBadgeText}>預覽</Text>
+        </View>
+        <Text style={styles.previewBadgeDesc}>點下面的階級可以看那一階的技能敘述,不管解鎖了沒都能先看。</Text>
+      </View>
 
       <View style={styles.tierRow}>
         {TIERS.map((tier) => {
@@ -315,6 +327,30 @@ function TierList({
             )}
           </View>
         </>
+      )}
+
+      {/* 上面的階級預覽是「畢業後才會拿到」的職業技能樹,不是學生現在真正在投資的技能——
+          畢業前另外補一塊唯讀清單,讓學生看得到自己在「技能」分頁花技能書升級的到底是哪些。
+          升級操作本身還是留在「技能」分頁做,這裡只負責讓兩邊資訊對得起來。 */}
+      {!hasChosenJob && (
+        <View style={styles.studentSkillBlock}>
+          <Text style={styles.studentSkillTitle}>你目前的學生技能</Text>
+          <Text style={styles.detailDesc}>
+            畢業前實際生效、在「技能」分頁花技能書升級的是這些,不是上面的職業技能預覽。
+          </Text>
+          {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
+            const slotLevel = studentSkillTree[slot];
+            const flavor = getStudentSkillFlavor(currentLevel, slot);
+            return (
+              <View key={slot} style={styles.studentSkillRow}>
+                <Text style={styles.studentSkillName}>
+                  {flavor.name} Lv{slotLevel}/{STUDENT_SKILL_LEVEL_CAP}
+                </Text>
+                <Text style={styles.studentSkillDesc}>{getStudentSkillSlotBonusDescription(slot, slotLevel)}</Text>
+              </View>
+            );
+          })}
+        </View>
       )}
     </View>
   );
@@ -390,6 +426,7 @@ export function JobSelector() {
   const level = useGameState((state) => state.level);
   const secondaryJob = useGameState((state) => state.secondaryJob);
   const skillTree = useGameState((state) => state.skillTree);
+  const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const transferFragments = useGameState((state) => state.transferFragments);
   const transferProofs = useGameState((state) => state.transferProofs);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
@@ -440,6 +477,7 @@ export function JobSelector() {
           dualClassUnlocked={dualClassUnlocked}
           transferFragmentCount={transferFragments[viewingArchetype] ?? 0}
           transferProofCount={transferProofs[viewingArchetype] ?? 0}
+          studentSkillTree={studentSkillTree}
           onBack={() => setView('archetypes')}
           onSetPrimary={() => setJob(viewingArchetype, job.branch)}
           onSetBranch={(b) => setJob(job.archetype, b)}
@@ -729,6 +767,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
+  // 下面的階級/技能敘述都是「畢業後才會拿到」的預覽,不是玩家現在真正在投資的技能——
+  // 用跟成就分頁一樣視覺語彙的小標籤明確標出「這是預覽」,避免跟真正在升級的技能搞混。
+  // 這裡不能重用 detailDesc(它在別處是獨立區塊裡的純文字,不在 row 容器內,加 flex:1
+  // 會在那邊變成沿著 column 主軸吃掉多餘高度,把下面的技能清單擠開),另開一個專用樣式。
+  previewBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  previewBadgeDesc: {
+    flex: 1,
+    color: '#c8c8d0',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  previewBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    backgroundColor: 'rgba(143, 191, 224, 0.2)',
+  },
+  previewBadgeText: {
+    color: '#8fbfe0',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   detailCombatBonus: {
     color: '#c9a94f',
     fontSize: 12,
@@ -778,5 +842,31 @@ const styles = StyleSheet.create({
   secondaryLocked: {
     color: '#6a6a75',
     fontSize: 11,
+  },
+  studentSkillBlock: {
+    width: '100%',
+    gap: 4,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a35',
+  },
+  studentSkillTitle: {
+    color: '#c9a94f',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  studentSkillRow: {
+    gap: 1,
+    marginTop: 4,
+  },
+  studentSkillName: {
+    color: '#f2f2f2',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  studentSkillDesc: {
+    color: '#8fd4a8',
+    fontSize: 10,
   },
 });
