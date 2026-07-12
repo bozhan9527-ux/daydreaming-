@@ -107,7 +107,7 @@ export function InventoryPanel() {
 
   const currentId = equipment[selectedSlot];
   const items = getEquippableItemsForSlot(selectedSlot, job.archetype);
-  const bagItems = items.filter((item) => isItemUnlocked(unlockedItemIds, item.id) && item.id !== currentId);
+  const bagItems = items.filter((item) => isItemUnlocked(unlockedItemIds, item.id));
 
   function handleEquip(item: EquipmentItem) {
     equip(item.id);
@@ -137,6 +137,9 @@ export function InventoryPanel() {
         onPress={() => setSelectedSlot(slot)}
       >
         <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+        <Text style={styles.slotButtonLabel} numberOfLines={1}>
+          {SLOT_LABELS[slot]}
+        </Text>
       </Pressable>
     );
   }
@@ -145,9 +148,13 @@ export function InventoryPanel() {
     const icon = getItemIcon(item);
     const instance = itemInstances[item.id];
     const canIdentify = instance !== undefined && !instance.identified;
+    const equipped = item.id === currentId;
     return (
       <View key={item.id}>
-        <Pressable style={styles.itemRow} onPress={() => handleEquip(item)}>
+        <Pressable
+          style={[styles.itemRow, equipped && styles.itemRowEquipped]}
+          onPress={() => !equipped && handleEquip(item)}
+        >
           <View style={styles.rowLeft}>
             <View style={styles.iconWrap}>
               <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={ICON_PIXEL_SIZE} />
@@ -156,7 +163,9 @@ export function InventoryPanel() {
               {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
             </Text>
           </View>
-          <Text style={styles.itemRowMeta}>點擊裝備</Text>
+          <Text style={[styles.itemRowMeta, equipped && styles.itemRowMetaEquipped]}>
+            {equipped ? '已裝備' : '點擊裝備'}
+          </Text>
         </Pressable>
         {canIdentify && (
           <Pressable style={styles.identifyRow} onPress={() => handleIdentify(item)}>
@@ -199,14 +208,20 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   slotButton: {
-    width: 32,
-    height: 32,
+    width: 48,
+    paddingVertical: 4,
+    gap: 2,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#3a3a45',
     backgroundColor: '#1c1c24',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  slotButtonLabel: {
+    color: '#8a8a95',
+    fontSize: 8,
+    textAlign: 'center',
   },
   slotButtonActive: {
     backgroundColor: '#4a4456',
@@ -248,6 +263,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#1c1c24',
   },
+  itemRowEquipped: {
+    backgroundColor: '#243424',
+    borderWidth: 1,
+    borderColor: '#5fa563',
+  },
   itemRowLabel: {
     color: '#f2f2f2',
     fontSize: 11,
@@ -256,6 +276,10 @@ const styles = StyleSheet.create({
   itemRowMeta: {
     color: '#8a8a95',
     fontSize: 11,
+  },
+  itemRowMetaEquipped: {
+    color: '#8fd992',
+    fontWeight: '600',
   },
   identifyRow: {
     marginTop: 2,

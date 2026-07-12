@@ -98,10 +98,10 @@ export function CompanionPanel() {
 
   const totals = getCompanionBonusTotals(companions);
 
-  const bagCount = KINDS.reduce((sum, kind) => {
-    const equippedId = kind === 'pet' ? companions.equippedPetId : companions.equippedMountId;
-    return sum + getCompanionsByKind(kind).filter((c) => isCompanionUnlocked(companions, c.id) && c.id !== equippedId).length;
-  }, 0);
+  const bagCount = KINDS.reduce(
+    (sum, kind) => sum + getCompanionsByKind(kind).filter((c) => isCompanionUnlocked(companions, c.id)).length,
+    0
+  );
   const shopCount = KINDS.reduce(
     (sum, kind) => sum + getCompanionsByKind(kind).filter((c) => !isCompanionUnlocked(companions, c.id)).length,
     0
@@ -164,19 +164,27 @@ export function CompanionPanel() {
       {subView === 'bag' &&
         KINDS.map((kind) => {
           const equippedId = kind === 'pet' ? companions.equippedPetId : companions.equippedMountId;
-          const owned = getCompanionsByKind(kind).filter(
-            (c) => isCompanionUnlocked(companions, c.id) && c.id !== equippedId
-          );
+          const owned = getCompanionsByKind(kind).filter((c) => isCompanionUnlocked(companions, c.id));
           if (owned.length === 0) return null;
           return (
             <View key={kind} style={styles.kindSection}>
               <Text style={styles.kindTitle}>{KIND_LABELS[kind]}</Text>
-              {owned.map((companion) => (
-                <Pressable key={companion.id} style={styles.row} onPress={() => purchaseCompanion(companion.id)}>
-                  <Text style={styles.label}>{companion.name}</Text>
-                  <Text style={styles.cost}>{formatBonus(companion.bonus.stat, companion.bonus.value)}(點擊裝備)</Text>
-                </Pressable>
-              ))}
+              {owned.map((companion) => {
+                const equipped = companion.id === equippedId;
+                return (
+                  <Pressable
+                    key={companion.id}
+                    style={[styles.row, equipped && styles.rowEquipped]}
+                    onPress={() => !equipped && purchaseCompanion(companion.id)}
+                  >
+                    <Text style={styles.label}>{companion.name}</Text>
+                    <Text style={[styles.cost, equipped && styles.costEquipped]}>
+                      {formatBonus(companion.bonus.stat, companion.bonus.value)}
+                      {equipped ? '(已裝備)' : '(點擊裝備)'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           );
         })}
@@ -367,6 +375,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#2a2a35',
   },
+  rowEquipped: {
+    backgroundColor: '#243424',
+    borderWidth: 1,
+    borderColor: '#5fa563',
+  },
   label: {
     color: '#f2f2f2',
     fontSize: 12,
@@ -374,6 +387,10 @@ const styles = StyleSheet.create({
   cost: {
     color: '#8a8a95',
     fontSize: 12,
+  },
+  costEquipped: {
+    color: '#8fd992',
+    fontWeight: '600',
   },
   gearRow: {
     gap: 4,
