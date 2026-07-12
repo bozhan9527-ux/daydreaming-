@@ -1,11 +1,12 @@
 import { ENHANCE_MAX_LEVEL, GemType } from './equipment';
 
 // 成就系統:純函式,不依賴 React/RN,可在 Node 環境單獨測試(見 CLAUDE.md 分層鐵律)。
-// 26 個成就分 6 類:擊殺數/等級里程碑/裝備收集/強化鑲嵌/寵物坐騎/轉職。
+// 26 個手刻成就分 6 類(擊殺數/等級里程碑/裝備收集/強化鑲嵌/寵物坐騎/轉職)+ 76 個
+// 「關卡里程碑」(stage,見下面 STAGE_MILESTONES)用資料表+迴圈生成,不逐筆手刻物件實字。
 // 判定邏輯是「全量重新計算」(evaluateUnlockedAchievementIds),不是增量判定——
 // 這樣舊存檔(功能上線前就已經達標)第一次載入時能立刻被追溯性授予,不會因為
 // 「達標當下這個功能還不存在」而被擋下。
-export type AchievementCategory = 'kills' | 'level' | 'equipment' | 'enhance' | 'companion' | 'transfer';
+export type AchievementCategory = 'kills' | 'level' | 'equipment' | 'enhance' | 'companion' | 'transfer' | 'stage';
 
 export interface AchievementReward {
   coins: number;
@@ -34,6 +35,126 @@ export interface AchievementProgress {
   totalCompanionCount: number;
   hasAssembledTransferProof: boolean;
   hasSwitchedJobOnce: boolean;
+  // 這輩子累計清完的大關數(game/stages.ts 的 totalStagesCleared,永不因輪迴繞圈歸零)。
+  totalStagesCleared: number;
+}
+
+// 關卡里程碑成就:呼應「勇者發呆中」的發呆主題,前段謙虛(剛睡醒)、中後段逐漸誇張到宇宙尺度。
+// threshold 是「累計清完幾個大關」(=totalStagesCleared),對應的實際關卡數是 threshold*10——
+// 第 1~20 關(小關計:第10~200關)每清1大關一個里程碑,第25關起(第250關起)每5大關一個,
+// 呼應 game/stages.ts 的 300 大關 x 10 小關 = 3000 關設計。id 用實際關卡數命名(stage_N),
+// 資料表只放創作內容(標題/描述),數值(reward)另外用公式算,不逐筆手刻,避免76筆手算出錯。
+interface StageMilestoneDef {
+  threshold: number;
+  title: string;
+  description: string;
+}
+
+const STAGE_MILESTONES: StageMilestoneDef[] = [
+  { threshold: 1, title: '剛睡醒的勇者', description: '抵達第10關,眼睛還沒完全睜開就把敵人打趴了' },
+  { threshold: 2, title: '呆滯戰鬥新手', description: '抵達第20關,一邊放空一邊揮劍,意外地順手' },
+  { threshold: 3, title: '神遊起步', description: '抵達第30關,腦袋放假,身體還在加班' },
+  { threshold: 4, title: '放空初心者', description: '抵達第40關,發呆的基本功練起來了' },
+  { threshold: 5, title: '發呆也是修行', description: '抵達第50關,悟出「打怪跟放空可以同時進行」的道理' },
+  { threshold: 6, title: '心不在焉流', description: '抵達第60關,靠本能反應打贏一半戰鬥' },
+  { threshold: 7, title: '半夢半醒斬妖除魔', description: '抵達第70關,分不清是在打怪還是在做夢' },
+  { threshold: 8, title: '恍神連擊', description: '抵達第80關,連續好幾場戰鬥都不記得怎麼贏的' },
+  { threshold: 9, title: '發呆值全滿', description: '抵達第90關,專注力歸零,戰鬥力卻沒掉' },
+  { threshold: 10, title: '百戰百「呆」', description: '抵達第100關,打了一百場都用同一種恍神表情應付' },
+  { threshold: 11, title: '呆滯眼神鑑定合格', description: '抵達第110關,連怪物看了都覺得這眼神很專業' },
+  { threshold: 12, title: '邊打邊放空', description: '抵達第120關,證明多工處理是可能的(前提是放空那項不用花力氣)' },
+  { threshold: 13, title: '專業神遊選手', description: '抵達第130關,神遊技巧已經練到出神入化' },
+  { threshold: 14, title: '呆到連自己都佩服', description: '抵達第140關,連自己都不知道剛剛在想什麼' },
+  { threshold: 15, title: '半路殺出的發呆高手', description: '抵達第150關,靠純粹的放空撐過了半程' },
+  { threshold: 16, title: '打怪打到出神', description: '抵達第160關,眼神空洞,劍法卻沒亂' },
+  { threshold: 17, title: '發呆界新星', description: '抵達第170關,同期勇者都對這股恍神氣場甘拜下風' },
+  { threshold: 18, title: '快畢業的發呆生', description: '抵達第180關,離「發呆學位」只差臨門一腳' },
+  { threshold: 19, title: '發呆學分修好修滿', description: '抵達第190關,這輩子的放空額度都點滿了' },
+  { threshold: 20, title: '職業發呆選手', description: '抵達第200關,官方認證的全職發呆型勇者' },
+  { threshold: 25, title: '發呆宗師見習', description: '抵達第250關,開始有徒弟想拜師學放空' },
+  { threshold: 30, title: '放空即戰力', description: '抵達第300關,證明了發呆本身就是一種戰鬥力' },
+  { threshold: 35, title: '神遊戰場常勝軍', description: '抵達第350關,腦袋在別的次元,勝率卻沒掉過' },
+  { threshold: 40, title: '恍神連勝紀錄保持人', description: '抵達第400關,打破自己上一次的恍神連勝紀錄' },
+  { threshold: 45, title: '打瞌睡打出真本事', description: '抵達第450關,連打瞌睡都能打出真功夫' },
+  { threshold: 50, title: '傳說發呆冒險者', description: '抵達第500關,故事開始在酒館裡流傳' },
+  { threshold: 55, title: '半睡半醒踏破千軍', description: '抵達第550關,睡意跟戰意左右互搏,戰意驚險勝出' },
+  { threshold: 60, title: '發呆界活傳奇', description: '抵達第600關,新人勇者都聽過這號人物' },
+  { threshold: 65, title: '精神抽離戰鬥法', description: '抵達第650關,肉體在打怪,精神在放假' },
+  { threshold: 70, title: '打瞌睡打出神級反射', description: '抵達第700關,眼睛閉著也能躲過攻擊' },
+  { threshold: 75, title: '神遊天外還贏', description: '抵達第750關,腦袋飛去外太空,劍還是有刺中' },
+  { threshold: 80, title: '傳說級恍神紀錄', description: '抵達第800關,連紀錄官都懶得再統計了' },
+  { threshold: 85, title: '打怪如打呵欠', description: '抵達第850關,揮劍已經變成反射動作,跟打呵欠一樣自然' },
+  { threshold: 90, title: '發呆宗師認證', description: '抵達第900關,官方頒發「發呆宗師」證書一張' },
+  { threshold: 95, title: '千關不倒的恍神體', description: '抵達第950關,體力早就交給精神狀態去扛了' },
+  { threshold: 100, title: '千關傳說', description: '抵達第1000關,正式邁入四位數關卡的傳說領域' },
+  { threshold: 105, title: '超凡發呆入門', description: '抵達第1050關,凡人等級的發呆已經不夠形容' },
+  { threshold: 110, title: '精神超載也淡定', description: '抵達第1100關,腦袋當機照樣過關' },
+  { threshold: 115, title: '半神半呆', description: '抵達第1150關,戰鬥力逼近神格,恍神程度也是' },
+  { threshold: 120, title: '超越常人的放空力', description: '抵達第1200關,一般勇者理解不了這種境界' },
+  { threshold: 125, title: '意識飄移戰鬥術', description: '抵達第1250關,意識飄到半空中還能精準命中' },
+  { threshold: 130, title: '打怪如呼吸', description: '抵達第1300關,揮劍已經比呼吸還不需要思考' },
+  { threshold: 135, title: '超凡入聖的呆滯感', description: '抵達第1350關,呆滯到有種脫俗的美感' },
+  { threshold: 140, title: '傳說中的傳說', description: '抵達第1400關,連傳說裡都開始傳說這個傳說' },
+  { threshold: 145, title: '千四關不滅意志', description: '抵達第1450關,意志力比清醒度撐得更久' },
+  { threshold: 150, title: '半程宇宙發呆使者', description: '抵達第1500關,正式進入宇宙尺度的發呆旅程' },
+  { threshold: 155, title: '星際級放空力', description: '抵達第1550關,放空範圍已經不只地球' },
+  { threshold: 160, title: '銀河等級恍神', description: '抵達第1600關,恍神程度連銀河系都感應得到' },
+  { threshold: 165, title: '宇宙漫遊打怪王', description: '抵達第1650關,一邊神遊宇宙一邊順手清怪' },
+  { threshold: 170, title: '星辰都為之發呆', description: '抵達第1700關,連星星看了都忍不住跟著放空' },
+  { threshold: 175, title: '宇宙級發呆選手', description: '抵達第1750關,代表全宇宙出賽發呆項目' },
+  { threshold: 180, title: '銀河發呆代表隊', description: '抵達第1800關,正式入選銀河等級代表隊' },
+  { threshold: 185, title: '星際放空紀錄保持人', description: '抵達第1850關,紀錄刷新到連外星人都佩服' },
+  { threshold: 190, title: '宇宙盡頭前的堅持', description: '抵達第1900關,快到盡頭了,恍神程度絲毫不減' },
+  { threshold: 195, title: '準宇宙盡頭勇者', description: '抵達第1950關,只差臨門一腳就能抵達傳說終點' },
+  { threshold: 200, title: '兩千關傳奇', description: '抵達第2000關,正式踏入兩千大關的傳說殿堂' },
+  { threshold: 205, title: '時空發呆啟程', description: '抵達第2050關,發呆開始超越時間本身' },
+  { threshold: 210, title: '穿越時空也要放空', description: '抵達第2100關,連時空跳躍都不影響放空節奏' },
+  { threshold: 215, title: '時間感全面消失', description: '抵達第2150關,連時間流速都感覺不到了' },
+  { threshold: 220, title: '時空亂流中的淡定', description: '抵達第2200關,時空再亂,恍神姿勢照樣標準' },
+  { threshold: 225, title: '跨維度發呆使者', description: '抵達第2250關,連別的維度都感受得到這股呆氣' },
+  { threshold: 230, title: '時光旅人的恍神', description: '抵達第2300關,穿越各個時代都保持同一種眼神' },
+  { threshold: 235, title: '時空盡頭的守望者', description: '抵達第2350關,在時間盡頭默默放空守望' },
+  { threshold: 240, title: '超越因果的放空力', description: '抵達第2400關,連因果律都拿這股呆氣沒轍' },
+  { threshold: 245, title: '時空級傳說勇者', description: '抵達第2450關,傳說等級已經升級到時空規格' },
+  { threshold: 250, title: '兩千五百關傳奇', description: '抵達第2500關,四分之三的旅程已經走完' },
+  { threshold: 255, title: '終焉將近的堅持', description: '抵達第2550關,終點在望,恍神依舊不打折' },
+  { threshold: 260, title: '最終章發呆勇者', description: '抵達第2600關,故事進入最終章節' },
+  { threshold: 265, title: '逼近極限的放空力', description: '抵達第2650關,連放空能力都快要突破極限' },
+  { threshold: 270, title: '終極恍神體', description: '抵達第2700關,恍神程度已經進化到終極形態' },
+  { threshold: 275, title: '傳說盡頭的低語', description: '抵達第2750關,連傳說本身都開始向你低語致敬' },
+  { threshold: 280, title: '最終發呆試煉', description: '抵達第2800關,正在經歷這趟旅程最後的試煉' },
+  { threshold: 285, title: '終章前的寧靜', description: '抵達第2850關,暴風雨前的寧靜,只差最後衝刺' },
+  { threshold: 290, title: '九分之一步之遙', description: '抵達第2900關,距離終點只剩最後一小段路' },
+  { threshold: 295, title: '最終回合倒數', description: '抵達第2950關,倒數計時正式開始' },
+  { threshold: 300, title: '宇宙盡頭的發呆冠軍', description: '抵達第3000關,把整個宇宙的發呆額度用完,正式封頂' },
+];
+
+// 獎勵公式(不逐筆手刻):金幣跟門檻(=大關數)成正比;強化石從第10大關起才開始給,
+// 每10大關份量+1;每滿50大關(=每500關)額外給一批三色寶石,份量隨門檻線性成長——
+// 呼應既有成就系統「越晚越稀有」的獎勵曲線(參照 KILL_THRESHOLDS 系列)。
+function stageMilestoneReward(threshold: number): AchievementReward {
+  const reward: AchievementReward = { coins: threshold * 100 };
+  if (threshold >= 10) reward.enhanceStones = Math.floor(threshold / 10);
+  if (threshold % 50 === 0) {
+    const amount = threshold / 50;
+    reward.gems = { expGem: amount, coinGem: amount, speedGem: amount };
+  }
+  return reward;
+}
+
+function buildStageAchievements(): Record<string, AchievementDef> {
+  const result: Record<string, AchievementDef> = {};
+  for (const milestone of STAGE_MILESTONES) {
+    const id = `stage_${milestone.threshold * 10}`;
+    result[id] = {
+      id,
+      category: 'stage',
+      title: milestone.title,
+      description: milestone.description,
+      reward: stageMilestoneReward(milestone.threshold),
+    };
+  }
+  return result;
 }
 
 export const ACHIEVEMENTS: Record<string, AchievementDef> = {
@@ -224,6 +345,8 @@ export const ACHIEVEMENTS: Record<string, AchievementDef> = {
     description: '第一次真正換過不同的主職職業',
     reward: { coins: 500 },
   },
+
+  ...buildStageAchievements(),
 };
 
 export const ACHIEVEMENT_IDS: string[] = Object.keys(ACHIEVEMENTS);
@@ -264,6 +387,14 @@ const COMPANION_PCT_THRESHOLDS: { id: string; threshold: number }[] = [
   { id: 'companion_100pct', threshold: 1.0 },
 ];
 
+// 關卡里程碑門檻:達到即解鎖,單純門檻比較,threshold 是「累計清完幾個大關」——
+// 從 STAGE_MILESTONES 資料表衍生,id 命名規則(stage_{threshold*10})要跟 buildStageAchievements()
+// 保持一致,不然這裡查不到對應的成就定義。
+const STAGE_THRESHOLDS: { id: string; threshold: number }[] = STAGE_MILESTONES.map((milestone) => ({
+  id: `stage_${milestone.threshold * 10}`,
+  threshold: milestone.threshold,
+}));
+
 // 純函式,全量重新計算(不是增量判定):傳入目前的完整進度快照,回傳「目前應該全部解鎖」的
 // 成就 id 清單。呼叫端拿這份結果跟已持久化的 unlockedAchievementIds 做 diff 來找出「這次新解鎖」的項目。
 export function evaluateUnlockedAchievementIds(progress: AchievementProgress): string[] {
@@ -296,6 +427,10 @@ export function evaluateUnlockedAchievementIds(progress: AchievementProgress): s
   if (progress.hasAssembledTransferProof) unlocked.push('transfer_first_proof');
   if (progress.hasSwitchedJobOnce) unlocked.push('transfer_first_switch');
 
+  for (const { id, threshold } of STAGE_THRESHOLDS) {
+    if (progress.totalStagesCleared >= threshold) unlocked.push(id);
+  }
+
   return unlocked;
 }
 
@@ -326,6 +461,9 @@ export function getAchievementProgressDisplay(id: string, progress: AchievementP
     const target = Math.max(1, Math.ceil(companionPct.threshold * progress.totalCompanionCount));
     return { current: Math.min(progress.companionUnlockedCount, target), target };
   }
+
+  const stage = STAGE_THRESHOLDS.find((t) => t.id === id);
+  if (stage) return { current: Math.min(progress.totalStagesCleared, stage.threshold), target: stage.threshold };
 
   return null;
 }

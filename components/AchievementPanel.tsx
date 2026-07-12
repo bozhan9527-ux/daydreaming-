@@ -16,9 +16,18 @@ const CATEGORY_LABELS: Record<AchievementCategory, string> = {
   enhance: '強化鑲嵌',
   companion: '寵物坐騎',
   transfer: '轉職',
+  stage: '關卡里程碑',
 };
 
-const CATEGORY_ORDER: AchievementCategory[] = ['kills', 'level', 'equipment', 'enhance', 'companion', 'transfer'];
+const CATEGORY_ORDER: AchievementCategory[] = [
+  'kills',
+  'level',
+  'equipment',
+  'enhance',
+  'companion',
+  'transfer',
+  'stage',
+];
 
 const GEM_LABELS: Record<GemType, string> = {
   expGem: '經驗石',
@@ -45,6 +54,7 @@ export function AchievementPanel() {
   const companions = useGameState((state) => state.companions);
   const hasEverAssembledTransferProof = useGameState((state) => state.hasEverAssembledTransferProof);
   const hasEverSwitchedJob = useGameState((state) => state.hasEverSwitchedJob);
+  const totalStagesCleared = useGameState((state) => state.totalStagesCleared);
   const unlockedAchievementIds = useGameState((state) => state.unlockedAchievementIds);
   const claimedAchievementIds = useGameState((state) => state.claimedAchievementIds);
   const claimAchievement = useGameState((state) => state.claimAchievement);
@@ -58,6 +68,7 @@ export function AchievementPanel() {
     companions,
     hasEverAssembledTransferProof,
     hasEverSwitchedJob,
+    totalStagesCleared,
   });
 
   const claimableIds = unlockedAchievementIds.filter((id) => !claimedAchievementIds.includes(id));
