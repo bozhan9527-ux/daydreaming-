@@ -8,17 +8,69 @@ export interface MonsterSpec {
   damageType: DamageType;
 }
 
-// 4 個稀有度共 7 種怪物,稀有度沿用 game/trigger.ts 的 Rarity,不另外發明新分級。
-// damageType 為固定主題標記(物理/魔法系怪物/防禦系統對照用),非亂數決定。
-export const MONSTERS: MonsterSpec[] = [
-  { id: 'slime', name: '史萊姆', rarity: 'common', damageType: 'magic' },
-  { id: 'bat', name: '蝙蝠', rarity: 'common', damageType: 'physical' },
-  { id: 'goblin', name: '哥布林', rarity: 'rare', damageType: 'physical' },
-  { id: 'mushroom', name: '菇菇怪', rarity: 'rare', damageType: 'magic' },
-  { id: 'skeleton', name: '骷髏戰士', rarity: 'epic', damageType: 'physical' },
-  { id: 'golem', name: '石魔像', rarity: 'epic', damageType: 'magic' },
-  { id: 'dragon', name: '幼龍', rarity: 'legendary', damageType: 'magic' },
+// 稀有度沿用 game/trigger.ts 的 Rarity,不另外發明新分級。damageType 為固定主題標記
+// (物理/魔法系怪物/防禦系統對照用),非亂數決定。
+//
+// 12 種身體原型(見 game/sprites/monsters.ts 的 ARCHETYPES)x 10 個強度稱號 = 120 款怪物。
+// 稀有度池大小只影響「抽到這個稀有度時看到哪一款造型」,不影響抽到各稀有度的機率
+// (機率完全由 game/trigger.ts 的 rollTrigger 決定)——所以池子不必湊成 4 等分,common
+// 玩家看最多次故意分配最多款式(4款/原型),legendary 反而最少(1款/原型)也不影響數值。
+// id 命名規則 `${archetype}-${slot}`(slot 1~10)要跟 game/sprites/monsters.ts 的
+// MONSTER_VISUALS 產生器保持一致,改動任一邊記得同步另一邊。
+interface ArchetypeCatalogSpec {
+  key: string;
+  baseName: string;
+  damageType: DamageType;
+}
+
+// 前 7 個沿用原本 slime/bat/goblin/mushroom/skeleton/golem/dragon 的角色設定,
+// 後 5 個是新增原型。
+const ARCHETYPE_CATALOG: ArchetypeCatalogSpec[] = [
+  { key: 'blob', baseName: '史萊姆', damageType: 'magic' },
+  { key: 'flying', baseName: '蝙蝠', damageType: 'physical' },
+  { key: 'biped', baseName: '哥布林', damageType: 'physical' },
+  { key: 'fungal', baseName: '菇菇怪', damageType: 'magic' },
+  { key: 'undead', baseName: '骷髏戰士', damageType: 'physical' },
+  { key: 'construct', baseName: '石魔像', damageType: 'magic' },
+  { key: 'dragon', baseName: '幼龍', damageType: 'magic' },
+  { key: 'quadruped', baseName: '野狼', damageType: 'physical' },
+  { key: 'serpent', baseName: '巨蟒', damageType: 'magic' },
+  { key: 'insect', baseName: '甲蟲', damageType: 'physical' },
+  { key: 'aquatic', baseName: '深海魚', damageType: 'magic' },
+  { key: 'elemental', baseName: '元素獸', damageType: 'magic' },
 ];
+
+// 10 個強度稱號槽位,對應 game/sprites/monsters.ts 的 TINTS(同一個 index 兩邊要對得上)。
+// 稱號當前綴掛在 baseName 前面,common4款/rare3款/epic2款/legendary1款,共10款。
+const RARITY_SLOTS: { prefix: string; rarity: Rarity }[] = [
+  { prefix: '小', rarity: 'common' },
+  { prefix: '', rarity: 'common' },
+  { prefix: '大', rarity: 'common' },
+  { prefix: '兇暴', rarity: 'common' },
+  { prefix: '精銳', rarity: 'rare' },
+  { prefix: '鋼甲', rarity: 'rare' },
+  { prefix: '疾風', rarity: 'rare' },
+  { prefix: '魔化', rarity: 'epic' },
+  { prefix: '暗影', rarity: 'epic' },
+  { prefix: '王者', rarity: 'legendary' },
+];
+
+function buildMonsterCatalog(): MonsterSpec[] {
+  const monsters: MonsterSpec[] = [];
+  for (const archetype of ARCHETYPE_CATALOG) {
+    RARITY_SLOTS.forEach((slot, index) => {
+      monsters.push({
+        id: `${archetype.key}-${index + 1}`,
+        name: `${slot.prefix}${archetype.baseName}`,
+        rarity: slot.rarity,
+        damageType: archetype.damageType,
+      });
+    });
+  }
+  return monsters;
+}
+
+export const MONSTERS: MonsterSpec[] = buildMonsterCatalog();
 
 export function getMonstersByRarity(rarity: Rarity): MonsterSpec[] {
   return MONSTERS.filter((monster) => monster.rarity === rarity);

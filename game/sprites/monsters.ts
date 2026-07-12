@@ -43,178 +43,348 @@ function buildMonsterFrame(spec: MonsterVisualSpec): { frame: string[]; palette:
   return { frame, palette: spec.palette };
 }
 
-const K = 'K'; // 預設外框色,深灰,跟勇者身上的 K 同色階
+const K = 'K'; // 固定外框字元(所有原型共用),實際顏色由下面的 TINTS 決定,不是寫死色碼。
 
-const MONSTER_VISUALS: Record<string, MonsterVisualSpec> = {
-  slime: {
+// 12 種身體原型骨架:每種只手刻「一份輪廓」(跟舊版 7 隻怪物同一套手感),不是 120 份各自
+// 獨立的手繪稿。輪廓固定用 A(主色)/B(副色)兩個 fill key + K 外框,顏色留給下面的 TINTS
+// 決定——這樣同一副骨架套上不同 TINTS+縮放係數,就能長出「同一種怪、不同強度」的變體,
+// 呼應 equipmentIcons.ts「少量手繪骨架 + 程式化疊加差異化」讓大量內容有辨識度的既有解法。
+// 前 7 個(blob/flying/biped/fungal/undead/construct/dragon)沿用原本 slime/bat/goblin/
+// mushroom/skeleton/golem/dragon 的輪廓不變(只是把各自獨立的 palette key 統一改名成 A/B),
+// 後 5 個(quadruped/serpent/insect/aquatic/elemental)是新增的原型。
+interface ArchetypeSpec {
+  key: string;
+  width: number;
+  centerLeft: number;
+  centerRight: number;
+  rows: (MonsterRowSpec | null)[];
+}
+
+const ARCHETYPES: ArchetypeSpec[] = [
+  {
+    key: 'blob',
     width: 12,
     centerLeft: 5,
     centerRight: 6,
-    outline: K,
-    palette: { K: '#3a3542', G: '#8a9a86', D: '#5f6f56' },
     rows: [
       null,
-      { halfWidth: 1, fill: 'G' },
-      { halfWidth: 3, fill: 'G' },
-      { halfWidth: 4, fill: 'G' },
-      { halfWidth: 5, fill: 'G', eyes: true },
-      { halfWidth: 5, fill: 'G' },
-      { halfWidth: 5, fill: 'G' },
-      { halfWidth: 5, fill: 'G' },
-      { halfWidth: 4, fill: 'G' },
-      { halfWidth: 3, fill: 'G' },
-      { halfWidth: 2, fill: 'G' },
-      { halfWidth: 1, fill: 'D' },
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 4, fill: 'A' },
+      { halfWidth: 5, fill: 'A', eyes: true },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 4, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 1, fill: 'B' },
       null,
     ],
   },
-  bat: {
+  {
+    key: 'flying',
     width: 12,
     centerLeft: 5,
     centerRight: 6,
-    outline: K,
-    palette: { K: '#3a3542', B: '#6b6678', W: '#4a4456' },
     rows: [
       null,
-      { halfWidth: 1, fill: 'B' },
-      { halfWidth: 2, fill: 'B', eyes: true },
-      { halfWidth: 4, fill: 'W' },
-      { halfWidth: 6, fill: 'W' },
-      { halfWidth: 5, fill: 'W' },
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 2, fill: 'A', eyes: true },
+      { halfWidth: 4, fill: 'B' },
+      { halfWidth: 6, fill: 'B' },
+      { halfWidth: 5, fill: 'B' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 1, fill: 'A' },
+      null,
+      null,
+      null,
+    ],
+  },
+  {
+    key: 'biped',
+    width: 14,
+    centerLeft: 6,
+    centerRight: 7,
+    rows: [
+      null,
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 2, fill: 'A', eyes: true },
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 4, fill: 'A' },
+      { halfWidth: 4, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 2, fill: 'A' },
       { halfWidth: 3, fill: 'B' },
+      { halfWidth: 2, fill: 'B' },
+      null,
+      null,
+      null,
+    ],
+  },
+  {
+    key: 'fungal',
+    width: 14,
+    centerLeft: 6,
+    centerRight: 7,
+    rows: [
+      null,
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 6, fill: 'A' },
+      { halfWidth: 7, fill: 'A', eyes: true },
+      { halfWidth: 6, fill: 'A' },
+      { halfWidth: 4, fill: 'A' },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 1, fill: 'B' },
+      { halfWidth: 2, fill: 'B' },
+      { halfWidth: 2, fill: 'B' },
       { halfWidth: 2, fill: 'B' },
       { halfWidth: 1, fill: 'B' },
       null,
       null,
+    ],
+  },
+  {
+    key: 'undead',
+    width: 16,
+    centerLeft: 7,
+    centerRight: 8,
+    rows: [
+      null,
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 3, fill: 'A', eyes: true },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 1, fill: 'A' },
+      null,
+      null,
       null,
     ],
   },
-  goblin: {
+  {
+    key: 'construct',
+    width: 16,
+    centerLeft: 7,
+    centerRight: 8,
+    rows: [
+      null,
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 5, fill: 'A', eyes: true },
+      { halfWidth: 7, fill: 'A' },
+      { halfWidth: 6, fill: 'A' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 5, fill: 'B' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 4, fill: 'A' },
+      { halfWidth: 4, fill: 'A' },
+      { halfWidth: 4, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      null,
+      null,
+      null,
+      null,
+    ],
+  },
+  {
+    key: 'dragon',
+    width: 20,
+    centerLeft: 9,
+    centerRight: 10,
+    rows: [
+      null,
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 3, fill: 'A', eyes: true },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 8, fill: 'B' },
+      { halfWidth: 10, fill: 'B' },
+      { halfWidth: 9, fill: 'B' },
+      { halfWidth: 6, fill: 'B' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 4, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 2, fill: 'B' },
+      { halfWidth: 1, fill: 'B' },
+      null,
+      null,
+    ],
+  },
+  {
+    key: 'quadruped',
+    width: 16,
+    centerLeft: 7,
+    centerRight: 8,
+    rows: [
+      null,
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 2, fill: 'A', eyes: true },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 7, fill: 'A' },
+      { halfWidth: 7, fill: 'A' },
+      { halfWidth: 6, fill: 'A' },
+      { halfWidth: 5, fill: 'B' },
+      { halfWidth: 4, fill: 'B' },
+      { halfWidth: 3, fill: 'B' },
+      null,
+      null,
+    ],
+  },
+  {
+    key: 'serpent',
+    width: 10,
+    centerLeft: 4,
+    centerRight: 5,
+    rows: [
+      { halfWidth: 2, fill: 'A', eyes: true },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 2, fill: 'B' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 2, fill: 'B' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 2, fill: 'B' },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 2, fill: 'B' },
+      { halfWidth: 1, fill: 'A' },
+      { halfWidth: 1, fill: 'B' },
+    ],
+  },
+  {
+    key: 'insect',
     width: 14,
     centerLeft: 6,
     centerRight: 7,
-    outline: K,
-    palette: { K: '#3a3542', S: '#7a8a6a', A: '#6b5a3a' },
     rows: [
       null,
-      { halfWidth: 1, fill: 'S' },
-      { halfWidth: 2, fill: 'S', eyes: true },
-      { halfWidth: 1, fill: 'S' },
-      { halfWidth: 5, fill: 'S' },
-      { halfWidth: 4, fill: 'S' },
-      { halfWidth: 4, fill: 'S' },
-      { halfWidth: 3, fill: 'S' },
-      { halfWidth: 2, fill: 'S' },
+      { halfWidth: 1, fill: 'A', eyes: true },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 4, fill: 'B' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 4, fill: 'B' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 4, fill: 'B' },
       { halfWidth: 3, fill: 'A' },
       { halfWidth: 2, fill: 'A' },
       null,
       null,
+    ],
+  },
+  {
+    key: 'aquatic',
+    width: 16,
+    centerLeft: 7,
+    centerRight: 8,
+    rows: [
+      null,
+      { halfWidth: 1, fill: 'A', eyes: true },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 6, fill: 'B' },
+      { halfWidth: 7, fill: 'B' },
+      { halfWidth: 5, fill: 'A' },
+      { halfWidth: 3, fill: 'A' },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 1, fill: 'B' },
+      null,
       null,
     ],
   },
-  mushroom: {
+  {
+    key: 'elemental',
     width: 14,
     centerLeft: 6,
     centerRight: 7,
-    outline: K,
-    palette: { K: '#3a3542', C: '#a05a52', T: '#c9c4b0' },
     rows: [
       null,
-      { halfWidth: 3, fill: 'C' },
-      { halfWidth: 6, fill: 'C' },
-      { halfWidth: 7, fill: 'C', eyes: true },
-      { halfWidth: 6, fill: 'C' },
-      { halfWidth: 4, fill: 'C' },
-      { halfWidth: 2, fill: 'C' },
-      { halfWidth: 1, fill: 'T' },
-      { halfWidth: 2, fill: 'T' },
-      { halfWidth: 2, fill: 'T' },
-      { halfWidth: 2, fill: 'T' },
-      { halfWidth: 1, fill: 'T' },
-      null,
-      null,
-    ],
-  },
-  skeleton: {
-    width: 16,
-    centerLeft: 7,
-    centerRight: 8,
-    outline: K,
-    palette: { K: '#3a3542', B: '#d9c9b8' },
-    rows: [
-      null,
-      { halfWidth: 1, fill: 'B' },
-      { halfWidth: 3, fill: 'B', eyes: true },
+      { halfWidth: 2, fill: 'A' },
+      { halfWidth: 5, fill: 'A', eyes: true },
+      { halfWidth: 3, fill: 'B' },
+      { halfWidth: 6, fill: 'A' },
       { halfWidth: 2, fill: 'B' },
-      { halfWidth: 1, fill: 'B' },
-      { halfWidth: 5, fill: 'B' },
+      { halfWidth: 5, fill: 'A' },
       { halfWidth: 3, fill: 'B' },
-      { halfWidth: 5, fill: 'B' },
-      { halfWidth: 3, fill: 'B' },
-      { halfWidth: 2, fill: 'B' },
-      { halfWidth: 3, fill: 'B' },
+      { halfWidth: 4, fill: 'A' },
       { halfWidth: 1, fill: 'B' },
-      { halfWidth: 1, fill: 'B' },
-      null,
       null,
       null,
     ],
   },
-  golem: {
-    width: 16,
-    centerLeft: 7,
-    centerRight: 8,
+];
+
+// 10 組共用色調(小/中/大/兇暴/精銳/鋼甲/疾風/魔化/暗影/王者,對應 game/monsters.ts 的
+// RARITY_TIER_SLOTS 稀有度分佈),12 個原型共用同一組色調表——不是每個原型各自配色,
+// 這樣 12 原型 x 10 色調 = 120 款,只需要手調 10 組顏色而不是 120 組。
+interface Tint {
+  k: string;
+  a: string;
+  b: string;
+}
+
+const TINTS: Tint[] = [
+  { k: '#2e2a1c', a: '#8a9a86', b: '#5f6f56' }, // 1 小/common:原版史萊姆同色調,青綠
+  { k: '#3a3542', a: '#9aab8a', b: '#6f7f5a' }, // 2 中/common:偏亮的黃綠
+  { k: '#2a2820', a: '#7a8a72', b: '#4f5f46' }, // 3 大/common:壓深一階的橄欖綠
+  { k: '#2a1c16', a: '#a06050', b: '#6b3a2a' }, // 4 兇暴/common:赭紅
+  { k: '#161c2c', a: '#7a95c0', b: '#4a5a80' }, // 5 精銳/rare:鋼藍
+  { k: '#1c1e20', a: '#9aa0aa', b: '#606870' }, // 6 鋼甲/rare:金屬灰
+  { k: '#0e211c', a: '#7ad0c8', b: '#458a82' }, // 7 疾風/rare:青綠松石
+  { k: '#1c0e26', a: '#9a5ac0', b: '#5a2a70' }, // 8 魔化/epic:紫魔
+  { k: '#0e0c16', a: '#4a4258', b: '#2a2438' }, // 9 暗影/epic:暗灰紫
+  { k: '#1c1608', a: '#c9a94f', b: '#8a6a2a' }, // 10 王者/legendary:金
+];
+
+function maxHalfWidthFor(spec: ArchetypeSpec): number {
+  return Math.min(spec.centerLeft + 1, spec.width - spec.centerRight);
+}
+
+function buildVariantVisual(archetype: ArchetypeSpec, tintIndex: number, scaleFactor: number): MonsterVisualSpec {
+  const tint = TINTS[tintIndex];
+  const maxHalfWidth = maxHalfWidthFor(archetype);
+  const rows = archetype.rows.map((row) => {
+    if (row === null) return null;
+    const halfWidth = Math.max(1, Math.min(maxHalfWidth, Math.round(row.halfWidth * scaleFactor)));
+    return { halfWidth, fill: row.fill, eyes: row.eyes };
+  });
+  return {
+    width: archetype.width,
+    centerLeft: archetype.centerLeft,
+    centerRight: archetype.centerRight,
     outline: K,
-    palette: { K: '#3a3542', S: '#8b8698', C: '#e0955a' },
-    rows: [
-      null,
-      { halfWidth: 2, fill: 'S' },
-      { halfWidth: 5, fill: 'S', eyes: true },
-      { halfWidth: 7, fill: 'S' },
-      { halfWidth: 6, fill: 'S' },
-      { halfWidth: 5, fill: 'S' },
-      { halfWidth: 5, fill: 'C' },
-      { halfWidth: 5, fill: 'S' },
-      { halfWidth: 4, fill: 'S' },
-      { halfWidth: 4, fill: 'S' },
-      { halfWidth: 4, fill: 'S' },
-      { halfWidth: 3, fill: 'S' },
-      null,
-      null,
-      null,
-      null,
-    ],
-  },
-  dragon: {
-    width: 20,
-    centerLeft: 9,
-    centerRight: 10,
-    outline: 'Y',
-    palette: { Y: '#c9a94f', D: '#6b4a4a', W: '#4a3a3a', F: '#e8a23a' },
-    rows: [
-      null,
-      { halfWidth: 1, fill: 'D' },
-      { halfWidth: 2, fill: 'D' },
-      { halfWidth: 3, fill: 'D', eyes: true },
-      { halfWidth: 2, fill: 'D' },
-      { halfWidth: 3, fill: 'D' },
-      { halfWidth: 8, fill: 'W' },
-      { halfWidth: 10, fill: 'W' },
-      { halfWidth: 9, fill: 'W' },
-      { halfWidth: 6, fill: 'W' },
-      { halfWidth: 5, fill: 'D' },
-      { halfWidth: 5, fill: 'D' },
-      { halfWidth: 5, fill: 'D' },
-      { halfWidth: 4, fill: 'D' },
-      { halfWidth: 3, fill: 'D' },
-      { halfWidth: 2, fill: 'D' },
-      { halfWidth: 2, fill: 'F' },
-      { halfWidth: 1, fill: 'F' },
-      null,
-      null,
-    ],
-  },
-};
+    palette: { [K]: tint.k, A: tint.a, B: tint.b },
+    rows,
+  };
+}
+
+// 縮放係數對應 10 個色調欄位(小/中/大/兇暴/精銳/鋼甲/疾風/魔化/暗影/王者),越後面的稱號
+// 不見得體型越大,刻意讓體型/強度不是單純線性放大,看起來更像「同一種怪的不同個體」而不是
+// 縮放特效。
+const SCALE_FACTORS: number[] = [0.8, 0.95, 1.05, 1.15, 1.0, 1.1, 0.9, 1.15, 1.0, 1.3];
+
+// 產生全部 120 款怪物的視覺定義:id 跟 game/monsters.ts 的 MONSTERS 陣列保持
+// `${archetype}-${slot}`(slot 1~10)一致,兩邊各自維護但用同一套命名規則對齊,
+// 改動任一邊記得同步另一邊。
+const MONSTER_VISUALS: Record<string, MonsterVisualSpec> = {};
+for (const archetype of ARCHETYPES) {
+  for (let slot = 0; slot < TINTS.length; slot++) {
+    const id = `${archetype.key}-${slot + 1}`;
+    MONSTER_VISUALS[id] = buildVariantVisual(archetype, slot, SCALE_FACTORS[slot]);
+  }
+}
 
 export type MonsterSpriteId = keyof typeof MONSTER_VISUALS;
 
