@@ -38,7 +38,7 @@ import { createInitialStudentSkillTreeLevels, STUDENT_SKILL_LEVEL_CAP } from '..
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 27;
+export const SCHEMA_VERSION = 28;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -165,6 +165,10 @@ export interface SaveData {
   // 的計時基準時間戳,跟 heroHp 一樣要存檔——不存檔的話每次重開 App 都會被當成新的起算點,
   // 離線期間本來該累積的回血 tick 會不見。
   lastHpRegenTickAt: number;
+  // 這輩子累計清完的大關數(見 game/stages.ts):v28 起 STAGE_COUNT 拉到300(3000關里程碑),
+  // 破完一輪會繞回第1關第1小關,靠這個永不歸零的欄位判定「關卡里程碑」成就(見
+  // game/achievements.ts 的 'stage' 分類),不能直接看 stageProgress.stage。
+  totalStagesCleared: number;
   lastActiveAt: number;
 }
 
@@ -203,6 +207,7 @@ export function createInitialSaveData(): SaveData {
     studentSkillTree: createInitialStudentSkillTreeLevels(),
     companionGear: createEmptyCompanionGearState(),
     dungeon: createInitialDungeonState(),
+    totalStagesCleared: 0,
     lastHpRegenTickAt: Date.now(),
     lastActiveAt: Date.now(),
   };
@@ -1603,14 +1608,53 @@ function isSaveDataV26(value: unknown): value is SaveDataV26 {
   );
 }
 
-// v27(passive3/吸血/回血上線):現在的 SaveData 完整形狀,skillTree/studentSkillTree 每個
-// 職業/欄位變成7格(含 passive3),新增 lastHpRegenTickAt。這是 migrate() 的第一道
-// passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
-function isSaveDataV27(value: unknown): value is SaveData {
+// v27(passive3/吸血/回血上線,3000關/關卡里程碑成就上線前的最後一版):skillTree/
+// studentSkillTree 每個職業/欄位7格(含 passive3),有 lastHpRegenTickAt,但沒有
+// totalStagesCleared。凍結成明確獨立的 interface+literal版本號檢查,呼應這個檔案
+// 「每個舊版本都是固定形狀」的既有慣例。
+interface SaveDataV27 {
+  version: 27;
+  level: LevelState;
+  trigger: TriggerState;
+  job: JobSelection;
+  equipment: EquipmentLoadout;
+  bodyType: BodyType;
+  skillTree: SkillTreeLevels;
+  gender: Gender;
+  coins: number;
+  unlockedItemIds: UnlockedItemIds;
+  companions: CompanionState;
+  secondaryJob: Archetype | null;
+  itemInstances: ItemInstances;
+  enhanceStones: number;
+  gemCounts: GemCounts;
+  skillBooks: number;
+  stageProgress: StageProgress;
+  lastDailyResetAt: string;
+  dailyKillCount: number;
+  dailyQuestClaimed: boolean;
+  transferFragments: Partial<Record<Archetype, number>>;
+  transferProofs: Partial<Record<Archetype, number>>;
+  hasChosenJob: boolean;
+  unlockedAchievementIds: string[];
+  claimedAchievementIds: string[];
+  hasEverAssembledTransferProof: boolean;
+  hasEverSwitchedJob: boolean;
+  killCount: number;
+  heroHp: number;
+  defeatRecoveryUntil: number | null;
+  studentSkillTree: Record<SkillSlotId, number>;
+  companionGear: CompanionGearState;
+  dungeon: DungeonState;
+  lastHpRegenTickAt: number;
+  lastActiveAt: number;
+}
+
+function isSaveDataV27(value: unknown): value is SaveDataV27 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 27 &&
     typeof record.lastActiveAt === 'number' &&
     isLevelState(record.level) &&
     isTriggerState(record.trigger) &&
@@ -1645,6 +1689,18 @@ function isSaveDataV27(value: unknown): value is SaveData {
     isCompanionGearState(record.companionGear) &&
     isDungeonState(record.dungeon) &&
     typeof record.lastHpRegenTickAt === 'number'
+  );
+}
+
+// v28(3000關/關卡里程碑成就上線):現在的 SaveData 完整形狀,比 v27 多了 totalStagesCleared。
+// 這是 migrate() 的第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
+function isSaveDataV28(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    isSaveDataV27({ ...record, version: 27 }) &&
+    typeof record.totalStagesCleared === 'number'
   );
 }
 
@@ -1706,15 +1762,27 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // passive3=0(玩家還沒投資這格,就是0級,不是什麼特殊值),lastHpRegenTickAt 補 Date.now()
 // (呼應 hpRegenTotal<=0 時 applyHpRegenTick 也是直接推進到 now 的既有慣例,不會讓完全沒有
 // hpRegen 投資的老玩家一登入就補一段「追溯回血」)。
+// v27→v28 沒有 totalStagesCleared(見 game/stages.ts 的 3000 關擴充+關卡里程碑成就):
+// 補 0——這個功能上線前的存檔一律視為「還沒清過任何一個大關」,不會因為玩家過去已經打到
+// 第幾關(stageProgress.stage)就平白預先解鎖後面的里程碑成就,只能重新累積(呼應 killCount
+// 當初上線時同樣選擇補 0、不試圖從其他欄位反推歷史值的既有慣例)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV27(value)) return value;
+  if (isSaveDataV28(value)) return value;
+  if (isSaveDataV27(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      totalStagesCleared: 0,
+    };
+  }
   if (isSaveDataV26(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1725,6 +1793,7 @@ function migrate(value: unknown): SaveData {
       claimedAchievementIds: [...value.unlockedAchievementIds],
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1736,6 +1805,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1748,6 +1818,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1761,6 +1832,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1774,6 +1846,7 @@ function migrate(value: unknown): SaveData {
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1789,6 +1862,7 @@ function migrate(value: unknown): SaveData {
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1805,6 +1879,7 @@ function migrate(value: unknown): SaveData {
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
       claimedAchievementIds: [...value.unlockedAchievementIds],
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1824,6 +1899,7 @@ function migrate(value: unknown): SaveData {
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1844,6 +1920,7 @@ function migrate(value: unknown): SaveData {
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: 0,
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1882,6 +1959,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -1921,6 +1999,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -1960,6 +2039,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -1999,6 +2079,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2038,6 +2119,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2077,6 +2159,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2116,6 +2199,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2155,6 +2239,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2194,6 +2279,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2233,6 +2319,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2272,6 +2359,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2311,6 +2399,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2350,6 +2439,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2389,6 +2479,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2428,6 +2519,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2467,6 +2559,7 @@ function migrate(value: unknown): SaveData {
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
+      totalStagesCleared: 0,
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };

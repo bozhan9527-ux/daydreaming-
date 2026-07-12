@@ -231,6 +231,10 @@ interface GameState {
   // 技能書(見 game/skillTree.ts):技能升級改吃的獨立資源,不再跟角色升等搶銀行經驗值。
   skillBooks: number;
   stageProgress: StageProgress;
+  // 這輩子總共清了幾個大關(每破一次魔王就 +1),永不隨 stageProgress 輪迴繞圈歸零——
+  // 3000 關里程碑成就(見 game/achievements.ts 的 'stage' 分類)靠這個數字判定,不能直接看
+  // stageProgress.stage,因為破完第300大關後 stageProgress 會繞回第1關,這個欄位不會。
+  totalStagesCleared: number;
   // 每日內容:見 game/daily.ts。lastDailyLoginBonus 不存檔,只給 UI 顯示一次性登入獎勵彈窗用。
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -332,6 +336,7 @@ type PersistableState = Pick<
   | 'gemCounts'
   | 'skillBooks'
   | 'stageProgress'
+  | 'totalStagesCleared'
   | 'lastDailyResetAt'
   | 'dailyKillCount'
   | 'dailyQuestClaimed'
@@ -370,6 +375,7 @@ function persist(state: PersistableState): void {
     gemCounts: state.gemCounts,
     skillBooks: state.skillBooks,
     stageProgress: state.stageProgress,
+    totalStagesCleared: state.totalStagesCleared,
     lastDailyResetAt: state.lastDailyResetAt,
     dailyKillCount: state.dailyKillCount,
     dailyQuestClaimed: state.dailyQuestClaimed,
@@ -399,6 +405,7 @@ export function computeAchievementProgress(state: {
   companions: CompanionState;
   hasEverAssembledTransferProof: boolean;
   hasEverSwitchedJob: boolean;
+  totalStagesCleared: number;
 }): AchievementProgress {
   const paidItems = EQUIPMENT_ITEMS.filter((item) => item.price > 0);
   const unlockedPaidItemCount = paidItems.filter((item) => state.unlockedItemIds.includes(item.id)).length;
@@ -418,6 +425,7 @@ export function computeAchievementProgress(state: {
     totalCompanionCount: COMPANIONS.length,
     hasAssembledTransferProof: state.hasEverAssembledTransferProof,
     hasSwitchedJobOnce: state.hasEverSwitchedJob,
+    totalStagesCleared: state.totalStagesCleared,
   };
 }
 
@@ -468,6 +476,7 @@ export const useGameState = create<GameState>((set, get) => ({
   gemCounts: createEmptyGemCounts(),
   skillBooks: 0,
   stageProgress: createInitialStageProgress(),
+  totalStagesCleared: 0,
   lastDailyResetAt: '',
   dailyKillCount: 0,
   dailyQuestClaimed: false,
@@ -559,6 +568,7 @@ export const useGameState = create<GameState>((set, get) => ({
       gemCounts: save.gemCounts,
       skillBooks: save.skillBooks,
       stageProgress: save.stageProgress,
+      totalStagesCleared: save.totalStagesCleared,
       lastDailyResetAt: newDay ? todayDateString() : save.lastDailyResetAt,
       dailyKillCount: newDay ? 0 : save.dailyKillCount,
       dailyQuestClaimed: newDay ? false : save.dailyQuestClaimed,
@@ -884,6 +894,9 @@ export const useGameState = create<GameState>((set, get) => ({
       unlockedItemIds: nextUnlockedItemIds,
       itemInstances: nextItemInstances,
       stageProgress: nextStageProgress,
+      // 魔王小關(isBoss)只需要1擊就晉級(見 game/stages.ts),所以「這隻是魔王」跟「這一擊
+      // 剛清完一個大關」是同一件事,不用另外比對 stageProgress 前後差異。
+      totalStagesCleared: state.totalStagesCleared + (state.currentEncounter.isBoss ? 1 : 0),
       killCount: state.killCount + 1,
       dailyKillCount: state.dailyKillCount + 1,
       lastEvent: event,

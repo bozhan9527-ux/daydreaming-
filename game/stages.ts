@@ -1,7 +1,8 @@
-// 關卡系統:5 大關 x 10 小關,每小關固定擊敗 5 隻怪晉級,第 10 小關是魔王,
-// 第 5 關第 10 小關是大魔王。破完整組(含大魔王)直接循環回第 1 關第 1 小關,呼應放置遊戲
+// 關卡系統:300 大關 x 10 小關 = 3000 關,每小關固定擊敗 5 隻怪晉級,第 10 小關是魔王,
+// 第 300 關第 10 小關是大魔王。破完整組(含大魔王)直接循環回第 1 關第 1 小關,呼應放置遊戲
 // 「數值持續看玩家等級成長、關卡只是不斷重複的包裝」的定位——見 getStageDifficultyMultiplier。
-export const STAGE_COUNT = 5;
+// (原本是 5 大關,拉到 300 大關純粹是延長內容長度,兩層晉級結構跟魔王判定規則完全沒變。)
+export const STAGE_COUNT = 300;
 export const SUBSTAGES_PER_STAGE = 10;
 export const KILLS_PER_SUBSTAGE = 5;
 
@@ -47,10 +48,14 @@ export function advanceStageProgress(progress: StageProgress): StageProgress {
   return createInitialStageProgress();
 }
 
-// 關卡疊加的難度/獎勵倍率:每高一大關 +15%,同一大關內每高一小關再 +3%,
+// 關卡疊加的難度/獎勵倍率:每高一大關 +1%,同一大關內每高一小關再 +0.2%,
 // 魔王額外 x2.5、大魔王額外 x5,跟玩家等級的數值成長是各自獨立的兩條軸線。
-const STAGE_MULTIPLIER_STEP = 0.15;
-const SUBSTAGE_MULTIPLIER_STEP = 0.03;
+// (STAGE_COUNT 從 5 拉到 300 時這兩個 STEP 常數有跟著往下調——沿用舊的 15%/3% 直接線性
+// 拉長 60 倍會讓終局倍率從原本封頂約 9.35x 暴衝到 230x,換算下來滿等玩家單場戰鬥可能要打
+// 超過一天,關卡系統末端會直接卡死。調整後終局大魔王倍率約 20x,對齊副本系統(game/dungeon.ts)
+// 已經校準過的 Lv500 封頂倍率(約19x),兩套「後期硬檢驗」內容的難度量級才會一致。)
+const STAGE_MULTIPLIER_STEP = 0.01;
+const SUBSTAGE_MULTIPLIER_STEP = 0.002;
 const BOSS_MULTIPLIER = 2.5;
 const FINAL_BOSS_MULTIPLIER = 5;
 
