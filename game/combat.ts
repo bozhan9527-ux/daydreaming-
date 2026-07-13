@@ -44,9 +44,10 @@ export function calcCombatMultiplier(archetype: Archetype, tier: JobTier): numbe
   return BASE_MULTIPLIER[tier] + SUBTYPE_BONUS[subtype][tier] + DAMAGE_TYPE_BONUS[damageType][tier];
 }
 
-// 雙職兼修:3 階解鎖,可另選一個副職archetype。副職只吃自己那份倍率「超出 1.0 的部分」
-// 的一半,不會整個疊上去,維持主職才是數值主力的定位。
-export const DUAL_CLASS_UNLOCK_LEVEL = TIER_UNLOCK_LEVELS[3];
+// 雙職兼修:Lv120 解鎖,可另選一個副職archetype。副職只吃自己那份倍率「超出 1.0 的部分」
+// 的一半,不會整個疊上去,維持主職才是數值主力的定位。獨立於階級門檻(TIER_UNLOCK_LEVELS)之外,
+// 純粹是留給雙職這個系統自己的解鎖等級。
+export const DUAL_CLASS_UNLOCK_LEVEL = 120;
 const SECONDARY_JOB_WEIGHT = 0.5;
 
 export function canUnlockDualClass(level: number): boolean {
