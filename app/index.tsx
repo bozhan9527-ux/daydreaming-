@@ -33,6 +33,7 @@ export default function HomeScreen() {
   const lastOfflineGain = useGameState((state) => state.lastOfflineGain);
   const lastOfflineKills = useGameState((state) => state.lastOfflineKills);
   const lastOfflineCoins = useGameState((state) => state.lastOfflineCoins);
+  const stageProgress = useGameState((state) => state.stageProgress);
   const coins = useGameState((state) => state.coins);
   const lastEvent = useGameState((state) => state.lastEvent);
   const lastCompanionDropId = useGameState((state) => state.lastCompanionDropId);
@@ -257,7 +258,8 @@ export default function HomeScreen() {
             </Pressable>
           </View>
           <Text style={styles.offlineModalText}>
-            離線期間擊敗了 {lastOfflineKills} 隻怪,{'\n'}獲得 {lastOfflineGain} 經驗、{lastOfflineCoins} 金幣
+            離線期間擊敗了 {lastOfflineKills} 隻怪,{'\n'}獲得 {lastOfflineGain} 經驗、{lastOfflineCoins} 金幣{'\n'}
+            關卡推進到 第{stageProgress.stage}關‧第{stageProgress.subStage}小關
           </Text>
         </View>
       </Modal>

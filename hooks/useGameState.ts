@@ -8,7 +8,7 @@ import {
   canUpgradeAscension,
   getAscensionBonusTotal,
 } from '../game/ascension';
-import { calcKillReward, Encounter, estimateOfflineBattleResult, generateEncounter } from '../game/battle';
+import { calcKillReward, Encounter, generateEncounter } from '../game/battle';
 import {
   canUpgradeCompanionGearSlot,
   COMPANIONS,
@@ -136,6 +136,7 @@ import {
   StageProgress,
 } from '../game/stages';
 import { bumpPityFromClick, createInitialTriggerState, TriggerState } from '../game/trigger';
+import { simulateOfflineStageProgress } from '../game/offlineProgress';
 import { JobSelection, loadSave, SCHEMA_VERSION, writeSave } from '../lib/storage';
 import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
 import { useToast } from './useToast';
@@ -653,10 +654,29 @@ export const useGameState = create<GameState>((set, get) => ({
     // 的精神換成一週為單位——沒有登入獎勵這種一次性彈窗,純粹是進度池歸零+換一組新的3條挑戰。
     const newWeek = isNewWeek(save.weeklyChallengeWeekIndex);
 
-    // 背景/關閉期間沒有畫面可以真的打怪,離線期間用平均戰鬥時長反推大概擊敗幾隻、賺多少金幣
-    // (風味數字,經驗值仍然是上面 calcOfflineExp 那套沒變的公式在算),跟前景同一套裝備/寵物加成。
-    const offlineBattle = estimateOfflineBattleResult(elapsedMs, speedMultiplier, coinMultiplier);
-    const coins = save.coins + offlineBattle.coins + (dailyLoginBonus?.coins ?? 0);
+    // 背景/關閉期間沒有畫面可以真的打怪,離線期間用「平均稀有度」怪物血量反推大概擊敗幾隻、
+    // 真的推進關卡進度(見 game/offlineProgress.ts)——跟前景同一套裝備/寵物加成,攻擊力用
+    // 離線前的裝備/等級快照計算;跟 exp 一樣被 offlineCapHours 上限夾住,避免長時間沒開的
+    // 存檔一次推進到不合理的關卡數。
+    const substatTotals = getSubstatTotals(save.equipment, itemInstances);
+    const heroSchool = getArchetypeComposition(save.job.archetype).damageType;
+    const offlineAttackPower = heroAttackPower(
+      save.level.level,
+      getCurrentTier(save.level.level),
+      heroSchool === 'physical' ? substatTotals.physicalAttack : substatTotals.magicAttack
+    );
+    const cappedOfflineMs = Math.min(elapsedMs, offlineCapHours * 60 * 60 * 1000);
+    const offlineStageResult = simulateOfflineStageProgress(
+      cappedOfflineMs,
+      save.stageProgress,
+      save.totalStagesCleared,
+      save.killCount,
+      offlineAttackPower,
+      speedMultiplier,
+      coinMultiplier,
+      ASCENSION_POINTS_PER_CYCLE
+    );
+    const coins = save.coins + offlineStageResult.coins + (dailyLoginBonus?.coins ?? 0);
 
     set({
       level,
@@ -679,9 +699,9 @@ export const useGameState = create<GameState>((set, get) => ({
       enhanceStones: save.enhanceStones,
       gemCounts: save.gemCounts,
       skillBooks: save.skillBooks,
-      stageProgress: save.stageProgress,
-      totalStagesCleared: save.totalStagesCleared,
-      ascensionPoints: save.ascensionPoints,
+      stageProgress: offlineStageResult.stageProgress,
+      totalStagesCleared: offlineStageResult.totalStagesCleared,
+      ascensionPoints: save.ascensionPoints + offlineStageResult.ascensionPointsGained,
       ascensionUpgrades: save.ascensionUpgrades,
       weeklyChallengeWeekIndex: newWeek ? weekIndex() : save.weeklyChallengeWeekIndex,
       weeklyChallengeProgress: newWeek ? {} : save.weeklyChallengeProgress,
@@ -698,15 +718,15 @@ export const useGameState = create<GameState>((set, get) => ({
       claimedAchievementIds: save.claimedAchievementIds,
       hasEverAssembledTransferProof: save.hasEverAssembledTransferProof,
       hasEverSwitchedJob: save.hasEverSwitchedJob,
-      killCount: save.killCount,
+      killCount: offlineStageResult.killCount,
       heroHp: save.heroHp,
       defeatRecoveryUntil: save.defeatRecoveryUntil,
       lastHpRegenTickAt: save.lastHpRegenTickAt,
       lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,
-      lastOfflineKills: offlineBattle.kills,
-      lastOfflineCoins: offlineBattle.coins,
+      lastOfflineKills: offlineStageResult.kills,
+      lastOfflineCoins: offlineStageResult.coins,
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,
