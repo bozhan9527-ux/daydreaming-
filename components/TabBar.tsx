@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { isTabUnlocked, tabUnlockLevel } from '../game/onboarding';
@@ -31,26 +32,30 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, attention, onSelec
         const lockedLabel = `${tab.label}\nLv${unlockLevel}`;
         // 已解鎖才顯示提醒角標——鎖住的分頁本來就有 Lv 門檻字樣提示,不用重複疊加。
         const showDot = unlocked && (attention[tab.id as keyof TabAttentionFlags] ?? false);
+        // 轉生是Lv50後期限定內容,跟前面7個常駐分頁性質不同(破完一輪3000關才有意義),
+        // 加一條細分隔線區隔開,不用真的拆掉獨立分頁或減少分頁數。
         return (
-          <Pressable
-            key={tab.id}
-            style={[styles.tab, active && styles.tabActive, !unlocked && styles.tabLocked]}
-            onPress={() => {
-              if (!unlocked) {
-                showToast(`Lv${unlockLevel} 解鎖「${tab.label}」`);
-                return;
-              }
-              onSelect(tab.id);
-            }}
-          >
-            <View style={styles.iconBox}>
-              <PixelSprite frame={frame} palette={palette} pixelSize={4} />
-              {showDot && <View style={styles.attentionDot} />}
-            </View>
-            <Text style={styles.label} numberOfLines={unlocked ? 1 : 2}>
-              {unlocked ? tab.label : lockedLabel}
-            </Text>
-          </Pressable>
+          <Fragment key={tab.id}>
+            {tab.id === 'ascension' && <View style={styles.divider} />}
+            <Pressable
+              style={[styles.tab, active && styles.tabActive, !unlocked && styles.tabLocked]}
+              onPress={() => {
+                if (!unlocked) {
+                  showToast(`Lv${unlockLevel} 解鎖「${tab.label}」`);
+                  return;
+                }
+                onSelect(tab.id);
+              }}
+            >
+              <View style={styles.iconBox}>
+                <PixelSprite frame={frame} palette={palette} pixelSize={4} />
+                {showDot && <View style={styles.attentionDot} />}
+              </View>
+              <Text style={styles.label} numberOfLines={unlocked ? 1 : 2}>
+                {unlocked ? tab.label : lockedLabel}
+              </Text>
+            </Pressable>
+          </Fragment>
         );
       })}
     </View>
@@ -67,6 +72,11 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 4,
     width: '100%',
+  },
+  divider: {
+    width: 1,
+    marginVertical: 6,
+    backgroundColor: '#3a3a45',
   },
   tab: {
     flex: 1,

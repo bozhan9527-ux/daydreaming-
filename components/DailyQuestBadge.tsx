@@ -38,6 +38,8 @@ export function DailyQuestBadge() {
   const weeklyChallengeProgress = useGameState((state) => state.weeklyChallengeProgress);
   const weeklyChallengeClaimedIds = useGameState((state) => state.weeklyChallengeClaimedIds);
   const claimWeeklyChallenge = useGameState((state) => state.claimWeeklyChallenge);
+  const unlockedAchievementIds = useGameState((state) => state.unlockedAchievementIds);
+  const claimedAchievementIds = useGameState((state) => state.claimedAchievementIds);
 
   const dailyRows: TaskRow[] = [
     {
@@ -70,9 +72,16 @@ export function DailyQuestBadge() {
     onClaim: () => claimWeeklyChallenge(def.id),
   }));
 
+  // 成就待領取數(見 game/achievements.ts 的手動領取制):只把「還有幾個可領」的數字併進
+  // 徽章總待領取數,不把102個成就逐筆列進這個小面板——面板本來就是給「每日/每週」這種會
+  // 跨天/跨週歸零的短期任務用,成就是終生累積清單,塞進來會撐爆面板,也稀釋掉「今天/本週
+  // 做完了嗎」這個原本的判斷基準。allClaimed(徽章整個消失的條件)刻意不算進成就數——不然
+  // 已經有大量歷史成就待領的老玩家會發現徽章永遠不會消失,失去「今天做完了」的完成感。
+  const achievementClaimableCount = unlockedAchievementIds.filter((id) => !claimedAchievementIds.includes(id)).length;
+
   const allRows = [...dailyRows, ...weeklyRows];
   const claimedCount = allRows.filter((row) => row.claimed).length;
-  const claimableCount = allRows.filter((row) => row.canClaim).length;
+  const claimableCount = allRows.filter((row) => row.canClaim).length + achievementClaimableCount;
   const allClaimed = claimedCount === allRows.length;
 
   if (allClaimed) return null;
@@ -118,6 +127,14 @@ export function DailyQuestBadge() {
           {dailyRows.map(renderRow)}
           <Text style={styles.sectionLabel}>本週挑戰</Text>
           {weeklyRows.map(renderRow)}
+          {achievementClaimableCount > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>成就</Text>
+              <Text style={styles.achievementHint}>
+                {achievementClaimableCount} 個成就可領取,前往「成就」分頁一鍵領取
+              </Text>
+            </>
+          )}
         </View>
       )}
     </View>
@@ -175,6 +192,10 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     marginTop: 4,
+  },
+  achievementHint: {
+    color: '#c9a94f',
+    fontSize: 10,
   },
   row: {
     flexDirection: 'row',

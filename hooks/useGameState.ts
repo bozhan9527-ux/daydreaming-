@@ -92,6 +92,7 @@ import {
 } from '../game/daily';
 import { getRandomEvent, GameEvent } from '../game/events';
 import { applyHpRegenTick, heroAttackPower, heroMaxHp, RECOVERY_DELAY_MS, resolveFightHealth } from '../game/heroHealth';
+import { getActiveLimitedEvent } from '../game/limitedEvent';
 import {
   canClaimWeeklyChallenge,
   getWeeklyChallengeDef,
@@ -206,13 +207,32 @@ function computeRewardMultipliers(
   const ascensionExp = getAscensionBonusTotal('exp', ascensionUpgrades);
   const ascensionCoins = getAscensionBonusTotal('coins', ascensionUpgrades);
   const ascensionSpeed = getAscensionBonusTotal('speed', ascensionUpgrades);
+  // 限時活動(見 game/limitedEvent.ts):純粹是「今天星期幾」算出來的固定加成,不存檔、
+  // 不用跟伺服器同步,呼叫端不用管活動有沒有在進行,這裡直接算好疊加上去就好。
+  const activeEvent = getActiveLimitedEvent();
+  const eventExpBonus = activeEvent?.stat === 'exp' ? activeEvent.bonus : 0;
+  const eventCoinBonus = activeEvent?.stat === 'coins' ? activeEvent.bonus : 0;
+  const eventSpeedBonus = activeEvent?.stat === 'speed' ? activeEvent.bonus : 0;
   return {
     expMultiplier:
       jobMultiplier *
-      (1 + equipmentBonus.exp + companionBonus.exp + companionGearBonus.exp + passiveBonus.exp + ascensionExp),
+      (1 +
+        equipmentBonus.exp +
+        companionBonus.exp +
+        companionGearBonus.exp +
+        passiveBonus.exp +
+        ascensionExp +
+        eventExpBonus),
     coinMultiplier:
-      1 + equipmentBonus.coins + companionBonus.coins + companionGearBonus.coins + passiveBonus.coins + ascensionCoins,
-    speedMultiplier: 1 + equipmentBonus.speed + companionBonus.speed + companionGearBonus.speed + ascensionSpeed,
+      1 +
+      equipmentBonus.coins +
+      companionBonus.coins +
+      companionGearBonus.coins +
+      passiveBonus.coins +
+      ascensionCoins +
+      eventCoinBonus,
+    speedMultiplier:
+      1 + equipmentBonus.speed + companionBonus.speed + companionGearBonus.speed + ascensionSpeed + eventSpeedBonus,
   };
 }
 
@@ -597,7 +617,11 @@ export const useGameState = create<GameState>((set, get) => ({
   load: async () => {
     const save = await loadSave();
     const elapsedMs = Date.now() - save.lastActiveAt;
-    const baseGain = calcOfflineExp(save.level.level, elapsedMs);
+    // 轉生加成樹的「恆常離線效率」節點(見 game/ascension.ts 的 offlineCap)延長預設24小時的
+    // 離線收益結算上限,offlineCapBonusHours 直接是「小時」數(不是百分比,不用像 exp/coins/
+    // speed 那樣乘進 computeRewardMultipliers)。
+    const offlineCapHours = 24 + getAscensionBonusTotal('offlineCap', save.ascensionUpgrades);
+    const baseGain = calcOfflineExp(save.level.level, elapsedMs, offlineCapHours);
 
     // 補齊舊存檔(v11 以前)已經擁有的裝備(含免費起始款,免費款不會出現在 unlockedItemIds 裡)
     // 的隨機/隱藏素質,不用等玩家重新裝備一次才生效。

@@ -71,6 +71,15 @@ function getSlotFlavor(archetype: Archetype, tier: JobTier, slot: SkillSlotId): 
   return getTierSkillFlavor(archetype, tier, slot);
 }
 
+// 數值為0時用暗色淡化,非零維持一般文字色——角色狀態這排素質很多欄位新玩家/沒投資的方向
+// 常年停在0%,跟旁邊有意義的數字用同樣視覺權重呈現,會讓玩家要花力氣從一堆「沒有」裡面
+// 找「有」。只淡化這個數字本身,不影響外層 Text 既有的 highlight 樣式(該金色高亮的整行
+// 還是金色,只是裡面剛好是0的那個數字不會搶戲)。
+function ZeroDimmed({ value }: { value: number }) {
+  const pct = Math.round(value * 100);
+  return <Text style={pct === 0 && styles.statusValueZero}>{pct}%</Text>;
+}
+
 // 角色狀態面板:只在第一層(archetypes)顯示,獨立呼叫 useGameState 抓自己需要的資料——
 // 這一層本來就沒有像 TierList/SkillDetailPanel 那樣被父層挑選/篩選過的資料要傳,
 // 直接在元件內部訂閱比多繞一層 props 更直接,跟 JobSelector() 本體的寫法一致。
@@ -114,19 +123,19 @@ function HeroStatusPanel() {
         魔法攻擊力 {Math.round(heroAttackPower(level.level, currentTier, substatTotals.magicAttack))}
       </Text>
       <Text style={[styles.statusLine, isPhysical && styles.statusLineHighlight]}>
-        物理:爆擊率 {Math.round(substatTotals.physicalCritRate * 100)}% / 爆擊傷害 +
-        {Math.round(substatTotals.physicalCritDamage * 100)}%
+        物理:爆擊率 <ZeroDimmed value={substatTotals.physicalCritRate} /> / 爆擊傷害 +
+        <ZeroDimmed value={substatTotals.physicalCritDamage} />
       </Text>
       <Text style={[styles.statusLine, !isPhysical && styles.statusLineHighlight]}>
-        魔法:爆擊率 {Math.round(substatTotals.magicCritRate * 100)}% / 爆擊傷害 +
-        {Math.round(substatTotals.magicCritDamage * 100)}%
+        魔法:爆擊率 <ZeroDimmed value={substatTotals.magicCritRate} /> / 爆擊傷害 +
+        <ZeroDimmed value={substatTotals.magicCritDamage} />
       </Text>
       <Text style={styles.statusLine}>
-        吸血 {Math.round(totalLifesteal * 100)}%　自動回血 {Math.round(totalHpRegen * 100)}%
+        吸血 <ZeroDimmed value={totalLifesteal} />　自動回血 <ZeroDimmed value={totalHpRegen} />
       </Text>
       <Text style={styles.statusLine}>
-        總加成:經驗+{Math.round(bonusTotals.exp * 100)}% / 金幣+{Math.round(bonusTotals.coins * 100)}% / 速度+
-        {Math.round(bonusTotals.speed * 100)}%
+        總加成:經驗+<ZeroDimmed value={bonusTotals.exp} /> / 金幣+<ZeroDimmed value={bonusTotals.coins} /> / 速度+
+        <ZeroDimmed value={bonusTotals.speed} />
       </Text>
       <Text style={styles.statusLine}>職業階級倍率 x{calcCombatMultiplier(job.archetype, currentTier).toFixed(2)}</Text>
     </View>
@@ -552,6 +561,10 @@ const styles = StyleSheet.create({
   statusLineHighlight: {
     color: '#c9a94f',
     fontWeight: '600',
+  },
+  statusValueZero: {
+    color: '#5a5a65',
+    fontWeight: '400',
   },
   archetypeGrid: {
     flexDirection: 'row',

@@ -1069,7 +1069,7 @@ function isDailyTaskClaimedIds(value: unknown): value is DailyTaskId[] {
   return Array.isArray(value) && value.every((id) => DAILY_TASK_IDS.includes(id));
 }
 
-const ASCENSION_UPGRADE_IDS: AscensionUpgradeId[] = ['exp', 'coins', 'speed'];
+const ASCENSION_UPGRADE_IDS: AscensionUpgradeId[] = ['exp', 'coins', 'speed', 'offlineCap'];
 
 function isAscensionUpgrades(value: unknown): value is Partial<Record<AscensionUpgradeId, number>> {
   if (typeof value !== 'object' || value === null) return false;
