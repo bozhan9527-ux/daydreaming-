@@ -86,12 +86,38 @@ const SUB_VIEWS: { id: SubView; label: string }[] = [
   { id: 'shop', label: '商店' },
 ];
 
+// 篩選:生成式目錄一個部位最多50個等級檔,商店清單(還沒買的款式)常常一次塞滿一長串——
+// 跟 InventoryPanel.tsx 背包分頁同一套篩選維度(主加成類型),排序沿用既有的依需求等級規則
+// (見下面 items 的 .sort),不重複加一顆排序切換鈕。
+type StatFilter = 'all' | EquipmentBonusStat;
+
+const STAT_FILTERS: StatFilter[] = ['all', 'exp', 'coins', 'speed'];
+
+const STAT_FILTER_LABELS: Record<StatFilter, string> = {
+  all: '全部',
+  exp: '經驗',
+  coins: '金幣',
+  speed: '速度',
+};
+
 function formatBonus(stat: EquipmentBonusStat, value: number): string {
   return `${STAT_LABELS[stat]} +${Math.round(value * 100)}%`;
 }
 
 function formatSubstat(stat: SubstatType, value: number): string {
   return `${SUBSTAT_LABELS[stat]} +${Math.round(value * 100)}%`;
+}
+
+// 素質格數值為0(+0%)時用暗色淡化,取代跟旁邊真正有投資的欄位一樣的視覺權重——這個格子
+// 集中了8+2個素質,新玩家/沒點的方向常年停在+0%,不淡化的話很難一眼看出「哪些欄位真的有加成」。
+function SubstatCell({ label, value }: { label: string; value: number }) {
+  const pct = Math.round(value * 100);
+  return (
+    <View style={styles.substatCell}>
+      <Text style={styles.substatCellLabel}>{label}</Text>
+      <Text style={[styles.substatCellValue, pct === 0 && styles.substatCellValueZero]}>+{pct}%</Text>
+    </View>
+  );
 }
 
 function formatItemStats(item: EquipmentItem, instance: ItemInstanceData | undefined): string {
@@ -125,6 +151,7 @@ export function EquipmentPanel() {
 
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
   const [subView, setSubView] = useState<SubView>('worn');
+  const [shopStatFilter, setShopStatFilter] = useState<StatFilter>('all');
 
   const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const substatTotals = getSubstatTotals(equipment, itemInstances);
@@ -136,7 +163,12 @@ export function EquipmentPanel() {
   );
   // 商店:還沒擁有(不管有沒有等級鎖)的款式;已擁有但沒穿的背包款式改到獨立的
   // 「背包」分頁(components/InventoryPanel.tsx)去挑,「穿戴」畫面只顯示目前穿著的那一件。
+  // shopItems 維持「全部未擁有款式」不受篩選影響,子分頁按鈕上的數字才是「這個部位總共還有
+  // 幾款沒收集」;篩選只影響下面實際渲染的清單(filteredShopItems)。
   const shopItems = items.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
+  const filteredShopItems = shopItems.filter(
+    (item) => shopStatFilter === 'all' || item.bonus.stat === shopStatFilter
+  );
 
   function pickItem(item: EquipmentItem) {
     // equip()/purchaseItem() 是第一次擁有這件裝備時擲隨機/隱藏素質的地方(同步 set),
@@ -212,53 +244,23 @@ export function EquipmentPanel() {
       <View style={styles.substatGrid}>
         <View style={styles.substatRow}>
           <Text style={styles.substatRowLabel}>物理</Text>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>攻擊</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.physicalAttack * 100)}%</Text>
-          </View>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>抗性</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.physicalResistance * 100)}%</Text>
-          </View>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>爆率</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.physicalCritRate * 100)}%</Text>
-          </View>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>爆傷</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.physicalCritDamage * 100)}%</Text>
-          </View>
+          <SubstatCell label="攻擊" value={substatTotals.physicalAttack} />
+          <SubstatCell label="抗性" value={substatTotals.physicalResistance} />
+          <SubstatCell label="爆率" value={substatTotals.physicalCritRate} />
+          <SubstatCell label="爆傷" value={substatTotals.physicalCritDamage} />
         </View>
         <View style={styles.substatRow}>
           <Text style={styles.substatRowLabel}>魔法</Text>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>攻擊</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.magicAttack * 100)}%</Text>
-          </View>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>抗性</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.magicResistance * 100)}%</Text>
-          </View>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>爆率</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.magicCritRate * 100)}%</Text>
-          </View>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>爆傷</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.magicCritDamage * 100)}%</Text>
-          </View>
+          <SubstatCell label="攻擊" value={substatTotals.magicAttack} />
+          <SubstatCell label="抗性" value={substatTotals.magicResistance} />
+          <SubstatCell label="爆率" value={substatTotals.magicCritRate} />
+          <SubstatCell label="爆傷" value={substatTotals.magicCritDamage} />
         </View>
         {/* 吸血/自動回血是通用素質(不分物理/魔法),只用一行、兩格,格子寬度自然比上面寬一倍。 */}
         <View style={styles.substatRow}>
           <Text style={styles.substatRowLabel}>通用</Text>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>吸血</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.lifesteal * 100)}%</Text>
-          </View>
-          <View style={styles.substatCell}>
-            <Text style={styles.substatCellLabel}>回血</Text>
-            <Text style={styles.substatCellValue}>+{Math.round(substatTotals.hpRegen * 100)}%</Text>
-          </View>
+          <SubstatCell label="吸血" value={substatTotals.lifesteal} />
+          <SubstatCell label="回血" value={substatTotals.hpRegen} />
         </View>
       </View>
 
@@ -301,13 +303,28 @@ export function EquipmentPanel() {
       {subView === 'socket' && <SocketPanel />}
 
       {subView === 'shop' && (
-        <View style={styles.itemList}>
-          {shopItems.length === 0 ? (
-            <Text style={styles.wornEmptyText}>這個部位的款式都收集齊了</Text>
-          ) : (
-            shopItems.map(renderShopItemRow)
-          )}
-        </View>
+        <>
+          <View style={styles.filterRow}>
+            {STAT_FILTERS.map((filter) => (
+              <Pressable
+                key={filter}
+                style={[styles.filterChip, shopStatFilter === filter && styles.filterChipActive]}
+                onPress={() => setShopStatFilter(filter)}
+              >
+                <Text style={styles.filterChipLabel}>{STAT_FILTER_LABELS[filter]}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.itemList}>
+            {filteredShopItems.length === 0 ? (
+              <Text style={styles.wornEmptyText}>
+                {shopStatFilter === 'all' ? '這個部位的款式都收集齊了' : '這個篩選條件下沒有符合的款式'}
+              </Text>
+            ) : (
+              filteredShopItems.map(renderShopItemRow)
+            )}
+          </View>
+        </>
       )}
     </View>
   );
@@ -403,6 +420,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  substatCellValueZero: {
+    color: '#5a5a65',
+    fontWeight: '400',
+  },
   subNav: {
     flexDirection: 'row',
     gap: 6,
@@ -457,6 +478,29 @@ const styles = StyleSheet.create({
   },
   itemList: {
     gap: 3,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  filterChip: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: '#1c1c24',
+    borderWidth: 1,
+    borderColor: '#2a2a35',
+  },
+  filterChipActive: {
+    backgroundColor: '#4a4456',
+    borderColor: '#6ab0e0',
+  },
+  filterChipLabel: {
+    color: '#c8c8d0',
+    fontSize: 9,
   },
   rowLeft: {
     flexDirection: 'row',

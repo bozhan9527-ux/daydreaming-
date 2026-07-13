@@ -40,7 +40,10 @@ export function AscensionPanel() {
         const atMax = currentLevel >= upgrade.maxLevel;
         const cost = ascensionUpgradeCost(currentLevel);
         const canUpgrade = canUpgradeAscension(upgrade.id as AscensionUpgradeId, ascensionUpgrades, ascensionPoints);
-        const currentBonusPct = Math.round(currentLevel * upgrade.bonusPerLevel * 100);
+        // offlineCap 的單位是小時,不是像 exp/coins/speed 那樣的百分比——顯示文字要分開處理,
+        // 不能套同一個「乘100取整數」的公式(那樣會把「+2小時」誤顯示成「+200%」)。
+        const currentBonusAmount = currentLevel * upgrade.bonusPerLevel;
+        const bonusDisplay = upgrade.id === 'offlineCap' ? `+${currentBonusAmount}小時` : `+${Math.round(currentBonusAmount * 100)}%`;
         return (
           <View key={upgrade.id} style={styles.card}>
             <View style={styles.cardHeader}>
@@ -50,7 +53,7 @@ export function AscensionPanel() {
               </Text>
             </View>
             <Text style={styles.description}>{upgrade.description}</Text>
-            <Text style={styles.bonusText}>目前加成:+{currentBonusPct}%</Text>
+            <Text style={styles.bonusText}>目前加成:{bonusDisplay}</Text>
             <Pressable
               style={[styles.upgradeButton, !canUpgrade && styles.upgradeButtonDisabled]}
               onPress={() => upgradeAscension(upgrade.id as AscensionUpgradeId)}

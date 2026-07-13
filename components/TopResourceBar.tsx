@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 // 頂部資源列:呼應參考圖「畫面最上方就看得到等級/金幣,不用往下滑」的資訊層級——
 // 藥丸狀徽章,金幣旁邊留一個視覺上的強調點(呼應參考圖金幣旁的「+」按鈕位置),
@@ -7,18 +7,21 @@ interface TopResourceBarProps {
   level: number;
   coins: number;
   skillBooks: number;
+  onPressLevel?: () => void;
 }
 
 // 技能書是每次升技能都要看的資源,但原本只有背包分頁看得到庫存,玩家很容易忘記手上有多少——
 // 跟等級/金幣一樣提到常駐列,其餘強化石/寶石維持收在背包(不是每次操作都要看,常駐列放太多
-// 反而稀釋掉等級/金幣這兩個最核心的資訊)。
-export function TopResourceBar({ level, coins, skillBooks }: TopResourceBarProps) {
+// 反而稀釋掉等級/金幣這兩個最核心的資訊)。生涯總覽(見 CareerOverviewPanel.tsx)刻意不在這裡
+// 加第4個徽章,而是讓既有的Lv.徽章可以點——不增加常駐列的視覺元素數量,只是讓現有元素多一個
+// 用途。
+export function TopResourceBar({ level, coins, skillBooks, onPressLevel }: TopResourceBarProps) {
   return (
     <View style={styles.row}>
-      <View style={styles.pill}>
+      <Pressable style={styles.pill} onPress={onPressLevel} disabled={!onPressLevel}>
         <View style={[styles.dot, styles.levelDot]} />
         <Text style={styles.pillText}>Lv.{level}</Text>
-      </View>
+      </Pressable>
       <View style={styles.pill}>
         <View style={[styles.dot, styles.coinDot]} />
         <Text style={styles.pillText}>{coins.toLocaleString()}</Text>

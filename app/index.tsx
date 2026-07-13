@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BattleScene } from '../components/BattleScene';
+import { CareerOverviewPanel } from '../components/CareerOverviewPanel';
 import { DailyQuestBadge } from '../components/DailyQuestBadge';
+import { LimitedEventBanner } from '../components/LimitedEventBanner';
 import { EquippedItemsStrip } from '../components/EquippedItemsStrip';
 import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
@@ -59,6 +61,7 @@ export default function HomeScreen() {
   // 離線收益改成彈出視窗,關掉之後這次 session 就不再自動彈出(下次 load()重新設定 lastOfflineKills 時才會再跳)。
   const [offlineModalDismissed, setOfflineModalDismissed] = useState(false);
   const [dailyBonusModalDismissed, setDailyBonusModalDismissed] = useState(false);
+  const [showCareerOverview, setShowCareerOverview] = useState(false);
 
   useBattleLoop();
 
@@ -159,7 +162,12 @@ export default function HomeScreen() {
         又沒有 ScrollView 可以承接時,等於整頁沒有任何東西吃得到那個手勢)。 */}
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* 頂部資源列放最上面,一眼就看得到等級/金幣,不用往下找。 */}
-      <TopResourceBar level={level.level} coins={coins} skillBooks={skillBooks} />
+      <TopResourceBar
+        level={level.level}
+        coins={coins}
+        skillBooks={skillBooks}
+        onPressLevel={() => setShowCareerOverview(true)}
+      />
 
       {/* 彩蛋反應框縮小+加外框+改橫向排版——原本100px高、直向堆疊圖示+兩行文字,縮到46px高
           時圖示本身(48px)就已經比整個框還高,彩蛋內容直接被裁掉看不見。改成「圖示在左、
@@ -235,6 +243,10 @@ export default function HomeScreen() {
       {/* 每日任務改成浮在畫面右側的小徽章,已領取直接消失,不再佔用主畫面高度。 */}
       <DailyQuestBadge />
 
+      {/* 限時活動:浮在畫面左側,跟右側的每日任務徽章對稱——沒有活動進行中(一週7天有4天
+          沒有)完全不渲染,不佔用畫面版面。 */}
+      <LimitedEventBanner />
+
       <Modal visible={showOfflineModal} animationType="fade" transparent onRequestClose={() => setOfflineModalDismissed(true)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setOfflineModalDismissed(true)} />
         <View style={styles.offlineModalCard}>
@@ -265,6 +277,21 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* 生涯總覽:點頂部資源列的Lv.徽章開,不佔用底部8個分頁的名額(見TopResourceBar.tsx的
+          設計取捨)。彙整存檔既有的終生數據,不新增追蹤欄位。 */}
+      <Modal visible={showCareerOverview} animationType="fade" transparent onRequestClose={() => setShowCareerOverview(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowCareerOverview(false)} />
+        <View style={styles.offlineModalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>生涯總覽</Text>
+            <Pressable style={styles.modalCloseButton} onPress={() => setShowCareerOverview(false)}>
+              <Text style={styles.modalCloseLabel}>✕</Text>
+            </Pressable>
+          </View>
+          <CareerOverviewPanel />
+        </View>
+      </Modal>
+
       <Modal
         visible={openTab !== null}
         animationType="slide"
@@ -282,6 +309,19 @@ export default function HomeScreen() {
           <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
             {openTab && <openTab.Component />}
           </ScrollView>
+          {/* 分頁列在這裡再放一份:這個 Modal 蓋住主畫面底下那份 TabBar(RN Web 的 Modal 是
+              portal 到 document.body 的獨立子樹,主畫面那份雖然還在但被背板擋住摸不到),不放
+              這份的話,玩家逛裝備逛到一半想看技能,得先按 X 關掉才能點下一個分頁——這是玩家
+              做最頻繁的操作,不該多一次關閉動作。onSelect 一樣接 setOpenTabId,點別的分頁
+              直接切換這個 Modal 顯示的內容,不用先關閉。 */}
+          <TabBar
+            tabs={PANEL_TABS}
+            activeId={openTabId ?? ''}
+            level={level.level}
+            hasChosenJob={hasChosenJob}
+            attention={tabAttention}
+            onSelect={setOpenTabId}
+          />
           {/* RN Web 的 Modal 是直接 portal 到 document.body 的獨立子樹,根層級那個 ToastHost
               (在這個 Modal 開著的時候)疊圖疊不贏這個 portal,所以分頁內觸發的提示(例如轉職道具
               不夠)在這裡再掛一份、當這個 Modal 自己子樹裡最後一個節點,才能真的疊在最上面。

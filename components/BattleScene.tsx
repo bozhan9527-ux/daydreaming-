@@ -29,7 +29,15 @@ const SCENE_MAX_WIDTH = 320;
 // pixelSize 對應縮小,讓角色/怪物在戰鬥場景裡的物理尺寸跟拉密度之前差不多,不會把畫面撐爆。
 // 特效(attackEffects.ts)沒有跟著拉密度,維持原本 pixelSize={3}。
 const HERO_PIXEL_SIZE = 1.75;
-const MONSTER_PIXEL_SIZE = 4 / 3;
+// 怪物原生畫布高度不像勇者本體固定(勇者56列),120種一般怪物/5階段魔王/大魔王的列數
+// 從60列到72列都有——原本用固定 pixelSize(4/3)是配合最高列數(72)算出來的保守值,
+// 比勇者的1.75小了快31%,一般怪物視覺份量明顯不足。改成「目標畫面高度固定、pixelSize
+// 反推」:MONSTER_TARGET_HEIGHT 是怪物在畫面上實際的像素高度上限,列數少的一般怪物會分到
+// 比較大的 pixelSize(視覺跟勇者持平甚至更搶眼),列數最多的大魔王會自動分到比較小的
+// pixelSize,兩種都不會超出 SCENE_HEIGHT 固定畫布、被 overflow:hidden 切掉。
+// 95px 是量過 SCENE_HEIGHT(130)扣掉 monsterSlot 的 bottom 偏移(20)跟 progressTrack
+// 高度(約10)之後,能安全放進去的量,跟勇者在1.75時的實際畫面高度(56*1.75=98px)相近。
+const MONSTER_TARGET_HEIGHT = 95;
 const COMPANION_PIXEL_SIZE = 1;
 const GROUND_PATTERN_WIDTH = 40;
 const GROUND_SCROLL_DURATION = 1400;
@@ -265,7 +273,7 @@ export function BattleScene() {
             <PixelSprite
               frame={getMonsterFrame(currentEncounter.monster.id).frame}
               palette={getMonsterFrame(currentEncounter.monster.id).palette}
-              pixelSize={MONSTER_PIXEL_SIZE}
+              pixelSize={MONSTER_TARGET_HEIGHT / getMonsterFrame(currentEncounter.monster.id).frame.length}
             />
           </MonsterHitReaction>
           <View style={styles.progressTrack}>

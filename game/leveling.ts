@@ -84,8 +84,11 @@ export function expBankCap(level: number): number {
   return expToNext(level) * EXP_BANK_CAP_MULTIPLIER;
 }
 
-export function calcOfflineExp(level: number, elapsedMs: number): number {
-  const cappedMs = Math.min(elapsedMs, 24 * 60 * 60 * 1000);
+// capHours 預設24小時,轉生加成樹的「恆常離線效率」節點(見 game/ascension.ts 的
+// offlineCap)可以延長這個上限,呼叫端(hooks/useGameState.ts 的 load())算好
+// 24+節點加成的實際小時數再傳進來,這裡不用知道轉生系統的存在。
+export function calcOfflineExp(level: number, elapsedMs: number, capHours: number = 24): number {
+  const cappedMs = Math.min(elapsedMs, capHours * 60 * 60 * 1000);
   const minutes = cappedMs / 60000;
   return Math.floor(expPerMin(level) * minutes);
 }

@@ -69,6 +69,20 @@ const EMPTY_ICON_COLOR = '#4a4456';
 // 圖示來源配合勇者本體像素密度提升整張放大了3倍,這裡用 2/3 抵銷回來,維持清單物理尺寸不變。
 const ICON_PIXEL_SIZE = 2 / 3;
 
+// 篩選/排序:生成式目錄一個部位最多50個等級檔,練到後期背包同一部位塞了一長串款式,
+// 只能一格一格滑動找。'all' 是「不篩選」,其餘對應 item.bonus.stat 三選一——裝備目錄
+// 目前沒有稀有度分級,主加成類型是唯一有意義的篩選維度。
+type StatFilter = 'all' | EquipmentBonusStat;
+
+const STAT_FILTERS: StatFilter[] = ['all', 'exp', 'coins', 'speed'];
+
+const STAT_FILTER_LABELS: Record<StatFilter, string> = {
+  all: '全部',
+  exp: '經驗',
+  coins: '金幣',
+  speed: '速度',
+};
+
 function formatBonus(stat: EquipmentBonusStat, value: number): string {
   return `${STAT_LABELS[stat]} +${Math.round(value * 100)}%`;
 }
@@ -104,10 +118,15 @@ export function InventoryPanel() {
   const showToast = useToast((state) => state.show);
 
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
+  const [statFilter, setStatFilter] = useState<StatFilter>('all');
+  const [sortDesc, setSortDesc] = useState(false);
 
   const currentId = equipment[selectedSlot];
   const items = getEquippableItemsForSlot(selectedSlot, job.archetype);
-  const bagItems = items.filter((item) => isItemUnlocked(unlockedItemIds, item.id));
+  const bagItems = items
+    .filter((item) => isItemUnlocked(unlockedItemIds, item.id))
+    .filter((item) => statFilter === 'all' || item.bonus.stat === statFilter)
+    .sort((a, b) => (sortDesc ? -1 : 1) * ((a.requiredLevel ?? 0) - (b.requiredLevel ?? 0)));
 
   function handleEquip(item: EquipmentItem) {
     equip(item.id);
@@ -186,9 +205,27 @@ export function InventoryPanel() {
       <ResourceBar />
       <View style={styles.slotRow}>{SLOT_ORDER.map(renderSlotButton)}</View>
       <Text style={styles.hint}>目前選擇:{SLOT_LABELS[selectedSlot]}</Text>
+      {/* 篩選/排序列:練到後期同一部位背包塞了一長串款式,篩主加成類型+切換需求等級排序方向,
+          不用一格一格滑動找。 */}
+      <View style={styles.filterRow}>
+        {STAT_FILTERS.map((filter) => (
+          <Pressable
+            key={filter}
+            style={[styles.filterChip, statFilter === filter && styles.filterChipActive]}
+            onPress={() => setStatFilter(filter)}
+          >
+            <Text style={styles.filterChipLabel}>{STAT_FILTER_LABELS[filter]}</Text>
+          </Pressable>
+        ))}
+        <Pressable style={styles.sortButton} onPress={() => setSortDesc((prev) => !prev)}>
+          <Text style={styles.filterChipLabel}>需求等級 {sortDesc ? '高→低' : '低→高'}</Text>
+        </Pressable>
+      </View>
       <View style={styles.itemList}>
         {bagItems.length === 0 ? (
-          <Text style={styles.emptyText}>背包裡沒有這個部位的其他款式,去「裝備」分頁的商店逛逛</Text>
+          <Text style={styles.emptyText}>
+            {statFilter === 'all' ? '背包裡沒有這個部位的其他款式,去「裝備」分頁的商店逛逛' : '這個篩選條件下沒有符合的款式'}
+          </Text>
         ) : (
           bagItems.map(renderBagItemRow)
         )}
@@ -235,6 +272,37 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textAlign: 'center',
     marginBottom: 2,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  filterChip: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: '#1c1c24',
+    borderWidth: 1,
+    borderColor: '#2a2a35',
+  },
+  filterChipActive: {
+    backgroundColor: '#4a4456',
+    borderColor: '#6ab0e0',
+  },
+  filterChipLabel: {
+    color: '#c8c8d0',
+    fontSize: 9,
+  },
+  sortButton: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: '#1c1c24',
+    borderWidth: 1,
+    borderColor: '#2a2a35',
   },
   itemList: {
     gap: 3,

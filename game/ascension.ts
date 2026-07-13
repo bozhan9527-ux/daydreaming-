@@ -17,24 +17,37 @@ export function getCycleCount(totalStagesCleared: number): number {
 // 點數產出沒有理由因為玩家破的是第 1 輪還是第 50 輪而不同。
 export const ASCENSION_POINTS_PER_CYCLE = 10;
 
-export type AscensionUpgradeId = 'exp' | 'coins' | 'speed';
+export type AscensionUpgradeId = 'exp' | 'coins' | 'speed' | 'offlineCap';
 
 export interface AscensionUpgradeDef {
   id: AscensionUpgradeId;
   label: string;
   description: string;
   maxLevel: number;
-  bonusPerLevel: number; // 每級 +N% (小數,例如 0.01 = +1%)
+  // 每級 +N,單位依節點而定:exp/coins/speed 是小數百分比(0.01 = +1%),offlineCap 是
+  // 「小時」的整數(見 getAscensionBonusTotal 的呼叫端,兩種單位不用互相換算,呼叫端自己
+  // 知道自己在跟哪個節點要數字)。
+  bonusPerLevel: number;
 }
 
-// 3 個節點刻意跟裝備/寵物坐騎既有的三圍加成同一組(經驗/金幣/戰鬥速度),玩家不用學新概念——
+// 前3個節點刻意跟裝備/寵物坐騎既有的三圍加成同一組(經驗/金幣/戰鬥速度),玩家不用學新概念——
 // 差別只在於這是「破輪迴」換來的,永久疊加在所有其他加成之上,不會因為換裝/換寵物而消失。
 // 封頂20級、每級+1%,單一節點滿級+20%,三個都滿+20%/+20%/+20%,對照 Lv500 封頂玩家原本
 // 的加成量級(裝備/寵物/被動疊起來通常也是幾十趴等級),不會讓轉生加成獨自蓋過其他系統。
+// 第4個節點(offlineCap)是離線收益結算上限的延長:見 game/leveling.ts 的 calcOfflineExp,
+// 預設24小時封頂,每級+1小時,封頂20級=+20小時=44小時上限——呼應「回來的頻率越低,轉生
+// 加成能補的越多」這個定位,跟前3個節點(玩家常開App也吃得到)互補,不是同一種玩法的重複。
 export const ASCENSION_UPGRADES: AscensionUpgradeDef[] = [
   { id: 'exp', label: '恆常經驗', description: '永久提升經驗獲取,不受裝備/寵物坐騎更換影響', maxLevel: 20, bonusPerLevel: 0.01 },
   { id: 'coins', label: '恆常財富', description: '永久提升金幣獲取,不受裝備/寵物坐騎更換影響', maxLevel: 20, bonusPerLevel: 0.01 },
   { id: 'speed', label: '恆常迅捷', description: '永久提升戰鬥速度,不受裝備/寵物坐騎更換影響', maxLevel: 20, bonusPerLevel: 0.01 },
+  {
+    id: 'offlineCap',
+    label: '恆常離線效率',
+    description: '永久延長離線收益結算上限(預設24小時),適合不常開App的玩家',
+    maxLevel: 20,
+    bonusPerLevel: 1,
+  },
 ];
 
 export function getAscensionUpgradeDef(id: AscensionUpgradeId): AscensionUpgradeDef {
