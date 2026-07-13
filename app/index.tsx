@@ -300,8 +300,11 @@ export default function HomeScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setOpenTabId(null)} />
         <View style={styles.modalSheet}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{openTab?.label}</Text>
+          {/* 標題色+底線套該分頁的識別色(見 panelTabs.tsx 的 accentColor)——8個系統原本
+              視覺同質化,除了圖示外分不出「現在在哪個系統裡」,這裡是玩家開分頁第一眼看到
+              的東西,加識別色成本最低、辨識度提升最直接。 */}
+          <View style={[styles.modalHeader, openTab && { borderBottomColor: openTab.accentColor }]}>
+            <Text style={[styles.modalTitle, openTab && { color: openTab.accentColor }]}>{openTab?.label}</Text>
             <Pressable style={styles.modalCloseButton} onPress={() => setOpenTabId(null)}>
               <Text style={styles.modalCloseLabel}>✕</Text>
             </Pressable>

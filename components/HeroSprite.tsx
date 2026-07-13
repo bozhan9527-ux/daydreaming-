@@ -25,6 +25,9 @@ interface HeroSpriteProps {
   onPress?: () => void;
   // 裝備圖鑑用:在空插槽的位置畫虛線框,讓玩家看得出「這個位置可以裝什麼」,跟一般戰鬥場景無關。
   showEmptySlotHints?: boolean;
+  // 倒地恢復期間常駐閉眼,借用既有的眨眼畫格(不是新畫一組表情)——見 BattleScene.tsx
+  // 的呼叫端。true 時蓋掉底下正常的眨眼週期,不會兩者互相打架。
+  isDefeated?: boolean;
 }
 
 export function HeroSprite({
@@ -33,6 +36,7 @@ export function HeroSprite({
   pixelSize = 6,
   onPress,
   showEmptySlotHints = false,
+  isDefeated = false,
 }: HeroSpriteProps) {
   const frames = useMemo(() => buildHeroFrames(bodyType), [bodyType]);
   const overlays = useMemo(() => getEquippedOverlays(equipment ?? {}), [equipment]);
@@ -85,7 +89,7 @@ export function HeroSprite({
     <Pressable onPress={handlePress}>
       <Animated.View style={animatedStyle}>
         <View style={{ position: 'relative' }}>
-          <PixelSprite frame={blinking ? frames.blink : frames.open} palette={HERO_PALETTE} pixelSize={pixelSize} />
+          <PixelSprite frame={isDefeated || blinking ? frames.blink : frames.open} palette={HERO_PALETTE} pixelSize={pixelSize} />
           {overlays.map((overlay, index) => {
             const wrapperStyle = {
               position: 'absolute' as const,

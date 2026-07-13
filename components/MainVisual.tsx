@@ -25,8 +25,8 @@ export function MainVisual({ children }: MainVisualProps) {
   const totalStagesCleared = useGameState((state) => state.totalStagesCleared);
 
   const tier = getCurrentTier(level.level);
-  const background = getJobBackground(job.archetype, job.branch, tier, EXTENDED_ROWS);
-  const backdropColor = getJobBackdropColor(job.archetype, job.branch, tier);
+  const background = getJobBackground(job.archetype, job.branch, tier, EXTENDED_ROWS, stageProgress.stage);
+  const backdropColor = getJobBackdropColor(job.archetype, job.branch, tier, stageProgress.stage);
   const cycleCount = getCycleCount(totalStagesCleared);
 
   return (

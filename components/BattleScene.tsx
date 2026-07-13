@@ -166,6 +166,30 @@ function WeaponSwingEffect({ frame, palette, active }: WeaponSwingEffectProps) {
   );
 }
 
+// legendary稀有度的怪物用一圈脈動金光跟其他稀有度拉開視覺落差——這是唯一在數值上跟common
+// 差距最大的一級(見 game/heroHealth.ts 的 MONSTER_BASE_ATTACK,legendary=80 vs common=5),
+// 但目前視覺上只靠怪物本身的色調(TINTS的第10組金色)區分,跟 epic 站在一起不夠搶眼。
+// 只用 opacity(GPU屬性,呼應CLAUDE.md的動畫限制),不重畫怪物輪廓本身,風險最低。
+const LEGENDARY_GLOW_COLOR = '#c9a94f';
+
+function LegendaryGlow({ active }: { active: boolean }) {
+  const glowOpacity = useSharedValue(0.3);
+
+  useEffect(() => {
+    if (!active) return;
+    glowOpacity.value = withRepeat(
+      withSequence(withTiming(0.55, { duration: 900 }), withTiming(0.22, { duration: 900 })),
+      -1,
+      true
+    );
+  }, [active, glowOpacity]);
+
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: glowOpacity.value }));
+
+  if (!active) return null;
+  return <Animated.View style={[styles.legendaryGlow, animatedStyle]} />;
+}
+
 interface MonsterHitReactionProps {
   active: boolean;
   children: React.ReactNode;
@@ -214,6 +238,7 @@ export function BattleScene() {
   const boostCurrentFight = useGameState((state) => state.boostCurrentFight);
   const lastSkillTriggerAt = useGameState((state) => state.lastSkillTriggerAt);
   const lastSecondarySkillTriggerAt = useGameState((state) => state.lastSecondarySkillTriggerAt);
+  const defeatRecoveryUntil = useGameState((state) => state.defeatRecoveryUntil);
 
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -226,6 +251,10 @@ export function BattleScene() {
   const skillJustTriggered =
     (lastSkillTriggerAt !== null && now - lastSkillTriggerAt < SKILL_FLASH_WINDOW_MS) ||
     (lastSecondarySkillTriggerAt !== null && now - lastSecondarySkillTriggerAt < SKILL_FLASH_WINDOW_MS);
+  // 倒地恢復期間讓勇者閉眼——不是新畫一組表情,直接借用既有的眨眼畫格(見
+  // heroSilhouette.ts 的 blinkFrame)常駐顯示,取代目前「倒地中」只有文字提示、角色本體
+  // 站姿毫無變化的狀態。「反差萌」的笑點需要看得到,不能只靠讀的。
+  const isDefeated = defeatRecoveryUntil !== null && now < defeatRecoveryUntil;
 
   const mainhandId = equipment.mainhand;
   const mainhandItem = mainhandId !== undefined ? getItemById(mainhandId) : undefined;
@@ -254,7 +283,13 @@ export function BattleScene() {
 
       {/* 勇者從場景正中央移到左側站位,跟右側的怪物拉開距離,中間讓給往返移動的技能特效。 */}
       <View style={styles.heroSlot}>
-        <HeroSprite pixelSize={HERO_PIXEL_SIZE} bodyType={bodyType} equipment={equipment} onPress={boostCurrentFight} />
+        <HeroSprite
+          pixelSize={HERO_PIXEL_SIZE}
+          bodyType={bodyType}
+          equipment={equipment}
+          onPress={boostCurrentFight}
+          isDefeated={isDefeated}
+        />
       </View>
 
       {pet && (
@@ -269,6 +304,7 @@ export function BattleScene() {
 
       {currentEncounter && (
         <View key={fightStartedAt ?? 'none'} style={styles.monsterSlot}>
+          <LegendaryGlow active={currentEncounter.rarity === 'legendary'} />
           <MonsterHitReaction active={!!currentEncounter}>
             <PixelSprite
               frame={getMonsterFrame(currentEncounter.monster.id).frame}
@@ -351,6 +387,15 @@ const styles = StyleSheet.create({
     right: 12,
     bottom: 20,
     alignItems: 'center',
+  },
+  legendaryGlow: {
+    position: 'absolute',
+    top: -12,
+    left: -12,
+    right: -12,
+    bottom: -12,
+    borderRadius: 999,
+    backgroundColor: LEGENDARY_GLOW_COLOR,
   },
   // 特效插槽的靜止基準點在勇者跟怪物中間偏左,往右移動 EFFECT_TRAVEL_DISTANCE 之後
   // 大致落在怪物腳邊,呼應「打過去」的方向性。
