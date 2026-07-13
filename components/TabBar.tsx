@@ -38,7 +38,12 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, attention, onSelec
           <Fragment key={tab.id}>
             {tab.id === 'ascension' && <View style={styles.divider} />}
             <Pressable
-              style={[styles.tab, active && styles.tabActive, !unlocked && styles.tabLocked]}
+              style={[
+                styles.tab,
+                active && styles.tabActive,
+                active && { borderColor: tab.accentColor },
+                !unlocked && styles.tabLocked,
+              ]}
               onPress={() => {
                 if (!unlocked) {
                   showToast(`Lv${unlockLevel} 解鎖「${tab.label}」`);
@@ -85,6 +90,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     backgroundColor: '#2a2a35',
+    // 固定佔位的透明邊框:啟用時邊框顏色換成該分頁的識別色(見 accentColor),沒有這個
+    // 佔位的話啟用/取消瞬間會因為邊框從0變2px而讓按鈕尺寸跳動。
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   // 固定高度讓不同 pixelSize 的圖示(裝備/技能放大、圖鑑縮小)都能置中,
   // 底下的文字標籤才會對齊同一條線,不會因圖示大小不同而高低不一。

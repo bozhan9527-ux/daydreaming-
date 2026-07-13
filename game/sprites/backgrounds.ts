@@ -246,6 +246,22 @@ function computeChannelColor(archetype: Archetype, branch: JobBranch, tier: JobT
   return color;
 }
 
+// 場景色調隨大關數緩慢漂移:職業階級只會變化4次(Lv30/80/200/350解鎖下一階),玩家在
+// 同一階級裡可能要打完幾十甚至上百個大關,背景卻完全靜止,「持續前進」感只能靠關卡數字
+// 文字傳達。這裡只微調天空色相(skyTop/skyBottom),不動 ground/motif,才不會打亂
+// MOOD_SHIFTS 已經設計好的情境色識別度(地面/造型物是「這是哪個職業場景」的主要辨識線索,
+// 天空是氛圍層,調它最安全)。60大關一個完整循環(呼應晝夜/四季更迭的意象),用 sin 波形
+// 讓漂移平滑來回,不會在循環邊界跳色。
+const STAGE_DRIFT_CYCLE = 60;
+const STAGE_DRIFT_MAX_HUE = 18;
+
+function applyStageDrift(hex: string, stage: number): string {
+  const [h, s, l] = hexToHsl(hex);
+  const progress = ((stage - 1) % STAGE_DRIFT_CYCLE) / STAGE_DRIFT_CYCLE;
+  const hueOffset = Math.sin(progress * Math.PI * 2) * STAGE_DRIFT_MAX_HUE;
+  return hslToHex(h + hueOffset, s, l);
+}
+
 // tier 1 兩分支共用同一份造型與配色(呼應 JOB_TITLES 的「1 階兩個分支共用同一稱號」);
 // tier 2 起才切到各自分支的 motifShape 與情境色。
 function computeTheme(archetype: Archetype, branch: JobBranch, tier: JobTier): BackgroundTheme {
@@ -263,7 +279,13 @@ function computeTheme(archetype: Archetype, branch: JobBranch, tier: JobTier): B
 // tier 1..5,數字越大場景裡的造型元素越密集,呼應轉職階級遞進;元素數量 = tier。
 // totalHeight 預設等於原本的戰鬥場景高度(HEIGHT);傳更大的值(給「主視覺延伸區」用)時,
 // 超出原本地面之後的部分一律延續 skyBottom 色階往下鋪,不會重複畫地面,不然會看起來像整塊土台。
-export function getJobBackground(archetype: Archetype, branch: JobBranch, tier: JobTier, totalHeight: number = HEIGHT): BackgroundFrameData {
+export function getJobBackground(
+  archetype: Archetype,
+  branch: JobBranch,
+  tier: JobTier,
+  totalHeight: number = HEIGHT,
+  stage: number = 1
+): BackgroundFrameData {
   const theme = computeTheme(archetype, branch, tier);
   const grid: string[][] = Array.from({ length: totalHeight }, (_, y) => {
     const rowChar = y < SKY_TOP_ROWS ? 'T' : y < HEIGHT - GROUND_ROWS ? 'B' : y < HEIGHT ? 'G' : 'B';
@@ -283,12 +305,18 @@ export function getJobBackground(archetype: Archetype, branch: JobBranch, tier: 
   }
 
   const frame = grid.map((row) => row.join(''));
-  const palette: Record<string, string> = { T: theme.skyTop, B: theme.skyBottom, G: theme.ground, M: theme.motif };
+  const palette: Record<string, string> = {
+    T: applyStageDrift(theme.skyTop, stage),
+    B: applyStageDrift(theme.skyBottom, stage),
+    G: theme.ground,
+    M: theme.motif,
+  };
   return { frame, palette };
 }
 
 // 主視覺延伸區用:圖片本身之外(超出 totalHeight 的殘留高度)要靠外層 View 的純色
-// backgroundColor 接住,顏色跟圖片最底部的 skyBottom 一致才不會看到明顯接縫。
-export function getJobBackdropColor(archetype: Archetype, branch: JobBranch, tier: JobTier): string {
-  return computeTheme(archetype, branch, tier).skyBottom;
+// backgroundColor 接住,顏色跟圖片最底部的 skyBottom 一致才不會看到明顯接縫——這裡也要套
+// 同一個 stage 漂移,不然接縫處會露出兩種色階。
+export function getJobBackdropColor(archetype: Archetype, branch: JobBranch, tier: JobTier, stage: number = 1): string {
+  return applyStageDrift(computeTheme(archetype, branch, tier).skyBottom, stage);
 }
