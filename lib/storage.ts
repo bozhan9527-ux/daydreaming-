@@ -38,9 +38,10 @@ import { BodyType } from '../game/sprites/heroSilhouette';
 import { createInitialStageProgress, StageProgress } from '../game/stages';
 import { createInitialStudentSkillTreeLevels, STUDENT_SKILL_LEVEL_CAP } from '../game/studentSkillTree';
 import { createInitialTriggerState, TriggerState } from '../game/trigger';
+import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 30;
+export const SCHEMA_VERSION = 31;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -182,6 +183,13 @@ export interface SaveData {
   // game/ascension.ts 的 getCycleCount。
   ascensionPoints: number;
   ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>;
+  // 週期成就輪替(見 game/weeklyChallenge.ts):weeklyChallengeWeekIndex 是上次重置對應的週序號,
+  // 跟 lastDailyResetAt 一樣「跨週才重置」的判定基準,但這裡存數字序號不存日期字串(見
+  // weekIndex 的註解)。weeklyChallengeProgress/weeklyChallengeClaimedIds 跟
+  // dailyTaskProgress/dailyTaskClaimedIds 同一套模式,只是週期換成一週而不是一天。
+  weeklyChallengeWeekIndex: number;
+  weeklyChallengeProgress: Partial<Record<WeeklyStatKey, number>>;
+  weeklyChallengeClaimedIds: string[];
   lastActiveAt: number;
 }
 
@@ -225,6 +233,9 @@ export function createInitialSaveData(): SaveData {
     dailyTaskClaimedIds: [],
     ascensionPoints: 0,
     ascensionUpgrades: {},
+    weeklyChallengeWeekIndex: weekIndex(),
+    weeklyChallengeProgress: {},
+    weeklyChallengeClaimedIds: [],
     lastHpRegenTickAt: Date.now(),
     lastActiveAt: Date.now(),
   };
@@ -1068,6 +1079,20 @@ function isAscensionUpgrades(value: unknown): value is Partial<Record<AscensionU
   );
 }
 
+const WEEKLY_STAT_KEYS: WeeklyStatKey[] = ['kills', 'identify', 'dungeon', 'enhance', 'companionGear'];
+
+function isWeeklyChallengeProgress(value: unknown): value is Partial<Record<WeeklyStatKey, number>> {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return Object.entries(record).every(
+    ([key, count]) => WEEKLY_STAT_KEYS.includes(key as WeeklyStatKey) && typeof count === 'number'
+  );
+}
+
+function isWeeklyChallengeClaimedIds(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((id) => typeof id === 'string');
+}
+
 interface SaveDataV19 {
   version: 19;
   level: LevelState;
@@ -1771,16 +1796,39 @@ function isSaveDataV29(value: unknown): value is SaveDataV29 {
   );
 }
 
-// v30(輪迴系統上線):現在的 SaveData 完整形狀,比 v29 多了 ascensionPoints/ascensionUpgrades。
-// 這是 migrate() 的第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
-function isSaveDataV30(value: unknown): value is SaveData {
+// v30(輪迴系統上線,週期成就輪替上線前的最後一版):比 v29 多了 ascensionPoints/
+// ascensionUpgrades,沒有 weeklyChallengeWeekIndex/weeklyChallengeProgress/
+// weeklyChallengeClaimedIds。凍結成明確獨立的 interface+literal版本號檢查,形狀直接繼承
+// SaveDataV29(只換 version 字面量、疊加新欄位)。
+interface SaveDataV30 extends Omit<SaveDataV29, 'version'> {
+  version: 30;
+  ascensionPoints: number;
+  ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>;
+}
+
+function isSaveDataV30(value: unknown): value is SaveDataV30 {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 30 &&
+    isSaveDataV29({ ...record, version: 29 }) &&
+    typeof record.ascensionPoints === 'number' &&
+    isAscensionUpgrades(record.ascensionUpgrades)
+  );
+}
+
+// v31(週期成就輪替上線):現在的 SaveData 完整形狀,比 v30 多了 weeklyChallengeWeekIndex/
+// weeklyChallengeProgress/weeklyChallengeClaimedIds。這是 migrate() 的第一道 passthrough
+// 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
+function isSaveDataV31(value: unknown): value is SaveData {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
     record.version === SCHEMA_VERSION &&
-    isSaveDataV29({ ...record, version: 29 }) &&
-    typeof record.ascensionPoints === 'number' &&
-    isAscensionUpgrades(record.ascensionUpgrades)
+    isSaveDataV30({ ...record, version: 30 }) &&
+    typeof record.weeklyChallengeWeekIndex === 'number' &&
+    isWeeklyChallengeProgress(record.weeklyChallengeProgress) &&
+    isWeeklyChallengeClaimedIds(record.weeklyChallengeClaimedIds)
   );
 }
 
@@ -1852,15 +1900,32 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // v29→v30 沒有 ascensionPoints/ascensionUpgrades(見 game/ascension.ts 的輪迴/轉生系統):
 // 補 0/空物件——這個功能上線前的存檔沒有「輪迴過」這個概念,一律視為還沒轉生過,只能重新
 // 累積(呼應 totalStagesCleared 當初上線時同樣選擇補 0 的既有慣例)。
+// v30→v31 沒有 weeklyChallengeWeekIndex/weeklyChallengeProgress/weeklyChallengeClaimedIds
+// (見 game/weeklyChallenge.ts 的週期成就輪替):weekIndex 補「現在」對應的週序號(不是 0),
+// 不然舊存檔一登入會被判定成「上次重置是第0週」,如果玩家剛好活在第0週以後很久,isNewWeek()
+// 反而不會馬上觸發重置,progress/claimedIds 卻已經補成空的——直接補現在的 weekIndex() 才能保證
+// migrate 完的狀態一定跟「剛剛才重置過」一致,progress/claimedIds 補空互相對應。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV30(value)) return value;
+  if (isSaveDataV31(value)) return value;
+  if (isSaveDataV30(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
+    };
+  }
   if (isSaveDataV29(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
     };
   }
   if (isSaveDataV28(value)) {
@@ -1871,6 +1936,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
     };
   }
   if (isSaveDataV27(value)) {
@@ -1882,6 +1950,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
     };
   }
   if (isSaveDataV26(value)) {
@@ -1895,6 +1966,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1910,6 +1984,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1926,6 +2003,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1943,6 +2023,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1961,6 +2044,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1979,6 +2065,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -1999,6 +2088,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -2020,6 +2112,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -2044,6 +2139,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -2069,6 +2167,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
     };
   }
@@ -2112,6 +2213,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2156,6 +2260,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2200,6 +2307,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2244,6 +2354,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2288,6 +2401,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2332,6 +2448,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2376,6 +2495,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2420,6 +2542,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2464,6 +2589,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2508,6 +2636,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2552,6 +2683,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2596,6 +2730,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2640,6 +2777,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2684,6 +2824,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2728,6 +2871,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
@@ -2772,6 +2918,9 @@ function migrate(value: unknown): SaveData {
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
       ascensionUpgrades: {},
+      weeklyChallengeWeekIndex: weekIndex(),
+      weeklyChallengeProgress: {},
+      weeklyChallengeClaimedIds: [],
       lastHpRegenTickAt: Date.now(),
       lastActiveAt: value.lastActiveAt,
     };
