@@ -8,6 +8,7 @@ import {
   DAILY_TASKS,
   DailyTaskId,
 } from '../game/daily';
+import { canClaimWeeklyChallenge, getActiveWeeklyChallenges } from '../game/weeklyChallenge';
 import { useGameState } from '../hooks/useGameState';
 
 interface TaskRow {
@@ -20,9 +21,11 @@ interface TaskRow {
   onClaim: () => void;
 }
 
-// 每日任務原本只有 1 條(擊殺),現在擴充成任務池共 5 條(擊殺+鑑定+副本+強化+寵物坐騎裝備)——
-// 徽章本身還是浮在畫面右側的小按鈕(不佔主畫面高度),點一下展開/收合底下的清單,
-// 5 條全部領完才會整個消失(呼應原本「已領取就消失」的精神,只是判定條件從1條變5條)。
+// 每日任務原本只有 1 條(擊殺),現在擴充成任務池共 5 條(擊殺+鑑定+副本+強化+寵物坐騎裝備),
+// 再加上週期成就輪替(見 game/weeklyChallenge.ts)的 3 條本週挑戰——刻意塞進同一個徽章裡
+// (只分兩個子區塊 每日/本週),不另外開第二個浮動徽章佔畫面(Hick's Law:選項越多決策越慢,
+// 兩個徽章疊在畫面上比一個徽章裡分兩段更吵)。徽章本身還是浮在畫面右側的小按鈕(不佔主畫面
+// 高度),點一下展開/收合底下的清單,兩邊全部領完才會整個消失。
 export function DailyQuestBadge() {
   const [expanded, setExpanded] = useState(false);
 
@@ -32,8 +35,11 @@ export function DailyQuestBadge() {
   const dailyTaskProgress = useGameState((state) => state.dailyTaskProgress);
   const dailyTaskClaimedIds = useGameState((state) => state.dailyTaskClaimedIds);
   const claimDailyTask = useGameState((state) => state.claimDailyTask);
+  const weeklyChallengeProgress = useGameState((state) => state.weeklyChallengeProgress);
+  const weeklyChallengeClaimedIds = useGameState((state) => state.weeklyChallengeClaimedIds);
+  const claimWeeklyChallenge = useGameState((state) => state.claimWeeklyChallenge);
 
-  const rows: TaskRow[] = [
+  const dailyRows: TaskRow[] = [
     {
       key: 'kill',
       label: `擊敗${DAILY_QUEST_KILL_TARGET}隻怪物`,
@@ -54,11 +60,44 @@ export function DailyQuestBadge() {
     })),
   ];
 
-  const claimedCount = rows.filter((row) => row.claimed).length;
-  const claimableCount = rows.filter((row) => row.canClaim).length;
-  const allClaimed = claimedCount === rows.length;
+  const weeklyRows: TaskRow[] = getActiveWeeklyChallenges().map((def) => ({
+    key: def.id,
+    label: def.label,
+    current: Math.min(weeklyChallengeProgress[def.statKey] ?? 0, def.target),
+    target: def.target,
+    claimed: weeklyChallengeClaimedIds.includes(def.id),
+    canClaim: canClaimWeeklyChallenge(def.id, weeklyChallengeProgress, weeklyChallengeClaimedIds),
+    onClaim: () => claimWeeklyChallenge(def.id),
+  }));
+
+  const allRows = [...dailyRows, ...weeklyRows];
+  const claimedCount = allRows.filter((row) => row.claimed).length;
+  const claimableCount = allRows.filter((row) => row.canClaim).length;
+  const allClaimed = claimedCount === allRows.length;
 
   if (allClaimed) return null;
+
+  function renderRow(row: TaskRow) {
+    return (
+      <View key={row.key} style={styles.row}>
+        <Text style={styles.rowLabel} numberOfLines={1}>
+          {row.claimed ? '✓ ' : ''}
+          {row.label}
+        </Text>
+        {row.claimed ? (
+          <Text style={styles.rowDone}>已領取</Text>
+        ) : row.canClaim ? (
+          <Pressable style={styles.rowClaimButton} onPress={row.onClaim}>
+            <Text style={styles.rowClaimButtonText}>領取</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.rowProgress}>
+            {row.current}/{row.target}
+          </Text>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
@@ -66,34 +105,19 @@ export function DailyQuestBadge() {
         style={[styles.badge, claimableCount > 0 && styles.badgeReady]}
         onPress={() => setExpanded((prev) => !prev)}
       >
-        <Text style={styles.title}>每日任務</Text>
+        <Text style={styles.title}>任務</Text>
         <Text style={styles.progress}>
-          {claimedCount}/{rows.length}
+          {claimedCount}/{allRows.length}
         </Text>
         {claimableCount > 0 && <Text style={styles.claimLabel}>{claimableCount} 個待領取</Text>}
       </Pressable>
 
       {expanded && (
         <View style={styles.panel}>
-          {rows.map((row) => (
-            <View key={row.key} style={styles.row}>
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                {row.claimed ? '✓ ' : ''}
-                {row.label}
-              </Text>
-              {row.claimed ? (
-                <Text style={styles.rowDone}>已領取</Text>
-              ) : row.canClaim ? (
-                <Pressable style={styles.rowClaimButton} onPress={row.onClaim}>
-                  <Text style={styles.rowClaimButtonText}>領取</Text>
-                </Pressable>
-              ) : (
-                <Text style={styles.rowProgress}>
-                  {row.current}/{row.target}
-                </Text>
-              )}
-            </View>
-          ))}
+          <Text style={styles.sectionLabel}>每日任務</Text>
+          {dailyRows.map(renderRow)}
+          <Text style={styles.sectionLabel}>本週挑戰</Text>
+          {weeklyRows.map(renderRow)}
         </View>
       )}
     </View>
@@ -145,6 +169,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(23, 23, 31, 0.95)',
     borderWidth: 1,
     borderColor: '#3a3a45',
+  },
+  sectionLabel: {
+    color: '#8a8a95',
+    fontSize: 9,
+    fontWeight: '700',
+    marginTop: 4,
   },
   row: {
     flexDirection: 'row',

@@ -92,6 +92,13 @@ import {
 } from '../game/daily';
 import { getRandomEvent, GameEvent } from '../game/events';
 import { applyHpRegenTick, heroAttackPower, heroMaxHp, RECOVERY_DELAY_MS, resolveFightHealth } from '../game/heroHealth';
+import {
+  canClaimWeeklyChallenge,
+  getWeeklyChallengeDef,
+  isNewWeek,
+  weekIndex,
+  WeeklyStatKey,
+} from '../game/weeklyChallenge';
 import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
 import {
   activeSkillTriggerIntervalSeconds,
@@ -257,6 +264,12 @@ interface GameState {
   // ascensionUpgrades 是永久加成樹各節點目前等級。第幾輪不存檔,直接用 totalStagesCleared 算。
   ascensionPoints: number;
   ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>;
+  // 週期成就輪替(見 game/weeklyChallenge.ts):weeklyChallengeWeekIndex 是上次重置對應的週序號,
+  // weeklyChallengeProgress/weeklyChallengeClaimedIds 跟 dailyTaskProgress/dailyTaskClaimedIds
+  // 同一套模式,只是週期換成一週而不是一天。
+  weeklyChallengeWeekIndex: number;
+  weeklyChallengeProgress: Partial<Record<WeeklyStatKey, number>>;
+  weeklyChallengeClaimedIds: string[];
   // 每日內容:見 game/daily.ts。lastDailyLoginBonus 不存檔,只給 UI 顯示一次性登入獎勵彈窗用。
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -337,6 +350,7 @@ interface GameState {
   unsocketGem: (itemId: string, socketIndex: number) => void;
   claimDailyQuest: () => void;
   claimDailyTask: (id: DailyTaskId) => void;
+  claimWeeklyChallenge: (id: string) => void;
   upgradeAscension: (id: AscensionUpgradeId) => void;
   claimAchievement: (id: string) => void;
   claimAllAchievements: () => void;
@@ -366,6 +380,9 @@ type PersistableState = Pick<
   | 'totalStagesCleared'
   | 'ascensionPoints'
   | 'ascensionUpgrades'
+  | 'weeklyChallengeWeekIndex'
+  | 'weeklyChallengeProgress'
+  | 'weeklyChallengeClaimedIds'
   | 'lastDailyResetAt'
   | 'dailyKillCount'
   | 'dailyQuestClaimed'
@@ -409,6 +426,9 @@ function persist(state: PersistableState): void {
     totalStagesCleared: state.totalStagesCleared,
     ascensionPoints: state.ascensionPoints,
     ascensionUpgrades: state.ascensionUpgrades,
+    weeklyChallengeWeekIndex: state.weeklyChallengeWeekIndex,
+    weeklyChallengeProgress: state.weeklyChallengeProgress,
+    weeklyChallengeClaimedIds: state.weeklyChallengeClaimedIds,
     lastDailyResetAt: state.lastDailyResetAt,
     dailyKillCount: state.dailyKillCount,
     dailyQuestClaimed: state.dailyQuestClaimed,
@@ -474,6 +494,17 @@ function incrementDailyTaskProgress(
   return { ...progress, [id]: (progress[id] ?? 0) + 1 };
 }
 
+// 週期成就輪替(見 game/weeklyChallenge.ts)的共用進度遞增 helper,跟上面 incrementDailyTaskProgress
+// 同一套模式——刻意重用 5 個每日任務池已經在追蹤的活動類型(kills/identify/dungeon/enhance/
+// companionGear),所以每個呼叫端在原本 incrementDailyTaskProgress 旁邊多呼叫這個一次就好,
+// 不用新增額外的偵測邏輯。
+function incrementWeeklyChallengeProgress(
+  progress: Partial<Record<WeeklyStatKey, number>>,
+  key: WeeklyStatKey
+): Partial<Record<WeeklyStatKey, number>> {
+  return { ...progress, [key]: (progress[key] ?? 0) + 1 };
+}
+
 // 成就偵測的共用入口:每次呼叫都是全量重新計算(見 evaluateUnlockedAchievementIds 的註解),
 // 跟已持久化的 unlockedAchievementIds 做 diff 找出「這次新達成」的項目,更新 unlockedAchievementIds
 // 並跳 toast 提示。v26 起改成手動領取制,這裡只負責「偵測條件達成」,不再自動發獎勵——
@@ -524,6 +555,9 @@ export const useGameState = create<GameState>((set, get) => ({
   totalStagesCleared: 0,
   ascensionPoints: 0,
   ascensionUpgrades: {},
+  weeklyChallengeWeekIndex: weekIndex(),
+  weeklyChallengeProgress: {},
+  weeklyChallengeClaimedIds: [],
   lastDailyResetAt: '',
   dailyKillCount: 0,
   dailyQuestClaimed: false,
@@ -591,6 +625,10 @@ export const useGameState = create<GameState>((set, get) => ({
     const dailyLoginBonus = newDay ? { coins: DAILY_LOGIN_COIN_BONUS, exp: DAILY_LOGIN_EXP_BONUS } : null;
     const level = accumulateExp(save.level, gainedExp + (dailyLoginBonus?.exp ?? 0));
 
+    // 週期成就輪替(見 game/weeklyChallenge.ts):跨週才重置進度+已領取清單,同一套「跨日重置」
+    // 的精神換成一週為單位——沒有登入獎勵這種一次性彈窗,純粹是進度池歸零+換一組新的3條挑戰。
+    const newWeek = isNewWeek(save.weeklyChallengeWeekIndex);
+
     // 背景/關閉期間沒有畫面可以真的打怪,離線期間用平均戰鬥時長反推大概擊敗幾隻、賺多少金幣
     // (風味數字,經驗值仍然是上面 calcOfflineExp 那套沒變的公式在算),跟前景同一套裝備/寵物加成。
     const offlineBattle = estimateOfflineBattleResult(elapsedMs, speedMultiplier, coinMultiplier);
@@ -621,6 +659,9 @@ export const useGameState = create<GameState>((set, get) => ({
       totalStagesCleared: save.totalStagesCleared,
       ascensionPoints: save.ascensionPoints,
       ascensionUpgrades: save.ascensionUpgrades,
+      weeklyChallengeWeekIndex: newWeek ? weekIndex() : save.weeklyChallengeWeekIndex,
+      weeklyChallengeProgress: newWeek ? {} : save.weeklyChallengeProgress,
+      weeklyChallengeClaimedIds: newWeek ? [] : save.weeklyChallengeClaimedIds,
       lastDailyResetAt: newDay ? todayDateString() : save.lastDailyResetAt,
       dailyKillCount: newDay ? 0 : save.dailyKillCount,
       dailyQuestClaimed: newDay ? false : save.dailyQuestClaimed,
@@ -958,6 +999,7 @@ export const useGameState = create<GameState>((set, get) => ({
       ascensionPoints: state.ascensionPoints + (state.currentEncounter.isFinalBoss ? ASCENSION_POINTS_PER_CYCLE : 0),
       killCount: state.killCount + 1,
       dailyKillCount: state.dailyKillCount + 1,
+      weeklyChallengeProgress: incrementWeeklyChallengeProgress(state.weeklyChallengeProgress, 'kills'),
       lastEvent: event,
       lastCompanionDropId,
       lastEquipmentDropId,
@@ -1016,7 +1058,9 @@ export const useGameState = create<GameState>((set, get) => ({
 
     // 副本任務(見 game/daily.ts 的 DAILY_TASKS)看的是「有沒有挑戰過」,不看輸贏——
     // 消耗到入場券(spent !== null,上面已經檢查過)就算數,所以贏/輸兩條分支都要記一次。
+    // 週期成就輪替(見 game/weeklyChallenge.ts)的副本挑戰次數同一套判定,一起記。
     const nextDailyTaskProgress = incrementDailyTaskProgress(state.dailyTaskProgress, 'dungeon');
+    const nextWeeklyChallengeProgress = incrementWeeklyChallengeProgress(state.weeklyChallengeProgress, 'dungeon');
 
     if (healthResult.defeated) {
       set({
@@ -1024,6 +1068,7 @@ export const useGameState = create<GameState>((set, get) => ({
         dungeon: spent,
         defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
         dailyTaskProgress: nextDailyTaskProgress,
+        weeklyChallengeProgress: nextWeeklyChallengeProgress,
       });
       persist(get());
       return;
@@ -1042,6 +1087,7 @@ export const useGameState = create<GameState>((set, get) => ({
       hasEverAssembledTransferProof: nextHasEverAssembledTransferProof,
       lastTransferFragmentArchetype: archetype,
       dailyTaskProgress: nextDailyTaskProgress,
+      weeklyChallengeProgress: nextWeeklyChallengeProgress,
     });
     checkAndUnlockAchievements(get, set);
     persist(get());
@@ -1175,7 +1221,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
   // 花錢鑑定隱藏素質,鑑定過就永久生效;裝備不存在/沒有素質資料/金幣不夠就靜默不做事。
   identifyItem: (itemId) => {
-    const { coins, itemInstances, dailyTaskProgress } = get();
+    const { coins, itemInstances, dailyTaskProgress, weeklyChallengeProgress } = get();
     const item = getItemById(itemId);
     const instance = itemInstances[itemId];
     if (!item || !instance || instance.identified) return;
@@ -1186,6 +1232,7 @@ export const useGameState = create<GameState>((set, get) => ({
       coins: coins - cost,
       itemInstances: { ...itemInstances, [itemId]: { ...instance, identified: true } },
       dailyTaskProgress: incrementDailyTaskProgress(dailyTaskProgress, 'identify'),
+      weeklyChallengeProgress: incrementWeeklyChallengeProgress(weeklyChallengeProgress, 'identify'),
     });
     persist(get());
   },
@@ -1193,7 +1240,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // 花金幣+強化石嘗試 +1;Lv1~5 失敗只浪費資源,Lv6~10 失敗可能降級或直接損毀(從裝備欄跟
   // 已解鎖清單一併移除)。resistance 素質(裝備自己的,不是全身加總)拉低失敗率。
   enhanceItem: (itemId) => {
-    const { coins, enhanceStones, itemInstances, equipment, unlockedItemIds, dailyTaskProgress } = get();
+    const { coins, enhanceStones, itemInstances, equipment, unlockedItemIds, dailyTaskProgress, weeklyChallengeProgress } = get();
     const item = getItemById(itemId);
     const instance = itemInstances[itemId];
     if (!item || !instance) return;
@@ -1236,6 +1283,7 @@ export const useGameState = create<GameState>((set, get) => ({
       unlockedItemIds: nextUnlockedItemIds,
       lastEnhanceOutcome: message,
       dailyTaskProgress: incrementDailyTaskProgress(dailyTaskProgress, 'enhance'),
+      weeklyChallengeProgress: incrementWeeklyChallengeProgress(weeklyChallengeProgress, 'enhance'),
     });
     checkAndUnlockAchievements(get, set);
     persist(get());
@@ -1375,7 +1423,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // 只吃金幣(不吃 bankedExp)——這是寵物系統的加成,定位是「金幣的額外去處」,
   // 不跟主要練等經濟(bankedExp)搶資源。
   upgradeCompanionGearSlot: (kind, slot) => {
-    const { companionGear, level, coins, dailyTaskProgress } = get();
+    const { companionGear, level, coins, dailyTaskProgress, weeklyChallengeProgress } = get();
     const currentSlotLevel = companionGear[kind][slot];
     if (!canUpgradeCompanionGearSlot(currentSlotLevel, level.level, coins)) return;
 
@@ -1389,6 +1437,7 @@ export const useGameState = create<GameState>((set, get) => ({
       companionGear: nextCompanionGear,
       coins: coins - coinCost,
       dailyTaskProgress: incrementDailyTaskProgress(dailyTaskProgress, 'companionGear'),
+      weeklyChallengeProgress: incrementWeeklyChallengeProgress(weeklyChallengeProgress, 'companionGear'),
     });
     persist(get());
     playSkillUpgrade();
@@ -1418,6 +1467,28 @@ export const useGameState = create<GameState>((set, get) => ({
       enhanceStones: enhanceStones + (reward.enhanceStones ?? 0),
       skillBooks: skillBooks + (reward.skillBooks ?? 0),
       dailyTaskClaimedIds: [...dailyTaskClaimedIds, id],
+    });
+    persist(get());
+  },
+
+  // 週期成就輪替(見 game/weeklyChallenge.ts):跟上面 claimDailyTask 同一套判定/領取模式,
+  // 獎勵可能含寶石(見 WEEKLY_CHALLENGE_POOL),疊加邏輯照抄 claimAchievement 那段。
+  claimWeeklyChallenge: (id) => {
+    const { weeklyChallengeProgress, weeklyChallengeClaimedIds, coins, enhanceStones, gemCounts } = get();
+    if (!canClaimWeeklyChallenge(id, weeklyChallengeProgress, weeklyChallengeClaimedIds)) return;
+    const reward = getWeeklyChallengeDef(id).reward;
+    const nextGemCounts: GemCounts = { ...gemCounts };
+    if (reward.gems) {
+      for (const gemType of GEM_TYPES) {
+        const amount = reward.gems[gemType];
+        if (amount) nextGemCounts[gemType] += amount;
+      }
+    }
+    set({
+      coins: coins + reward.coins,
+      enhanceStones: enhanceStones + (reward.enhanceStones ?? 0),
+      gemCounts: nextGemCounts,
+      weeklyChallengeClaimedIds: [...weeklyChallengeClaimedIds, id],
     });
     persist(get());
   },
