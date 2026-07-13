@@ -101,35 +101,3 @@ export function calcKillReward(
 export function hasMonsterFor(rarity: Rarity): boolean {
   return getMonstersByRarity(rarity).length > 0;
 }
-
-const RARITY_WEIGHTS: Record<Rarity, number> = { common: 0.7, rare: 0.22, epic: 0.07, legendary: 0.01 };
-const RARITY_LIST = Object.keys(RARITY_WEIGHTS) as Rarity[];
-
-const AVG_FIGHT_DURATION_MS = RARITY_LIST.reduce(
-  (sum, rarity) => sum + RARITY_WEIGHTS[rarity] * BASE_FIGHT_DURATION_MS[rarity],
-  0
-);
-const AVG_COINS_PER_KILL = RARITY_LIST.reduce(
-  (sum, rarity) => sum + RARITY_WEIGHTS[rarity] * coinsForRarity(rarity),
-  0
-);
-
-export interface OfflineBattleEstimate {
-  kills: number;
-  coins: number;
-}
-
-// App 背景/關閉時沒有畫面可以真的一隻一隻打,離線結算用「平均戰鬥時長/平均金幣」反推
-// 大概打了幾隻、賺了多少金幣,純粹是離線橫幅的風味數字——經驗值仍然是 calcOfflineExp
-// 那套已經調好的公式在算,這裡不影響、也不重算經驗。speedMultiplier/coinMultiplier
-// 跟前景戰鬥用的是同一套裝備/寵物加成,離線估算才不會跟實際玩起來的速率脫節。
-export function estimateOfflineBattleResult(
-  elapsedMs: number,
-  speedMultiplier: number,
-  coinMultiplier: number = 1
-): OfflineBattleEstimate {
-  const effectiveDurationMs = AVG_FIGHT_DURATION_MS / speedMultiplier;
-  const kills = Math.max(0, Math.floor(elapsedMs / effectiveDurationMs));
-  const coins = Math.round(kills * AVG_COINS_PER_KILL * coinMultiplier);
-  return { kills, coins };
-}
