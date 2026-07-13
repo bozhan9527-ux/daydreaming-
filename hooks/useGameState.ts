@@ -1,12 +1,18 @@
 import { create } from 'zustand';
 
-import { ACHIEVEMENTS, AchievementProgress, evaluateUnlockedAchievementIds } from '../game/achievements';
+import {
+  ACHIEVEMENTS,
+  AchievementProgress,
+  evaluateUnlockedAchievementIds,
+  getAchievementBonusMultiplier,
+} from '../game/achievements';
 import {
   ASCENSION_POINTS_PER_CYCLE,
   ascensionUpgradeCost,
   AscensionUpgradeId,
   canUpgradeAscension,
   getAscensionBonusTotal,
+  getCycleCount,
 } from '../game/ascension';
 import { calcKillReward, Encounter, generateEncounter } from '../game/battle';
 import {
@@ -54,9 +60,11 @@ import {
   getGenderUnlockItems,
   getIdentifyCost,
   getItemById,
+  getRerollCost,
   getSubstatTotals,
   isItemUnlocked,
   ItemInstances,
+  rerollItemSubstats,
   rollEnhanceOutcome,
   rollEnhanceStoneDrop,
   rollEquipmentDrop,
@@ -137,8 +145,8 @@ import {
 } from '../game/stages';
 import { bumpPityFromClick, createInitialTriggerState, TriggerState } from '../game/trigger';
 import { simulateOfflineStageProgress } from '../game/offlineProgress';
-import { JobSelection, loadSave, SCHEMA_VERSION, writeSave } from '../lib/storage';
-import { playEvent, playLevelUp, playSkillUpgrade } from '../lib/sounds';
+import { clearSave, JobSelection, loadSave, SCHEMA_VERSION, writeSave } from '../lib/storage';
+import { playEvent, playLevelUp, playSkillUpgrade, setSoundMuted } from '../lib/sounds';
 import { useToast } from './useToast';
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
@@ -196,7 +204,8 @@ function computeRewardMultipliers(
   skillTree: SkillTreeLevels,
   studentSkillTree: Record<SkillSlotId, number>,
   hasChosenJob: boolean,
-  ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>
+  ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>,
+  claimedAchievementIds: string[]
 ): RewardMultipliers {
   const jobMultiplier = currentJobMultiplier(job, level, secondaryJob, hasChosenJob);
   const equipmentBonus = getEquipmentBonusTotalsFull(equipment, itemInstances);
@@ -208,6 +217,9 @@ function computeRewardMultipliers(
   const ascensionExp = getAscensionBonusTotal('exp', ascensionUpgrades);
   const ascensionCoins = getAscensionBonusTotal('coins', ascensionUpgrades);
   const ascensionSpeed = getAscensionBonusTotal('speed', ascensionUpgrades);
+  // 成就永久加成(見 game/achievements.ts):領過的成就數就是全部,一樣不受裝備/寵物坐騎
+  // 更換影響——只加經驗/金幣,不加速度,呼應成就本身「累積成長」而非「戰鬥效率」的定位。
+  const achievementBonus = getAchievementBonusMultiplier(claimedAchievementIds.length);
   // 限時活動(見 game/limitedEvent.ts):純粹是「今天星期幾」算出來的固定加成,不存檔、
   // 不用跟伺服器同步,呼叫端不用管活動有沒有在進行,這裡直接算好疊加上去就好。
   const activeEvent = getActiveLimitedEvent();
@@ -223,6 +235,7 @@ function computeRewardMultipliers(
         companionGearBonus.exp +
         passiveBonus.exp +
         ascensionExp +
+        achievementBonus +
         eventExpBonus),
     coinMultiplier:
       1 +
@@ -231,6 +244,7 @@ function computeRewardMultipliers(
       companionGearBonus.coins +
       passiveBonus.coins +
       ascensionCoins +
+      achievementBonus +
       eventCoinBonus,
     speedMultiplier:
       1 + equipmentBonus.speed + companionBonus.speed + companionGearBonus.speed + ascensionSpeed + eventSpeedBonus,
@@ -346,7 +360,15 @@ interface GameState {
   lastSkillTriggerAt: number | null;
   lastSecondarySkillTriggerAt: number | null;
   forceInstantNextFight: boolean;
+  // 設定(見 components/SettingsModal.tsx):soundMuted 是音效總開關,hasSeenWelcome 是
+  // 新手歡迎彈窗是否已經看過/關閉——兩者都要存檔,不然每次重開 App 都要重新關一次音效/
+  // 重新看一次歡迎畫面。
+  soundMuted: boolean;
+  hasSeenWelcome: boolean;
   load: () => Promise<void>;
+  toggleSound: () => void;
+  dismissWelcome: () => void;
+  resetSave: () => Promise<void>;
   levelUp: (times: 1 | 5 | 10) => void;
   tickBattle: () => void;
   boostCurrentFight: () => void;
@@ -364,6 +386,7 @@ interface GameState {
   unequipCompanionSlot: (kind: CompanionKind) => void;
   upgradeCompanionGearSlot: (kind: CompanionKind, slot: CompanionGearSlot) => void;
   identifyItem: (itemId: string) => void;
+  rerollEquipmentSubstats: (itemId: string) => void;
   enhanceItem: (itemId: string) => void;
   purchaseEnhanceStone: () => void;
   purchaseGem: (gemType: GemType) => void;
@@ -420,6 +443,8 @@ type PersistableState = Pick<
   | 'heroHp'
   | 'defeatRecoveryUntil'
   | 'lastHpRegenTickAt'
+  | 'soundMuted'
+  | 'hasSeenWelcome'
 >;
 
 function persist(state: PersistableState): void {
@@ -467,6 +492,8 @@ function persist(state: PersistableState): void {
     defeatRecoveryUntil: state.defeatRecoveryUntil,
     lastHpRegenTickAt: state.lastHpRegenTickAt,
     lastActiveAt: Date.now(),
+    soundMuted: state.soundMuted,
+    hasSeenWelcome: state.hasSeenWelcome,
   });
 }
 
@@ -614,6 +641,8 @@ export const useGameState = create<GameState>((set, get) => ({
   lastSkillTriggerAt: null,
   lastSecondarySkillTriggerAt: null,
   forceInstantNextFight: false,
+  soundMuted: false,
+  hasSeenWelcome: false,
 
   load: async () => {
     const save = await loadSave();
@@ -640,7 +669,8 @@ export const useGameState = create<GameState>((set, get) => ({
       save.skillTree,
       save.studentSkillTree,
       save.hasChosenJob,
-      save.ascensionUpgrades
+      save.ascensionUpgrades,
+      save.claimedAchievementIds
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
 
@@ -722,6 +752,8 @@ export const useGameState = create<GameState>((set, get) => ({
       heroHp: save.heroHp,
       defeatRecoveryUntil: save.defeatRecoveryUntil,
       lastHpRegenTickAt: save.lastHpRegenTickAt,
+      soundMuted: save.soundMuted,
+      hasSeenWelcome: save.hasSeenWelcome,
       lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,
@@ -733,10 +765,30 @@ export const useGameState = create<GameState>((set, get) => ({
       activeSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
       secondarySkillTimerStartedAt: Date.now(),
     });
+    // 音效模組是獨立於 store 之外的命令式播放(見 lib/sounds.ts),load() 時同步一次目前的
+    // 靜音設定,之後 toggleSound() 每次切換也要同步呼叫,兩邊狀態才不會不一致。
+    setSoundMuted(save.soundMuted);
     // 全量重新計算:讓存檔本身已經達標的成就(不論是老存檔在這個功能上線前就已經達成,
     // 還是離線期間的升級/掉落剛好跨過門檻)在載入當下立刻被追溯性授予。
     checkAndUnlockAchievements(get, set);
     persist(get());
+  },
+
+  toggleSound: () => {
+    const nextMuted = !get().soundMuted;
+    setSoundMuted(nextMuted);
+    set({ soundMuted: nextMuted });
+    persist(get());
+  },
+
+  dismissWelcome: () => {
+    set({ hasSeenWelcome: true });
+    persist(get());
+  },
+
+  resetSave: async () => {
+    await clearSave();
+    await get().load();
   },
 
   levelUp: (times) => {
@@ -795,11 +847,12 @@ export const useGameState = create<GameState>((set, get) => ({
         state.skillTree,
         state.studentSkillTree,
         state.hasChosenJob,
-        state.ascensionUpgrades
+        state.ascensionUpgrades,
+        state.claimedAchievementIds
       );
       const isBoss = isBossSubStage(state.stageProgress.subStage);
       const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
-      const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress);
+      const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress, getCycleCount(state.totalStagesCleared));
       const bossTier = getCurrentTier(state.level.level);
       const heroSchool = getArchetypeComposition(state.job.archetype).damageType;
       const attackPower = heroAttackPower(
@@ -850,11 +903,12 @@ export const useGameState = create<GameState>((set, get) => ({
       state.skillTree,
       state.studentSkillTree,
       state.hasChosenJob,
-      state.ascensionUpgrades
+      state.ascensionUpgrades,
+      state.claimedAchievementIds
     );
-    // 關卡難度倍率:跟這隻怪生成當下用的是同一份 stageProgress(這次擊殺才會讓它晉級,
-    // 所以算獎勵的當下它還沒變),疊加在等級/裝備既有的獎勵倍率之上,是完全獨立的另一條軸線。
-    const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress);
+    // 關卡難度倍率:跟這隻怪生成當下用的是同一份 stageProgress/輪次(這次擊殺才會讓它們晉級,
+    // 所以算獎勵的當下都還沒變),疊加在等級/裝備既有的獎勵倍率之上,是完全獨立的另一條軸線。
+    const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress, getCycleCount(state.totalStagesCleared));
     const reward = calcKillReward(state.currentEncounter.rarity, state.level.level, expMultiplier, coinMultiplier, difficultyMultiplier);
 
     // 勇者血量/戰敗風險判定(見 game/heroHealth.ts):在這場戰鬥開始「前」的血量基礎上計算,
@@ -1277,6 +1331,23 @@ export const useGameState = create<GameState>((set, get) => ({
       itemInstances: { ...itemInstances, [itemId]: { ...instance, identified: true } },
       dailyTaskProgress: incrementDailyTaskProgress(dailyTaskProgress, 'identify'),
       weeklyChallengeProgress: incrementWeeklyChallengeProgress(weeklyChallengeProgress, 'identify'),
+    });
+    persist(get());
+  },
+
+  // 後期玩家裝備/技能/寵物都點滿之後金幣沒有長期去化管道,花金幣重擲已擁有裝備的隨機/隱藏
+  // 素質(兩項一起重擲,不能只挑一項)——賭運氣的無底洞消耗,不影響強化/鑲嵌/鑑定狀態。
+  rerollEquipmentSubstats: (itemId) => {
+    const { coins, itemInstances } = get();
+    const item = getItemById(itemId);
+    const instance = itemInstances[itemId];
+    if (!item || !instance) return;
+    const cost = getRerollCost(item);
+    if (coins < cost) return;
+
+    set({
+      coins: coins - cost,
+      itemInstances: { ...itemInstances, [itemId]: rerollItemSubstats(item, instance) },
     });
     persist(get());
   },

@@ -41,7 +41,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 31;
+export const SCHEMA_VERSION = 32;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -191,6 +191,12 @@ export interface SaveData {
   weeklyChallengeProgress: Partial<Record<WeeklyStatKey, number>>;
   weeklyChallengeClaimedIds: string[];
   lastActiveAt: number;
+  // 設定(見 components/SettingsModal.tsx):soundMuted 是音效總開關,false=正常播放。
+  // hasSeenWelcome 是新手歡迎彈窗是否已經看過/關閉——這個功能上線前建立的存檔一律視為
+  // true(老玩家顯然早就玩過,不用平白補跳一次歡迎畫面打斷正在進行的遊戲),只有真的
+  // 全新存檔(createInitialSaveData)才是 false。
+  soundMuted: boolean;
+  hasSeenWelcome: boolean;
 }
 
 export function createInitialSaveData(): SaveData {
@@ -238,6 +244,8 @@ export function createInitialSaveData(): SaveData {
     weeklyChallengeClaimedIds: [],
     lastHpRegenTickAt: Date.now(),
     lastActiveAt: Date.now(),
+    soundMuted: false,
+    hasSeenWelcome: false,
   };
 }
 
@@ -1817,18 +1825,40 @@ function isSaveDataV30(value: unknown): value is SaveDataV30 {
   );
 }
 
-// v31(週期成就輪替上線):現在的 SaveData 完整形狀,比 v30 多了 weeklyChallengeWeekIndex/
-// weeklyChallengeProgress/weeklyChallengeClaimedIds。這是 migrate() 的第一道 passthrough
-// 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
-function isSaveDataV31(value: unknown): value is SaveData {
+// v31(週期成就輪替上線,設定系統上線前的最後一版):比 v30 多了 weeklyChallengeWeekIndex/
+// weeklyChallengeProgress/weeklyChallengeClaimedIds,沒有 soundMuted/hasSeenWelcome。
+// 凍結成明確獨立的 interface+literal版本號檢查,形狀直接繼承 SaveDataV30(只換 version
+// 字面量、疊加新欄位)。
+interface SaveDataV31 extends Omit<SaveDataV30, 'version'> {
+  version: 31;
+  weeklyChallengeWeekIndex: number;
+  weeklyChallengeProgress: Partial<Record<WeeklyStatKey, number>>;
+  weeklyChallengeClaimedIds: string[];
+}
+
+function isSaveDataV31(value: unknown): value is SaveDataV31 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 31 &&
     isSaveDataV30({ ...record, version: 30 }) &&
     typeof record.weeklyChallengeWeekIndex === 'number' &&
     isWeeklyChallengeProgress(record.weeklyChallengeProgress) &&
     isWeeklyChallengeClaimedIds(record.weeklyChallengeClaimedIds)
+  );
+}
+
+// v32(設定系統上線):現在的 SaveData 完整形狀,比 v31 多了 soundMuted/hasSeenWelcome。
+// 這是 migrate() 的第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何
+// 遷移邏輯。
+function isSaveDataV32(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === SCHEMA_VERSION &&
+    isSaveDataV31({ ...record, version: 31 }) &&
+    typeof record.soundMuted === 'boolean' &&
+    typeof record.hasSeenWelcome === 'boolean'
   );
 }
 
@@ -1905,13 +1935,26 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // 不然舊存檔一登入會被判定成「上次重置是第0週」,如果玩家剛好活在第0週以後很久,isNewWeek()
 // 反而不會馬上觸發重置,progress/claimedIds 卻已經補成空的——直接補現在的 weekIndex() 才能保證
 // migrate 完的狀態一定跟「剛剛才重置過」一致,progress/claimedIds 補空互相對應。
+// v31→v32 沒有 soundMuted/hasSeenWelcome(見設定/新手引導系統):soundMuted 補 false(舊存檔
+// 一直以來都是有聲音的,維持原樣)、hasSeenWelcome 補 true(這個功能上線前的存檔顯然早就
+// 玩過了,不用平白補跳一次歡迎畫面打斷正在進行的遊戲)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV31(value)) return value;
+  if (isSaveDataV32(value)) return value;
+  if (isSaveDataV31(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
+    };
+  }
   if (isSaveDataV30(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       weeklyChallengeWeekIndex: weekIndex(),
       weeklyChallengeProgress: {},
       weeklyChallengeClaimedIds: [],
@@ -1921,6 +1964,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       ascensionPoints: 0,
       ascensionUpgrades: {},
       weeklyChallengeWeekIndex: weekIndex(),
@@ -1932,6 +1977,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
@@ -1945,6 +1992,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -1959,6 +2008,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
       totalStagesCleared: 0,
@@ -1976,6 +2027,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       claimedAchievementIds: [...value.unlockedAchievementIds],
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
@@ -1994,6 +2047,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: 0,
@@ -2013,6 +2068,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
@@ -2033,6 +2090,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
@@ -2054,6 +2113,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
@@ -2075,6 +2136,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
@@ -2098,6 +2161,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
@@ -2122,6 +2187,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       unlockedAchievementIds: [],
       claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
@@ -2149,6 +2216,8 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       hasChosenJob: true,
       unlockedAchievementIds: [],
       claimedAchievementIds: [],
@@ -2176,6 +2245,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV16(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2223,6 +2294,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV15(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2270,6 +2343,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV14(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2317,6 +2392,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV13(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2364,6 +2441,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV12(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2411,6 +2490,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV11(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2458,6 +2539,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV10(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2505,6 +2588,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV9(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2552,6 +2637,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV8(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2599,6 +2686,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV7(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2646,6 +2735,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV6(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2693,6 +2784,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV5(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2740,6 +2833,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV4(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2787,6 +2882,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV3(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2834,6 +2931,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV2(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: value.trigger,
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
@@ -2881,6 +2980,8 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV1(value)) {
     return {
       version: SCHEMA_VERSION,
+      soundMuted: false,
+      hasSeenWelcome: true,
       level: value.level,
       trigger: createInitialTriggerState(),
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
@@ -2944,4 +3045,9 @@ export async function loadSave(): Promise<SaveData> {
 
 export async function writeSave(data: SaveData): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+// 設定分頁的「重置存檔」用:清掉底層儲存,下一次 loadSave() 就會拿到全新的 createInitialSaveData()。
+export async function clearSave(): Promise<void> {
+  await AsyncStorage.removeItem(STORAGE_KEY);
 }

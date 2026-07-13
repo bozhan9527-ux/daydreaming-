@@ -467,3 +467,13 @@ export function getAchievementProgressDisplay(id: string, progress: AchievementP
 
   return null;
 }
+
+// 成就永久加成:每領取1個成就永久+0.1%經驗/金幣(共102個成就,全部領完約+10.2%)——
+// 獨立於 game/ascension.ts 那條「破輪迴」的永久加成軸線之外,讓成就本身也有超越一次性
+// 貨幣獎勵的長期價值,不用重新設計每個成就各自的獎勵內容,跟轉生加成一樣不受裝備/
+// 寵物坐騎更換影響。
+const ACHIEVEMENT_BONUS_PER_CLAIM = 0.001;
+
+export function getAchievementBonusMultiplier(claimedCount: number): number {
+  return claimedCount * ACHIEVEMENT_BONUS_PER_CLAIM;
+}
