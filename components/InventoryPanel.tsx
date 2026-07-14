@@ -9,6 +9,7 @@ import {
   getEquippableItemsForSlot,
   getIdentifyCost,
   getItemById,
+  getRerollCost,
   isItemUnlocked,
   ItemInstanceData,
   SubstatType,
@@ -115,6 +116,7 @@ export function InventoryPanel() {
   const job = useGameState((state) => state.job);
   const equip = useGameState((state) => state.equip);
   const identifyItem = useGameState((state) => state.identifyItem);
+  const rerollEquipmentSubstats = useGameState((state) => state.rerollEquipmentSubstats);
   const showToast = useToast((state) => state.show);
 
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
@@ -144,6 +146,16 @@ export function InventoryPanel() {
     }
     identifyItem(item.id);
     showToast(`鑑定完成:${item.name}\n${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
+  }
+
+  function handleReroll(item: EquipmentItem) {
+    const cost = getRerollCost(item);
+    if (coins < cost) {
+      showToast(`金幣不夠重擲 ${item.name}(需要 ${cost} 金幣)`);
+      return;
+    }
+    rerollEquipmentSubstats(item.id);
+    showToast(`重擲完成:${item.name}\n${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
   }
 
   function renderSlotButton(slot: EquipmentSlot) {
@@ -192,6 +204,11 @@ export function InventoryPanel() {
         {canIdentify && (
           <Pressable style={styles.identifyRow} onPress={() => handleIdentify(item)}>
             <Text style={styles.identifyLabel}>🔍 鑑定隱藏素質({getIdentifyCost(item)} 金幣)</Text>
+          </Pressable>
+        )}
+        {instance !== undefined && (
+          <Pressable style={styles.identifyRow} onPress={() => handleReroll(item)}>
+            <Text style={styles.identifyLabel}>🎲 重擲隨機/隱藏素質({getRerollCost(item)} 金幣)</Text>
           </Pressable>
         )}
       </View>

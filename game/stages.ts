@@ -59,9 +59,24 @@ const SUBSTAGE_MULTIPLIER_STEP = 0.002;
 const BOSS_MULTIPLIER = 2.5;
 const FINAL_BOSS_MULTIPLIER = 5;
 
-export function getStageDifficultyMultiplier(progress: StageProgress): number {
+// 輪迴週期加成(cycleCount,見 game/ascension.ts 的 getCycleCount):每破完一輪整組
+// 3000關,下一輪的難度整體 +3%——跟第1-300關本身的難度曲線是「這一輪內部」的軸線不同,
+// 這裡是「輪與輪之間」的第三條軸線。由於這個倍率也是 calcKillReward 的
+// difficultyMultiplier(見 game/battle.ts),經驗/金幣獎勵會跟著同步變多,不是單純
+// 「更難但沒有回報」——避免轉生加成樹點滿(第63輪前後)之後,後續每一輪都在重複一模一樣
+// 的內容跟數值,失去繼續玩下去的理由。63輪時約 1+63*0.03=2.89x,不會失控暴衝。
+const CYCLE_DIFFICULTY_STEP = 0.03;
+
+// 給 UI(AscensionPanel.tsx)顯示用:算出「輪次加成」本身佔多少百分比,不用讓呼叫端
+// 自己重新計算一次公式或碰觸 CYCLE_DIFFICULTY_STEP 這個內部常數。
+export function getCycleDifficultyBonusPct(cycleCount: number): number {
+  return Math.round(cycleCount * CYCLE_DIFFICULTY_STEP * 100);
+}
+
+export function getStageDifficultyMultiplier(progress: StageProgress, cycleCount: number = 0): number {
   const base = 1 + (progress.stage - 1) * STAGE_MULTIPLIER_STEP + (progress.subStage - 1) * SUBSTAGE_MULTIPLIER_STEP;
-  if (isFinalBossStage(progress.stage, progress.subStage)) return base * FINAL_BOSS_MULTIPLIER;
-  if (isBossSubStage(progress.subStage)) return base * BOSS_MULTIPLIER;
-  return base;
+  const cycleMultiplier = 1 + cycleCount * CYCLE_DIFFICULTY_STEP;
+  if (isFinalBossStage(progress.stage, progress.subStage)) return base * FINAL_BOSS_MULTIPLIER * cycleMultiplier;
+  if (isBossSubStage(progress.subStage)) return base * BOSS_MULTIPLIER * cycleMultiplier;
+  return base * cycleMultiplier;
 }

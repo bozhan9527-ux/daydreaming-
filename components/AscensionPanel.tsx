@@ -7,7 +7,7 @@ import {
   canUpgradeAscension,
   getCycleCount,
 } from '../game/ascension';
-import { STAGE_COUNT } from '../game/stages';
+import { getCycleDifficultyBonusPct, STAGE_COUNT } from '../game/stages';
 import { useGameState } from '../hooks/useGameState';
 
 export function AscensionPanel() {
@@ -29,6 +29,11 @@ export function AscensionPanel() {
             : `已完成 ${cycleCount} 輪輪迴,這一輪清了 ${stagesIntoCurrentCycle} / ${STAGE_COUNT} 個大關`}
         </Text>
         <Text style={styles.pointsText}>轉生點數:{ascensionPoints}</Text>
+        {cycleCount > 0 && (
+          <Text style={styles.summarySubtext}>
+            本輪關卡難度/獎勵:+{getCycleDifficultyBonusPct(cycleCount)}%(每輪 +3%,難度變高的同時經驗/金幣也同步變多)
+          </Text>
+        )}
       </View>
 
       <Text style={styles.sectionHint}>

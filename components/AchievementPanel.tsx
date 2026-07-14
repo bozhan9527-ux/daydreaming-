@@ -4,6 +4,7 @@ import {
   ACHIEVEMENTS,
   AchievementCategory,
   AchievementDef,
+  getAchievementBonusMultiplier,
   getAchievementProgressDisplay,
 } from '../game/achievements';
 import { GemType } from '../game/equipment';
@@ -74,12 +75,16 @@ export function AchievementPanel() {
   const claimableIds = unlockedAchievementIds.filter((id) => !claimedAchievementIds.includes(id));
   const unlockedCount = unlockedAchievementIds.length;
   const totalCount = Object.keys(ACHIEVEMENTS).length;
+  // 每領取1個成就永久+0.1%經驗/金幣(見 game/achievements.ts),讓玩家看得到「已領取的成就
+  // 數」本身也是一項持續累積的數值,不只是單純的一次性貨幣獎勵清單。
+  const bonusPct = Math.round(getAchievementBonusMultiplier(claimedAchievementIds.length) * 1000) / 10;
 
   return (
     <View style={styles.container}>
       <Text style={styles.totalsText}>
         已解鎖 {unlockedCount}/{totalCount}
       </Text>
+      <Text style={styles.bonusText}>已領取成就永久加成:經驗/金幣 +{bonusPct}%</Text>
 
       {claimableIds.length > 0 && (
         <Pressable style={styles.claimAllButton} onPress={() => claimAllAchievements()}>
@@ -145,6 +150,12 @@ const styles = StyleSheet.create({
   totalsText: {
     color: '#c9a94f',
     fontSize: 11,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  bonusText: {
+    color: '#8fd4a8',
+    fontSize: 10,
     textAlign: 'center',
     marginBottom: 4,
   },

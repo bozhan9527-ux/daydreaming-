@@ -1417,6 +1417,29 @@ export function getIdentifyCost(item: EquipmentItem): number {
   return Math.max(1, Math.round(item.price * IDENTIFY_COST_MULTIPLIER));
 }
 
+// 重擲隨機/隱藏素質:比鑑定貴(裝備/技能/寵物都點滿之後金幣缺乏長期去化管道,這裡故意訂得
+// 比鑑定費高一截,才撐得起「無底洞消耗」的定位,不會變成隨手就能重擲的廉價操作)。
+const REROLL_COST_MULTIPLIER = 1.5;
+
+export function getRerollCost(item: EquipmentItem): number {
+  return Math.max(1, Math.round(item.price * REROLL_COST_MULTIPLIER));
+}
+
+// 花金幣把已擁有裝備的隨機+隱藏素質一起重擲(不能只挑一項重擲),強化等級/鑲嵌/鑑定狀態
+// 全部維持原樣——重擲賭的是「素質種類/數值運氣」,不影響玩家已經投入的其他資源。
+export function rerollItemSubstats(
+  item: EquipmentItem,
+  instance: ItemInstanceData,
+  rng: () => number = Math.random
+): ItemInstanceData {
+  const bracket = item.bracket ?? 1;
+  return {
+    ...instance,
+    randomSubstat: rollSubstat(bracket, rng),
+    hiddenSubstat: rollSubstat(bracket, rng),
+  };
+}
+
 // ---- 強化系統 ----
 // 花金幣 + 強化石把裝備從 +0 強化到 +10,每級疊加主加成的固定比例。Lv1~5 是安全區,失敗只
 // 浪費資源;Lv6~10 失敗有機會降級或直接損毀裝備,抗性素質(見上方隨機/隱藏素質)降低失敗率。

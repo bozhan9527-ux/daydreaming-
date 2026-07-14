@@ -4,6 +4,7 @@
 // 獨立成一個檔案而不是塞進 game/battle.ts,是因為 battle.ts 的既有設計刻意不認識關卡系統的
 // StageProgress 結構(見 battle.ts 的 generateEncounter 說明);這裡是兩邊規則的交會點,
 // 跟 tickBattle 本身是同樣定位,只是拆出來成純函式方便離線結算重用/測試。
+import { getCycleCount } from './ascension';
 import { coinsForRarity } from './currency';
 import { monsterHp } from './heroHealth';
 import {
@@ -59,7 +60,7 @@ export function simulateOfflineStageProgress(
   let ascensionPointsGained = 0;
 
   for (let i = 0; i < SAFETY_MAX_KILLS; i++) {
-    const diff = getStageDifficultyMultiplier(progress);
+    const diff = getStageDifficultyMultiplier(progress, getCycleCount(stagesCleared));
     const isBoss = isBossSubStage(progress.subStage);
     const isFinal = isFinalBossStage(progress.stage, progress.subStage);
     const hp = isBoss || isFinal ? monsterHp('legendary', diff) : avgMonsterHp(diff);

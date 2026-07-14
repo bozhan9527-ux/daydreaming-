@@ -32,7 +32,16 @@ const RARITY_TO_SOUND: Record<Rarity, SoundKey> = {
   legendary: 'eventLegendary',
 };
 
+// 靜音開關獨立於 zustand store 之外的模組層級狀態(見 hooks/useGameState.ts 的 load()/
+// toggleSound()),避免這個純命令式的播放模組要反過來 import store 造成循環依賴。
+let muted = false;
+
+export function setSoundMuted(value: boolean): void {
+  muted = value;
+}
+
 function play(key: SoundKey): void {
+  if (muted) return;
   try {
     const player = createAudioPlayer(SOUND_SOURCES[key]);
     player.play();

@@ -5,6 +5,8 @@ import { BattleScene } from '../components/BattleScene';
 import { CareerOverviewPanel } from '../components/CareerOverviewPanel';
 import { DailyQuestBadge } from '../components/DailyQuestBadge';
 import { LimitedEventBanner } from '../components/LimitedEventBanner';
+import { SettingsButton } from '../components/SettingsButton';
+import { WelcomeModal } from '../components/WelcomeModal';
 import { EquippedItemsStrip } from '../components/EquippedItemsStrip';
 import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
@@ -34,6 +36,7 @@ export default function HomeScreen() {
   const lastOfflineKills = useGameState((state) => state.lastOfflineKills);
   const lastOfflineCoins = useGameState((state) => state.lastOfflineCoins);
   const stageProgress = useGameState((state) => state.stageProgress);
+  const hasSeenWelcome = useGameState((state) => state.hasSeenWelcome);
   const coins = useGameState((state) => state.coins);
   const lastEvent = useGameState((state) => state.lastEvent);
   const lastCompanionDropId = useGameState((state) => state.lastCompanionDropId);
@@ -132,8 +135,10 @@ export default function HomeScreen() {
   // 已存的經驗值不夠升1級時,三顆按鈕都該直接disable,不然點了沒反應,玩家會以為壞了。
   const canLevel = !isMaxLevel && canLevelUp(level);
   const availableLevels = isMaxLevel ? 0 : levelsAvailable(level);
-  const showOfflineModal = lastOfflineKills > 0 && !offlineModalDismissed;
-  const showDailyBonusModal = lastDailyLoginBonus !== null && !dailyBonusModalDismissed;
+  // 新手歡迎彈窗(見 WelcomeModal.tsx)優先權最高——沒看過之前不能讓離線收益/每日登入獎勵
+  // 這兩個彈窗疊上去搶焦點(全新存檔常常兩個條件同時成立,疊出來的畫面會擋住歡迎彈窗的按鈕)。
+  const showOfflineModal = hasSeenWelcome && lastOfflineKills > 0 && !offlineModalDismissed;
+  const showDailyBonusModal = hasSeenWelcome && lastDailyLoginBonus !== null && !dailyBonusModalDismissed;
 
   // 跨分頁提醒角標(見 game/tabAttention.ts):判斷每個分頁圖示要不要顯示小紅點,
   // 純函式計算,不需要另外存進 state。
@@ -247,6 +252,9 @@ export default function HomeScreen() {
       {/* 限時活動:浮在畫面左側,跟右側的每日任務徽章對稱——沒有活動進行中(一週7天有4天
           沒有)完全不渲染,不佔用畫面版面。 */}
       <LimitedEventBanner />
+
+      <SettingsButton />
+      <WelcomeModal />
 
       <Modal visible={showOfflineModal} animationType="fade" transparent onRequestClose={() => setOfflineModalDismissed(true)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setOfflineModalDismissed(true)} />
