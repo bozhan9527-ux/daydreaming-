@@ -36,32 +36,55 @@ export function SkillPanel() {
   const upgradeSkillSlot = useGameState((state) => state.upgradeSkillSlot);
   const upgradeStudentSkillSlot = useGameState((state) => state.upgradeStudentSkillSlot);
 
+  // 畢業前(!hasChosenJob)還沒有主職技能樹可看,固定顯示學生技能;畢業後兩棵樹永久並存
+  // (學生加成不會因為選定主職而失效),用這個分頁內部切換兩邊,預設看職業技能。
+  const [viewingJobTree, setViewingJobTree] = useState(true);
+  const showJobTree = hasChosenJob && viewingJobTree;
   const [selectedSlot, setSelectedSlot] = useState<SkillSlotId>('active1');
 
-  // 學生期(!hasChosenJob)還沒有主職可以查職業技能樹,整個畫面改吃 studentSkillTree,
-  // 圖示一樣可以借用目前 job.archetype(佔位值)當視覺樣板,不是重點。
   const tier = getCurrentTier(level.level);
-  const slotLevels = hasChosenJob ? skillTree[archetype] : studentSkillTree;
-  const cap = hasChosenJob ? skillSlotLevelCap(tier) : STUDENT_SKILL_LEVEL_CAP;
+  const slotLevels = showJobTree ? skillTree[archetype] : studentSkillTree;
+  const cap = showJobTree ? skillSlotLevelCap(tier) : STUDENT_SKILL_LEVEL_CAP;
 
   const selectedLevel = slotLevels[selectedSlot];
   const selectedBookCost = skillSlotUpgradeBookCost(selectedLevel);
-  const canUpgradeSelected = hasChosenJob
+  const canUpgradeSelected = showJobTree
     ? canUpgradeSkillSlot(selectedLevel, tier, skillBooks)
     : canUpgradeStudentSkillSlot(selectedLevel, skillBooks);
   const selectedAtCap = selectedLevel >= cap;
 
   const selectedFlavor = getStudentSkillFlavor(level.level, selectedSlot);
-  const selectedName = hasChosenJob ? SKILL_SLOT_NAMES[archetype][selectedSlot] : selectedFlavor.name;
-  const selectedDesc = hasChosenJob ? SKILL_SLOT_DESCRIPTIONS[archetype][selectedSlot] : selectedFlavor.description;
-  const selectedBonusDesc = hasChosenJob
+  const selectedName = showJobTree ? SKILL_SLOT_NAMES[archetype][selectedSlot] : selectedFlavor.name;
+  const selectedDesc = showJobTree ? SKILL_SLOT_DESCRIPTIONS[archetype][selectedSlot] : selectedFlavor.description;
+  const selectedBonusDesc = showJobTree
     ? getSkillSlotBonusDescription(archetype, selectedSlot, selectedLevel)
     : getStudentSkillSlotBonusDescription(selectedSlot, selectedLevel);
 
   return (
     <View style={styles.container}>
+      {hasChosenJob && (
+        <View style={styles.treeToggleRow}>
+          <Pressable
+            style={[styles.treeToggleTab, viewingJobTree && styles.treeToggleTabActive]}
+            onPress={() => setViewingJobTree(true)}
+          >
+            <Text style={[styles.treeToggleLabel, viewingJobTree && styles.treeToggleLabelActive]}>職業技能</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.treeToggleTab, !viewingJobTree && styles.treeToggleTabActive]}
+            onPress={() => setViewingJobTree(false)}
+          >
+            <Text style={[styles.treeToggleLabel, !viewingJobTree && styles.treeToggleLabelActive]}>學生技能</Text>
+          </Pressable>
+        </View>
+      )}
+
       <Text style={styles.hint}>
-        {hasChosenJob ? '技能書只顯示目前職業的技能;切換職業後這裡會跟著換一套' : '這是你的學生技能,畢業選定職業後會換成職業技能樹'}
+        {showJobTree
+          ? '技能書只顯示目前職業的技能;切換職業後這裡會跟著換一套'
+          : hasChosenJob
+            ? '畢業前投資的學生技能永久保留,加成疊加在職業技能之上,仍可持續花書升級'
+            : '這是你的學生技能,畢業後不會消失,加成會疊加在職業技能之上並可以持續升級'}
       </Text>
 
       <View style={styles.grid}>
@@ -99,11 +122,11 @@ export function SkillPanel() {
         </View>
         <Text style={styles.detailDesc}>{selectedDesc}</Text>
         <Text style={styles.detailBonus}>{selectedBonusDesc}</Text>
-        <Text style={styles.detailCap}>目前階級上限:{cap} 級{hasChosenJob ? '(升階可再提高)' : ''}</Text>
+        <Text style={styles.detailCap}>目前階級上限:{cap} 級{showJobTree ? '(升階可再提高)' : ''}</Text>
 
         <Pressable
           style={[styles.upgradeButton, !canUpgradeSelected && styles.upgradeButtonDisabled]}
-          onPress={() => (hasChosenJob ? upgradeSkillSlot(archetype, selectedSlot) : upgradeStudentSkillSlot(selectedSlot))}
+          onPress={() => (showJobTree ? upgradeSkillSlot(archetype, selectedSlot) : upgradeStudentSkillSlot(selectedSlot))}
           disabled={!canUpgradeSelected}
         >
           <Text style={styles.upgradeLabel}>
@@ -126,6 +149,31 @@ const styles = StyleSheet.create({
     color: '#8a8a95',
     fontSize: 11,
     textAlign: 'center',
+  },
+  treeToggleRow: {
+    flexDirection: 'row',
+    width: '100%',
+    borderRadius: 8,
+    backgroundColor: '#1c1c24',
+    padding: 3,
+    gap: 3,
+  },
+  treeToggleTab: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  treeToggleTabActive: {
+    backgroundColor: '#4a4456',
+  },
+  treeToggleLabel: {
+    color: '#8a8a95',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  treeToggleLabelActive: {
+    color: '#f2f2f2',
   },
   grid: {
     flexDirection: 'row',
