@@ -146,7 +146,7 @@ import {
 import { bumpPityFromClick, createInitialTriggerState, TriggerState } from '../game/trigger';
 import { simulateOfflineStageProgress } from '../game/offlineProgress';
 import { clearSave, JobSelection, loadSave, SCHEMA_VERSION, writeSave } from '../lib/storage';
-import { playEvent, playLevelUp, playSkillUpgrade, setSoundMuted } from '../lib/sounds';
+import { playEvent, playLevelUp, playSkillUpgrade, setMusicMuted, setSoundMuted, startMusic } from '../lib/sounds';
 import { useToast } from './useToast';
 
 const DEFAULT_JOB: JobSelection = { archetype: 'physicalMelee', branch: 'A' };
@@ -365,8 +365,11 @@ interface GameState {
   // 重新看一次歡迎畫面。
   soundMuted: boolean;
   hasSeenWelcome: boolean;
+  // 背景音樂總開關(見 lib/sounds.ts 的 startMusic/setMusicMuted),獨立於上面的音效開關。
+  musicMuted: boolean;
   load: () => Promise<void>;
   toggleSound: () => void;
+  toggleMusic: () => void;
   dismissWelcome: () => void;
   resetSave: () => Promise<void>;
   levelUp: (times: 1 | 5 | 10) => void;
@@ -445,6 +448,7 @@ type PersistableState = Pick<
   | 'lastHpRegenTickAt'
   | 'soundMuted'
   | 'hasSeenWelcome'
+  | 'musicMuted'
 >;
 
 function persist(state: PersistableState): void {
@@ -494,6 +498,7 @@ function persist(state: PersistableState): void {
     lastActiveAt: Date.now(),
     soundMuted: state.soundMuted,
     hasSeenWelcome: state.hasSeenWelcome,
+    musicMuted: state.musicMuted,
   });
 }
 
@@ -643,6 +648,7 @@ export const useGameState = create<GameState>((set, get) => ({
   forceInstantNextFight: false,
   soundMuted: false,
   hasSeenWelcome: false,
+  musicMuted: false,
 
   load: async () => {
     const save = await loadSave();
@@ -754,6 +760,7 @@ export const useGameState = create<GameState>((set, get) => ({
       lastHpRegenTickAt: save.lastHpRegenTickAt,
       soundMuted: save.soundMuted,
       hasSeenWelcome: save.hasSeenWelcome,
+      musicMuted: save.musicMuted,
       lastDailyLoginBonus: dailyLoginBonus,
       isLoaded: true,
       lastOfflineGain: gainedExp,
@@ -765,9 +772,13 @@ export const useGameState = create<GameState>((set, get) => ({
       activeSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
       secondarySkillTimerStartedAt: Date.now(),
     });
-    // 音效模組是獨立於 store 之外的命令式播放(見 lib/sounds.ts),load() 時同步一次目前的
-    // 靜音設定,之後 toggleSound() 每次切換也要同步呼叫,兩邊狀態才不會不一致。
+    // 音效/BGM模組是獨立於 store 之外的命令式播放(見 lib/sounds.ts),load() 時同步一次目前的
+    // 靜音設定,之後 toggleSound()/toggleMusic() 每次切換也要同步呼叫,兩邊狀態才不會不一致。
+    // startMusic() 這裡呼叫多半會被瀏覽器的自動播放限制擋下(靜默失敗,見該函式的try/catch),
+    // app/index.tsx 會在使用者第一次互動(點擊勇者)時再呼叫一次當備援,已經在播的話是no-op。
     setSoundMuted(save.soundMuted);
+    setMusicMuted(save.musicMuted);
+    startMusic();
     // 全量重新計算:讓存檔本身已經達標的成就(不論是老存檔在這個功能上線前就已經達成,
     // 還是離線期間的升級/掉落剛好跨過門檻)在載入當下立刻被追溯性授予。
     checkAndUnlockAchievements(get, set);
@@ -778,6 +789,13 @@ export const useGameState = create<GameState>((set, get) => ({
     const nextMuted = !get().soundMuted;
     setSoundMuted(nextMuted);
     set({ soundMuted: nextMuted });
+    persist(get());
+  },
+
+  toggleMusic: () => {
+    const nextMuted = !get().musicMuted;
+    setMusicMuted(nextMuted);
+    set({ musicMuted: nextMuted });
     persist(get());
   },
 
@@ -1195,6 +1213,10 @@ export const useGameState = create<GameState>((set, get) => ({
   // 推進保底計數器,提高下一次判定落到稀有以上的機率(當前這隻怪的稀有度已經生成好了,
   // 點擊影響的是下一隻)。每場戰鬥點擊能貢獻的保底次數設上限,避免瘋狂連點直接洗出保底。
   boostCurrentFight: () => {
+    // 瀏覽器的自動播放限制通常會擋下 load() 當下呼叫的 startMusic()(靜默失敗)——
+    // 點擊勇者是最直接、幾乎每個玩家都會做的第一個互動,這裡再呼叫一次當備援。
+    // startMusic() 本身是冪等的(已經在播就是no-op),不會因為每次點擊重複呼叫而疊出第二軌。
+    startMusic();
     const { currentEncounter, fightStartedAt, trigger, heroClicksThisFight } = get();
     if (!currentEncounter || fightStartedAt === null) return;
     const BOOST_MS = 400;

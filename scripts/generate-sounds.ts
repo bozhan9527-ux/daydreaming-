@@ -47,6 +47,96 @@ function silence(durationMs: number): Float32Array {
   return new Float32Array(Math.round((SAMPLE_RATE * durationMs) / 1000));
 }
 
+// 三角波:比方波(下面 squareTone 用的 Math.sign)柔和很多,拿來當BGM的貝斯/長音,
+// 不然連續循環播放一段方波旋律聽久了會刺耳。
+function triangleTone(freq: number, durationMs: number, volume: number, attackMs = 8, releaseMs = 30): Float32Array {
+  const numSamples = Math.round((SAMPLE_RATE * durationMs) / 1000);
+  const attackSamples = Math.round((SAMPLE_RATE * attackMs) / 1000);
+  const releaseSamples = Math.round((SAMPLE_RATE * releaseMs) / 1000);
+  const samples = new Float32Array(numSamples);
+  for (let i = 0; i < numSamples; i++) {
+    const phase = ((freq * i) / SAMPLE_RATE) % 1;
+    const wave = 4 * Math.abs(phase - 0.5) - 1;
+    samples[i] = wave * envelope(i, numSamples, attackSamples, releaseSamples) * volume;
+  }
+  return samples;
+}
+
+// 窄脈衝波(duty 25%):比 50% 方波亮一點但沒那麼刺耳,拿來當BGM主旋律的音色,
+// 跟既有事件音效的 squareTone 音色刻意做出區隔,不會讓玩家把BGM誤聽成連續觸發事件音。
+function pulseTone(freq: number, durationMs: number, volume: number, duty = 0.25, attackMs = 6, releaseMs = 25): Float32Array {
+  const numSamples = Math.round((SAMPLE_RATE * durationMs) / 1000);
+  const attackSamples = Math.round((SAMPLE_RATE * attackMs) / 1000);
+  const releaseSamples = Math.round((SAMPLE_RATE * releaseMs) / 1000);
+  const samples = new Float32Array(numSamples);
+  for (let i = 0; i < numSamples; i++) {
+    const phase = ((freq * i) / SAMPLE_RATE) % 1;
+    const wave = phase < duty ? 1 : -1;
+    samples[i] = wave * envelope(i, numSamples, attackSamples, releaseSamples) * volume;
+  }
+  return samples;
+}
+
+// 疊加多條同時發聲的軌道(旋律+貝斯),不是首尾相接——用來合成BGM的和聲。
+function mix(...tracks: Float32Array[]): Float32Array {
+  const length = Math.max(...tracks.map((track) => track.length));
+  const out = new Float32Array(length);
+  for (const track of tracks) {
+    for (let i = 0; i < track.length; i++) out[i] += track[i];
+  }
+  return out;
+}
+
+// 音名對應頻率(十二平均律,A4=440Hz)。
+const NOTE_FREQ: Record<string, number> = {
+  C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.0, A3: 220.0, B3: 246.94,
+  C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.0, A4: 440.0, B4: 493.88,
+  C5: 523.25, D5: 587.33, E5: 659.25,
+};
+
+const BGM_BPM = 96;
+const BEAT_MS = 60000 / BGM_BPM;
+
+// [音名, 拍數] 的序列轉成一整條音軌;REST 是休止符(純靜音,不發聲),拍數可以是小數
+// (例如半拍0.5)。toneFn 決定這條音軌的音色(旋律用 pulseTone,貝斯用 triangleTone)。
+function melodyTrack(
+  sequence: [string, number][],
+  toneFn: (freq: number, durationMs: number, volume: number) => Float32Array,
+  volume: number
+): Float32Array {
+  return concat(
+    ...sequence.map(([name, beats]) =>
+      name === 'REST' ? silence(beats * BEAT_MS) : toneFn(NOTE_FREQ[name], beats * BEAT_MS, volume)
+    )
+  );
+}
+
+// 8小節、悠閒步調的循環主題,呼應「勇者發呆中」放置遊戲慵懶不緊繃的調性——五聲音階為主的
+// 旋律線(pulseTone,音量刻意壓低不搶戲)配上每小節一個根音的三角波貝斯(triangleTone,
+// I-V-vi-IV走向,第8小節拆成兩個半音符做出回到第1小節根音C3的終止式)。旋律/貝斯總拍數
+// 都是32拍(8小節x4拍),長度對齊才能疊出正確的和聲、迴圈銜接處也不會突然錯拍。
+const BGM_MELODY: [string, number][] = [
+  ['E4', 1], ['G4', 1], ['A4', 1], ['G4', 1],
+  ['E4', 1], ['D4', 1], ['C4', 2],
+  ['A4', 1], ['C5', 1], ['D5', 1], ['C5', 1],
+  ['A4', 1], ['G4', 1], ['E4', 2],
+  ['G4', 1], ['E4', 1], ['D4', 1], ['E4', 1],
+  ['C4', 1], ['D4', 1], ['E4', 2],
+  ['G4', 1], ['A4', 1], ['G4', 1], ['E4', 1],
+  ['D4', 1], ['C4', 2], ['REST', 1],
+];
+
+const BGM_BASS: [string, number][] = [
+  ['C3', 4],
+  ['G3', 4],
+  ['A3', 4],
+  ['F3', 4],
+  ['C3', 4],
+  ['G3', 4],
+  ['A3', 4],
+  ['F3', 2], ['G3', 2],
+];
+
 function concat(...parts: Float32Array[]): Float32Array {
   const total = parts.reduce((sum, part) => sum + part.length, 0);
   const out = new Float32Array(total);
@@ -108,6 +198,10 @@ const SOUNDS: Record<string, Float32Array> = {
   ),
   'level-up.wav': concat(sweepTone(400, 900, 200, 0.3), silence(20), squareTone(1200, 150, 0.34)),
   'skill-upgrade.wav': concat(squareTone(750, 60, 0.28), silence(40), squareTone(750, 60, 0.28)),
+  'bgm.wav': mix(
+    melodyTrack(BGM_MELODY, pulseTone, 0.09),
+    melodyTrack(BGM_BASS, triangleTone, 0.07)
+  ),
 };
 
 for (const [filename, samples] of Object.entries(SOUNDS)) {

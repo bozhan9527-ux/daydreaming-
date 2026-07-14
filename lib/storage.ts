@@ -41,7 +41,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 32;
+export const SCHEMA_VERSION = 33;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -197,6 +197,9 @@ export interface SaveData {
   // 全新存檔(createInitialSaveData)才是 false。
   soundMuted: boolean;
   hasSeenWelcome: boolean;
+  // 背景音樂總開關(見 lib/sounds.ts 的 startMusic/setMusicMuted),獨立於上面的音效開關——
+  // 兩者是玩家常見的不同偏好組合(要音效不要一直循環的BGM,或反過來),分開存放。
+  musicMuted: boolean;
 }
 
 export function createInitialSaveData(): SaveData {
@@ -246,6 +249,7 @@ export function createInitialSaveData(): SaveData {
     lastActiveAt: Date.now(),
     soundMuted: false,
     hasSeenWelcome: false,
+    musicMuted: false,
   };
 }
 
@@ -1848,17 +1852,35 @@ function isSaveDataV31(value: unknown): value is SaveDataV31 {
   );
 }
 
-// v32(設定系統上線):現在的 SaveData 完整形狀,比 v31 多了 soundMuted/hasSeenWelcome。
-// 這是 migrate() 的第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何
-// 遷移邏輯。
-function isSaveDataV32(value: unknown): value is SaveData {
+// v32(設定系統上線,BGM上線前的最後一版):比 v31 多了 soundMuted/hasSeenWelcome,
+// 沒有 musicMuted。凍結成明確獨立的 interface+literal版本號檢查,形狀直接繼承
+// SaveDataV31(只換 version 字面量、疊加新欄位)。
+interface SaveDataV32 extends Omit<SaveDataV31, 'version'> {
+  version: 32;
+  soundMuted: boolean;
+  hasSeenWelcome: boolean;
+}
+
+function isSaveDataV32(value: unknown): value is SaveDataV32 {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 32 &&
+    isSaveDataV31({ ...record, version: 31 }) &&
+    typeof record.soundMuted === 'boolean' &&
+    typeof record.hasSeenWelcome === 'boolean'
+  );
+}
+
+// v33(背景音樂上線):現在的 SaveData 完整形狀,比 v32 多了 musicMuted。這是 migrate() 的
+// 第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
+function isSaveDataV33(value: unknown): value is SaveData {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
     record.version === SCHEMA_VERSION &&
-    isSaveDataV31({ ...record, version: 31 }) &&
-    typeof record.soundMuted === 'boolean' &&
-    typeof record.hasSeenWelcome === 'boolean'
+    isSaveDataV32({ ...record, version: 32 }) &&
+    typeof record.musicMuted === 'boolean'
   );
 }
 
@@ -1938,15 +1960,26 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // v31→v32 沒有 soundMuted/hasSeenWelcome(見設定/新手引導系統):soundMuted 補 false(舊存檔
 // 一直以來都是有聲音的,維持原樣)、hasSeenWelcome 補 true(這個功能上線前的存檔顯然早就
 // 玩過了,不用平白補跳一次歡迎畫面打斷正在進行的遊戲)。
+// v32→v33 沒有 musicMuted(見背景音樂系統):補 false——背景音樂是新功能,舊存檔沒有
+// 「選擇過關掉BGM」這件事,一律視為預設開啟,呼應 soundMuted 當初上線時同樣選擇「維持
+// 原樣、不平白幫玩家關掉」的既有慣例。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV32(value)) return value;
+  if (isSaveDataV33(value)) return value;
+  if (isSaveDataV32(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      musicMuted: false,
+    };
+  }
   if (isSaveDataV31(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
     };
   }
   if (isSaveDataV30(value)) {
@@ -1955,6 +1988,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       weeklyChallengeWeekIndex: weekIndex(),
       weeklyChallengeProgress: {},
       weeklyChallengeClaimedIds: [],
@@ -1966,6 +2000,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       ascensionPoints: 0,
       ascensionUpgrades: {},
       weeklyChallengeWeekIndex: weekIndex(),
@@ -1979,6 +2014,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
@@ -1994,6 +2030,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -2010,6 +2047,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
       totalStagesCleared: 0,
@@ -2029,6 +2067,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       claimedAchievementIds: [...value.unlockedAchievementIds],
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
@@ -2049,6 +2088,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: 0,
@@ -2070,6 +2110,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
@@ -2092,6 +2133,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
@@ -2115,6 +2157,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
@@ -2138,6 +2181,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
@@ -2163,6 +2207,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
@@ -2189,6 +2234,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       unlockedAchievementIds: [],
       claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
@@ -2218,6 +2264,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       hasChosenJob: true,
       unlockedAchievementIds: [],
       claimedAchievementIds: [],
@@ -2247,6 +2294,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2296,6 +2344,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2345,6 +2394,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2394,6 +2444,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2443,6 +2494,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2492,6 +2544,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2541,6 +2594,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2590,6 +2644,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2639,6 +2694,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2688,6 +2744,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2737,6 +2794,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2786,6 +2844,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2835,6 +2894,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2884,6 +2944,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2933,6 +2994,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: value.trigger,
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
@@ -2982,6 +3044,7 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       soundMuted: false,
       hasSeenWelcome: true,
+      musicMuted: false,
       level: value.level,
       trigger: createInitialTriggerState(),
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },

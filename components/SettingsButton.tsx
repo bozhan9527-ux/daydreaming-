@@ -13,6 +13,8 @@ export function SettingsButton() {
 
   const soundMuted = useGameState((state) => state.soundMuted);
   const toggleSound = useGameState((state) => state.toggleSound);
+  const musicMuted = useGameState((state) => state.musicMuted);
+  const toggleMusic = useGameState((state) => state.toggleMusic);
   const resetSave = useGameState((state) => state.resetSave);
 
   const close = () => {
@@ -39,6 +41,11 @@ export function SettingsButton() {
           <Pressable style={styles.row} onPress={toggleSound}>
             <Text style={styles.rowLabel}>音效</Text>
             <Text style={styles.rowValue}>{soundMuted ? '關閉' : '開啟'}</Text>
+          </Pressable>
+
+          <Pressable style={styles.row} onPress={toggleMusic}>
+            <Text style={styles.rowLabel}>背景音樂</Text>
+            <Text style={styles.rowValue}>{musicMuted ? '關閉' : '開啟'}</Text>
           </Pressable>
 
           <View style={styles.divider} />
