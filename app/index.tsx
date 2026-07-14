@@ -26,6 +26,7 @@ import { computeTabAttentionFlags } from '../game/tabAttention';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF } from '../game/transfer';
 import { useBattleLoop } from '../hooks/useBattleLoop';
 import { useGameState } from '../hooks/useGameState';
+import { useMusicUnlock } from '../hooks/useMusicUnlock';
 import { useToast } from '../hooks/useToast';
 
 export default function HomeScreen() {
@@ -68,6 +69,7 @@ export default function HomeScreen() {
   const [showCareerOverview, setShowCareerOverview] = useState(false);
 
   useBattleLoop();
+  useMusicUnlock();
 
   // 四種掉落通知(裝備/轉職碎片/寵物/金幣)同一時間最多只顯示一則。優先序:裝備 > 轉職碎片 >
   // 寵物 > 金幣(轉職碎片只在打贏大魔王才會掉,比寵物/金幣更值得被看到)。移到 hooks 之前算好,
