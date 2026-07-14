@@ -357,16 +357,18 @@ function TierList({
         </>
       )}
 
-      {/* 上面的階級預覽是「畢業後才會拿到」的職業技能樹,不是學生現在真正在投資的技能——
-          畢業前另外補一塊唯讀清單,讓學生看得到自己在「技能」分頁花技能書升級的到底是哪些。
+      {/* 上面的階級預覽是職業技能樹,不是學生時期投資的技能——這裡另外補一塊唯讀清單,
+          讓玩家看得到自己在「技能」分頁花技能書升級的學生技能。畢業後學生加成不會消失,
+          永久疊加在職業加成之上,仍可持續花書升級,所以這塊清單畢業後也繼續顯示。
           升級操作本身還是留在「技能」分頁做,這裡只負責讓兩邊資訊對得起來。 */}
-      {!hasChosenJob && (
-        <View style={styles.studentSkillBlock}>
-          <Text style={styles.studentSkillTitle}>你目前的學生技能</Text>
-          <Text style={styles.detailDesc}>
-            畢業前實際生效、在「技能」分頁花技能書升級的是這些,不是上面的職業技能預覽。
-          </Text>
-          {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
+      <View style={styles.studentSkillBlock}>
+        <Text style={styles.studentSkillTitle}>你的學生技能</Text>
+        <Text style={styles.detailDesc}>
+          {hasChosenJob
+            ? '畢業前投資的學生技能永久保留,加成疊加在職業技能之上,仍可在「技能」分頁持續花書升級。'
+            : '畢業前實際生效、在「技能」分頁花技能書升級的是這些,不是上面的職業技能預覽——畢業後也不會消失。'}
+        </Text>
+        {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
             const slotLevel = studentSkillTree[slot];
             const flavor = getStudentSkillFlavor(currentLevel, slot);
             return (
@@ -378,8 +380,7 @@ function TierList({
               </View>
             );
           })}
-        </View>
-      )}
+      </View>
     </View>
   );
 }
