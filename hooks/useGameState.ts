@@ -774,8 +774,8 @@ export const useGameState = create<GameState>((set, get) => ({
     });
     // 音效/BGM模組是獨立於 store 之外的命令式播放(見 lib/sounds.ts),load() 時同步一次目前的
     // 靜音設定,之後 toggleSound()/toggleMusic() 每次切換也要同步呼叫,兩邊狀態才不會不一致。
-    // startMusic() 這裡呼叫多半會被瀏覽器的自動播放限制擋下(靜默失敗,見該函式的try/catch),
-    // app/index.tsx 會在使用者第一次互動(點擊勇者)時再呼叫一次當備援,已經在播的話是no-op。
+    // 開啟遊戲就直接嘗試播放BGM(startMusic()),多數瀏覽器第一次造訪會擋下這次嘗試,
+    // 使用者第一次跟頁面互動時(見 hooks/useMusicUnlock.ts)會再呼叫一次當備援。
     setSoundMuted(save.soundMuted);
     setMusicMuted(save.musicMuted);
     startMusic();
@@ -1213,9 +1213,9 @@ export const useGameState = create<GameState>((set, get) => ({
   // 推進保底計數器,提高下一次判定落到稀有以上的機率(當前這隻怪的稀有度已經生成好了,
   // 點擊影響的是下一隻)。每場戰鬥點擊能貢獻的保底次數設上限,避免瘋狂連點直接洗出保底。
   boostCurrentFight: () => {
-    // 瀏覽器的自動播放限制通常會擋下 load() 當下呼叫的 startMusic()(靜默失敗)——
-    // 點擊勇者是最直接、幾乎每個玩家都會做的第一個互動,這裡再呼叫一次當備援。
-    // startMusic() 本身是冪等的(已經在播就是no-op),不會因為每次點擊重複呼叫而疊出第二軌。
+    // 點擊勇者也算一次使用者互動,順便重試BGM播放(見 lib/sounds.ts 的 startMusic/
+    // hooks/useMusicUnlock.ts)——這裡呼叫是備援,主要依靠的是 useMusicUnlock 監聽
+    // 整個頁面的互動,不限定要點勇者本體。
     startMusic();
     const { currentEncounter, fightStartedAt, trigger, heroClicksThisFight } = get();
     if (!currentEncounter || fightStartedAt === null) return;
