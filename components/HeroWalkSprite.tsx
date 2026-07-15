@@ -9,7 +9,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Archetype, getCurrentTier, JobBranch } from '../game/combat';
+import { Archetype, getCurrentTier, JobBranch, JobTier } from '../game/combat';
+import { getItemById } from '../game/equipment';
 import { useGameState } from '../hooks/useGameState';
 import { playClick } from '../lib/sounds';
 
@@ -166,26 +167,21 @@ const TIER2_ART: Record<Archetype, Record<JobBranch, HeroArt>> = {
   },
 };
 
-// 主手武器圖示測試:AI 畫的通用武器圖示(非「畫在角色身上的裝備」,是疊在角色手邊的
-// 獨立物件),跟角色圖示同一套「原生像素座標 + 顯示時等比縮放」手法——nativeCharHeight
-// 對到該角色圖原生高度,weaponNativeHeight/pasteX/pasteY 都是在那個原生尺寸下量出來的
-// 手部位置,顯示時乘上 (height / nativeCharHeight) 縮放,不管 HeroWalkSprite 的 height
-// prop 傳多少都能對齊。physicalMelee 目前武器命名其實是「工作手套/鐵鎚」這類工具,不是
-// 奇幻劍,先當通用武器圖示套用(不管實際物品名稱)。拳擊館學員(tier2 分支B)雙手是拳擊
-// 手套格鬥姿勢,沒地方握,改成 floating:true 浮在身側搖擺。其餘職業/分支尚未校準座標,
-// 先不疊。
+// 主手武器圖示:AI 畫的通用武器圖示(非「畫在角色身上的裝備」,是疊在角色手邊的獨立
+// 物件),跟角色圖示同一套「原生像素座標 + 顯示時等比縮放」手法——nativeCharHeight 對到
+// 該角色圖原生高度,weaponNativeHeight/pasteX/pasteY 都是在那個原生尺寸下量出來的手部
+// 位置,顯示時乘上 (height / nativeCharHeight) 縮放,不管 HeroWalkSprite 的 height prop
+// 傳多少都能對齊。拳擊館學員(tier2 分支B)雙手是拳擊手套格鬥姿勢,沒地方握,改成
+// floating:true 浮在身側搖擺。其餘職業/分支尚未校準座標,也還沒配圖,先不疊。
 interface WeaponAnchor {
   nativeCharHeight: number;
   weaponNativeHeight: number;
   pasteX: number;
   pasteY: number;
   // 拳擊館學員雙手是拳擊手套格鬥姿勢,武器沒地方「握」,改成浮在身側持續搖擺,
-  // 不嘗試對齊手部——呼應「反差萌」的荒謬感(打拳打到一半旁邊還飄著一把劍)。
+  // 不嘗試對齊手部——呼應「反差萌」的荒謬感(打拳打到一半旁邊還飄著一把武器)。
   floating?: boolean;
 }
-
-const SWORD_ICON: ImageSourcePropType = require('../assets/sprites/items/sword_test.png');
-const SWORD_ASPECT_RATIO = 996 / 1014;
 
 const PHYSICAL_MELEE_WEAPON_ANCHORS: Partial<Record<'tier1' | 'tier2A' | 'tier2B', WeaponAnchor>> = {
   tier1: { nativeCharHeight: 746, weaponNativeHeight: 210, pasteX: 300, pasteY: 400 },
@@ -194,6 +190,41 @@ const PHYSICAL_MELEE_WEAPON_ANCHORS: Partial<Record<'tier1' | 'tier2A' | 'tier2B
 };
 const WEAPON_SWING_DEG = 16;
 const WEAPON_SWING_MS = 700;
+
+// 武器圖示:5 階各一組單手/雙手,對應 game/equipment.ts 的 WEAPON_NOUNS_BY_TIER
+// physicalMelee 那份命名(工作手套/鐵鎚 → 突擊步槍),裁自同一張 2x5 網格生成圖,
+// 部分工具原始生成方向朝左,已鏡像成統一朝右(跟角色慣用的攻擊方向一致)。
+interface WeaponIconData {
+  source: ImageSourcePropType;
+  aspectRatio: number;
+}
+
+const PHYSICAL_MELEE_WEAPON_ICONS: Record<JobTier, { oneHanded: WeaponIconData; twoHanded: WeaponIconData }> = {
+  1: {
+    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t1_1h.png'), aspectRatio: 293 / 262 },
+    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t1_2h.png'), aspectRatio: 282 / 281 },
+  },
+  2: {
+    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t2_1h.png'), aspectRatio: 285 / 232 },
+    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t2_2h.png'), aspectRatio: 307 / 297 },
+  },
+  3: {
+    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t3_1h.png'), aspectRatio: 394 / 254 },
+    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t3_2h.png'), aspectRatio: 408 / 292 },
+  },
+  4: {
+    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t4_1h.png'), aspectRatio: 280 / 307 },
+    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t4_2h.png'), aspectRatio: 355 / 307 },
+  },
+  5: {
+    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t5_1h.png'), aspectRatio: 375 / 228 },
+    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t5_2h.png'), aspectRatio: 387 / 218 },
+  },
+};
+
+const WEAPON_ICONS: Partial<Record<Archetype, Record<JobTier, { oneHanded: WeaponIconData; twoHanded: WeaponIconData }>>> = {
+  physicalMelee: PHYSICAL_MELEE_WEAPON_ICONS,
+};
 
 interface HeroWalkSpriteProps {
   height?: number;
@@ -254,9 +285,16 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
   const aspectRatio = showClickArt ? art.clickAspectRatio : art.openAspectRatio;
 
   // 武器疊圖只在「開啟畫格」顯示(showClickArt 期間先隱藏,姿勢不同、座標校準不了),
-  // 只有裝備了主手武器、且目前是校準過座標的 physicalMelee 姿勢才顯示。
+  // 只有裝備了主手武器、該武器所屬職業有配圖、且目前是校準過座標的姿勢才顯示。
+  const mainhandItem = mainhandId !== undefined ? getItemById(mainhandId) : undefined;
+  const weaponIcon = mainhandItem
+    ? WEAPON_ICONS[mainhandItem.archetype ?? archetype]?.[getCurrentTier(mainhandItem.requiredLevel ?? 1)][
+        mainhandItem.twoHanded ? 'twoHanded' : 'oneHanded'
+      ]
+    : undefined;
+
   const weaponAnchor =
-    !showClickArt && mainhandId !== undefined && hasChosenJob && archetype === 'physicalMelee'
+    !showClickArt && weaponIcon !== undefined && hasChosenJob && archetype === 'physicalMelee'
       ? currentTier === 1
         ? PHYSICAL_MELEE_WEAPON_ANCHORS.tier1
         : currentTier >= 2
@@ -291,7 +329,7 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
       <Animated.View style={animatedStyle}>
         <View style={{ height, width: height * aspectRatio }}>
           <Image source={source} style={{ height, width: height * aspectRatio }} resizeMode="contain" />
-          {weaponAnchor && (
+          {weaponAnchor && weaponIcon && (
             <Animated.View
               style={[
                 {
@@ -303,10 +341,10 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
               ]}
             >
               <Image
-                source={SWORD_ICON}
+                source={weaponIcon.source}
                 style={{
                   height: weaponAnchor.weaponNativeHeight * (height / weaponAnchor.nativeCharHeight),
-                  width: weaponAnchor.weaponNativeHeight * (height / weaponAnchor.nativeCharHeight) * SWORD_ASPECT_RATIO,
+                  width: weaponAnchor.weaponNativeHeight * (height / weaponAnchor.nativeCharHeight) * weaponIcon.aspectRatio,
                 }}
                 resizeMode="contain"
               />

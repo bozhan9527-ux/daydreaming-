@@ -226,6 +226,7 @@ export function BattleScene() {
 
   const equipment = useGameState((state) => state.equipment);
   const job = useGameState((state) => state.job);
+  const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const companions = useGameState((state) => state.companions);
   const currentEncounter = useGameState((state) => state.currentEncounter);
   const fightStartedAt = useGameState((state) => state.fightStartedAt);
@@ -281,7 +282,14 @@ export function BattleScene() {
         </View>
       )}
 
-      <WeaponSwingEffect frame={swingFrame} palette={swingPalette} active={!!currentEncounter} />
+      {/* physicalMelee 已經有 AI 武器圖示疊在 HeroWalkSprite 裡(見 components/HeroWalkSprite.tsx),
+          位置跟這個程式產生的揮動圖示幾乎重疊,兩個一起顯示會糊成一團,該職業先關掉這個舊版效果。
+          其餘職業還沒有 AI 圖示,繼續用這個當作揮擊回饋。 */}
+      <WeaponSwingEffect
+        frame={swingFrame}
+        palette={swingPalette}
+        active={!!currentEncounter && !(hasChosenJob && job.archetype === 'physicalMelee')}
+      />
 
       <AttackTravelEffect frame={effect.frame} palette={effect.palette} active={skillJustTriggered} />
 
