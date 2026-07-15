@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Image, ImageSourcePropType, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -17,13 +17,6 @@ import { playClick } from '../lib/sounds';
 import { PixelSprite } from './PixelSprite';
 
 const ALL_SLOTS: EquipmentSlot[] = ['back', 'bottom', 'top', 'belt', 'headwear', 'face', 'gloves', 'offhand', 'mainhand'];
-
-// 靜態 AI 美術測試用 fallback:目前只有 normal 體型一張測試圖,沒裝備時才套用。
-// 覆蓋範圍擴大(其他體型/裝備疊圖)前先不動 game/sprites 的程式產生管線。
-const STATIC_HERO_ART: Partial<Record<BodyType, ImageSourcePropType>> = {
-  normal: require('../assets/sprites/hero/hero_test_normal.png'),
-};
-const STATIC_ART_ASPECT_RATIO = 172 / 197;
 
 interface HeroSpriteProps {
   bodyType?: BodyType;
@@ -91,22 +84,6 @@ export function HeroSprite({
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: bobOffset.value }, { scale: pressScale.value }],
   }));
-
-  const staticArt = overlays.length === 0 ? STATIC_HERO_ART[bodyType] : undefined;
-  if (staticArt !== undefined) {
-    const displayHeight = pixelSize * frames.open.length;
-    return (
-      <Pressable onPress={handlePress}>
-        <Animated.View style={animatedStyle}>
-          <Image
-            source={staticArt}
-            style={{ height: displayHeight, width: displayHeight * STATIC_ART_ASPECT_RATIO }}
-            resizeMode="contain"
-          />
-        </Animated.View>
-      </Pressable>
-    );
-  }
 
   return (
     <Pressable onPress={handlePress}>

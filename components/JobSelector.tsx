@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   Archetype,
@@ -60,29 +60,6 @@ const ARCHETYPES: Archetype[] = [
 
 const TIERS: JobTier[] = [1, 2, 3, 4, 5];
 const BRANCHES: JobBranch[] = ['A', 'B'];
-
-// AI 美術測試:學生 + 一階職業 6 種全部到齊。physicalSupport 原始生成圖混進讀得出來的品牌
-// 文字(名牌+店名),手動塗色蓋掉(取旁邊乾淨區域顏色逐行覆蓋),細看看得出修過的痕跡,
-// 使用者已確認接受這個品質,先用著,之後有更好的圖再換掉。只是靜態肖像,不影響戰鬥用的
-// HeroSprite/PixelSprite 程式產生系統。
-const JOB_PORTRAITS: Partial<Record<Archetype, ImageSourcePropType>> = {
-  physicalMelee: require('../assets/sprites/jobs/tier1_physicalMelee.png'),
-  physicalRanged: require('../assets/sprites/jobs/tier1_physicalRanged.png'),
-  physicalSupport: require('../assets/sprites/jobs/tier1_physicalSupport.png'),
-  magicMelee: require('../assets/sprites/jobs/tier1_magicMelee.png'),
-  magicRanged: require('../assets/sprites/jobs/tier1_magicRanged.png'),
-  magicSupport: require('../assets/sprites/jobs/tier1_magicSupport.png'),
-};
-const STUDENT_PORTRAIT: ImageSourcePropType = require('../assets/sprites/jobs/tier1_student.png');
-
-function JobPortrait({ source }: { source: ImageSourcePropType | undefined }) {
-  if (!source) return null;
-  return (
-    <View style={styles.portraitWrap}>
-      <Image source={source} style={styles.portraitImage} resizeMode="contain" />
-    </View>
-  );
-}
 
 // 依 tier 拿該格的名稱/敘述:tier1 沿用 game/skillTree.ts 既有內容(職業樹最初階本來就是這套),
 // tier2~5 是新增的「職業樹分支」內容(game/skillTreeFlavor.ts),兩邊資料來源不同但介面統一,
@@ -286,8 +263,6 @@ function TierList({
           );
         })}
       </View>
-
-      <JobPortrait source={JOB_PORTRAITS[archetype]} />
 
       <View style={styles.detailHeader}>
         <View style={styles.detailIconWrap}>
@@ -508,7 +483,6 @@ export function JobSelector() {
 
       {view === 'archetypes' && (
         <>
-          {!hasChosenJob && <JobPortrait source={STUDENT_PORTRAIT} />}
           <HeroStatusPanel />
           <ArchetypeGrid
             job={job.archetype}
@@ -575,21 +549,6 @@ const styles = StyleSheet.create({
     color: '#c9a94f',
     fontSize: 14,
     fontWeight: '600',
-  },
-  portraitWrap: {
-    width: '100%',
-    height: 150,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: '#1c1c24',
-    borderWidth: 1,
-    borderColor: '#2a2a35',
-    overflow: 'hidden',
-  },
-  portraitImage: {
-    width: '100%',
-    height: '100%',
   },
   statusCard: {
     width: '100%',

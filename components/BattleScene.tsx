@@ -17,7 +17,7 @@ import { getItemById } from '../game/equipment';
 import { getItemIcon } from '../game/sprites/equipmentIcons';
 import { getMonsterFrame } from '../game/sprites/monsters';
 import { useGameState } from '../hooks/useGameState';
-import { HeroSprite } from './HeroSprite';
+import { HeroWalkSprite } from './HeroWalkSprite';
 import { PixelSprite } from './PixelSprite';
 
 // 場景畫布尺寸固定不變:不管角色/特效怎麼換,SCENE_HEIGHT 都是同一個數字,版面不會因為
@@ -25,10 +25,6 @@ import { PixelSprite } from './PixelSprite';
 // 這裡維持透明,只負責角色/怪物/特效的定位。
 const SCENE_HEIGHT = 130;
 const SCENE_MAX_WIDTH = 320;
-// 勇者本體畫布從 20x24 拉高密度到 64x56(約3倍),寵物坐騎/怪物的畫布也跟著放大3倍,
-// pixelSize 對應縮小,讓角色/怪物在戰鬥場景裡的物理尺寸跟拉密度之前差不多,不會把畫面撐爆。
-// 特效(attackEffects.ts)沒有跟著拉密度,維持原本 pixelSize={3}。
-const HERO_PIXEL_SIZE = 1.75;
 // 怪物原生畫布高度不像勇者本體固定(勇者56列),120種一般怪物/5階段魔王/大魔王的列數
 // 從60列到72列都有——原本用固定 pixelSize(4/3)是配合最高列數(72)算出來的保守值,
 // 比勇者的1.75小了快31%,一般怪物視覺份量明顯不足。改成「目標畫面高度固定、pixelSize
@@ -228,7 +224,6 @@ export function BattleScene() {
   // 這個 component 要跳出 React Compiler 的自動記憶化,不然 forceTick 不會觸發重算。
   'use no memo';
 
-  const bodyType = useGameState((state) => state.bodyType);
   const equipment = useGameState((state) => state.equipment);
   const job = useGameState((state) => state.job);
   const companions = useGameState((state) => state.companions);
@@ -238,7 +233,6 @@ export function BattleScene() {
   const boostCurrentFight = useGameState((state) => state.boostCurrentFight);
   const lastSkillTriggerAt = useGameState((state) => state.lastSkillTriggerAt);
   const lastSecondarySkillTriggerAt = useGameState((state) => state.lastSecondarySkillTriggerAt);
-  const defeatRecoveryUntil = useGameState((state) => state.defeatRecoveryUntil);
 
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -251,11 +245,6 @@ export function BattleScene() {
   const skillJustTriggered =
     (lastSkillTriggerAt !== null && now - lastSkillTriggerAt < SKILL_FLASH_WINDOW_MS) ||
     (lastSecondarySkillTriggerAt !== null && now - lastSecondarySkillTriggerAt < SKILL_FLASH_WINDOW_MS);
-  // 倒地恢復期間讓勇者閉眼——不是新畫一組表情,直接借用既有的眨眼畫格(見
-  // heroSilhouette.ts 的 blinkFrame)常駐顯示,取代目前「倒地中」只有文字提示、角色本體
-  // 站姿毫無變化的狀態。「反差萌」的笑點需要看得到,不能只靠讀的。
-  const isDefeated = defeatRecoveryUntil !== null && now < defeatRecoveryUntil;
-
   const mainhandId = equipment.mainhand;
   const mainhandItem = mainhandId !== undefined ? getItemById(mainhandId) : undefined;
   const weaponIcon = mainhandItem ? getItemIcon(mainhandItem) : undefined;
@@ -283,13 +272,7 @@ export function BattleScene() {
 
       {/* 勇者從場景正中央移到左側站位,跟右側的怪物拉開距離,中間讓給往返移動的技能特效。 */}
       <View style={styles.heroSlot}>
-        <HeroSprite
-          pixelSize={HERO_PIXEL_SIZE}
-          bodyType={bodyType}
-          equipment={equipment}
-          onPress={boostCurrentFight}
-          isDefeated={isDefeated}
-        />
+        <HeroWalkSprite onPress={boostCurrentFight} />
       </View>
 
       {pet && (
