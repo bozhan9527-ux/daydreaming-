@@ -170,23 +170,20 @@ const TIER2_ART: Record<Archetype, Record<JobBranch, HeroArt>> = {
 // 主手武器圖示:AI 畫的通用武器圖示(非「畫在角色身上的裝備」,是疊在角色手邊的獨立
 // 物件),跟角色圖示同一套「原生像素座標 + 顯示時等比縮放」手法——nativeCharHeight 對到
 // 該角色圖原生高度,weaponNativeHeight/pasteX/pasteY 都是在那個原生尺寸下量出來的手部
-// 位置,顯示時乘上 (height / nativeCharHeight) 縮放,不管 HeroWalkSprite 的 height prop
-// 傳多少都能對齊。拳擊館學員(tier2 分支B)雙手是拳擊手套格鬥姿勢,沒地方握,改成
-// floating:true 浮在身側搖擺。其餘職業/分支尚未校準座標,也還沒配圖,先不疊。
+// (或拳擊館學員那種沒地方握、浮在身側的)位置,顯示時乘上 (height / nativeCharHeight)
+// 縮放,不管 HeroWalkSprite 的 height prop 傳多少都能對齊。所有武器持續搖擺,呼應
+// 「持續輸出」的攻擊動作感。其餘職業/分支尚未校準座標,也還沒配圖,先不疊。
 interface WeaponAnchor {
   nativeCharHeight: number;
   weaponNativeHeight: number;
   pasteX: number;
   pasteY: number;
-  // 拳擊館學員雙手是拳擊手套格鬥姿勢,武器沒地方「握」,改成浮在身側持續搖擺,
-  // 不嘗試對齊手部——呼應「反差萌」的荒謬感(打拳打到一半旁邊還飄著一把武器)。
-  floating?: boolean;
 }
 
 const PHYSICAL_MELEE_WEAPON_ANCHORS: Partial<Record<'tier1' | 'tier2A' | 'tier2B', WeaponAnchor>> = {
   tier1: { nativeCharHeight: 746, weaponNativeHeight: 210, pasteX: 300, pasteY: 400 },
   tier2A: { nativeCharHeight: 746, weaponNativeHeight: 200, pasteX: 250, pasteY: 430 },
-  tier2B: { nativeCharHeight: 746, weaponNativeHeight: 190, pasteX: 260, pasteY: 260, floating: true },
+  tier2B: { nativeCharHeight: 746, weaponNativeHeight: 190, pasteX: 260, pasteY: 260 },
 };
 const WEAPON_SWING_DEG = 16;
 const WEAPON_SWING_MS = 700;
@@ -317,9 +314,11 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
           : undefined
       : undefined;
 
+  // 武器持續搖擺(不管是浮空還是握在手上的),呼應「持續輸出」的攻擊動作感,
+  // 不是只有拳擊館學員那種沒地方握的浮空姿勢才擺動。
   const weaponSwing = useSharedValue(0);
   useEffect(() => {
-    if (!weaponAnchor?.floating) {
+    if (!weaponAnchor) {
       weaponSwing.value = 0;
       return;
     }
@@ -331,7 +330,7 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
       -1,
       true
     );
-  }, [weaponAnchor?.floating, weaponSwing]);
+  }, [weaponAnchor, weaponSwing]);
 
   const weaponAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${weaponSwing.value}deg` }],
@@ -350,7 +349,7 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
                   left: weaponAnchor.pasteX * (height / weaponAnchor.nativeCharHeight),
                   top: weaponAnchor.pasteY * (height / weaponAnchor.nativeCharHeight),
                 },
-                weaponAnchor.floating && weaponAnimatedStyle,
+                weaponAnimatedStyle,
               ]}
             >
               <Image
