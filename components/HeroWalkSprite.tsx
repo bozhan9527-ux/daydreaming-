@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Archetype } from '../game/combat';
+import { Archetype, getCurrentTier, JobBranch } from '../game/combat';
 import { useGameState } from '../hooks/useGameState';
 import { playClick } from '../lib/sounds';
 
@@ -35,7 +35,9 @@ const STUDENT_ART: HeroArt = {
   clickAspectRatio: 355 / 746,
 };
 
-const JOB_ART: Record<Archetype, HeroArt> = {
+// 一階美術:magicMelee(中二國中生)原本的生成圖畫風跟其他幾張落差較大,先移除等重生,
+// 缺的期間 art 選擇邏輯會 fallback 回學生圖(見下面 HeroWalkSprite 內的 art 判斷)。
+const JOB_ART: Partial<Record<Archetype, HeroArt>> = {
   physicalMelee: {
     open: require('../assets/sprites/hero/jobs/physicalMelee.png'),
     click: require('../assets/sprites/hero/jobs/physicalMelee_click.png'),
@@ -54,12 +56,6 @@ const JOB_ART: Record<Archetype, HeroArt> = {
     openAspectRatio: 364 / 716,
     clickAspectRatio: 396 / 722,
   },
-  magicMelee: {
-    open: require('../assets/sprites/hero/jobs/magicMelee.png'),
-    click: require('../assets/sprites/hero/jobs/magicMelee_click.png'),
-    openAspectRatio: 469 / 768,
-    clickAspectRatio: 460 / 768,
-  },
   magicRanged: {
     open: require('../assets/sprites/hero/jobs/magicRanged.png'),
     click: require('../assets/sprites/hero/jobs/magicRanged_click.png'),
@@ -74,6 +70,95 @@ const JOB_ART: Record<Archetype, HeroArt> = {
   },
 };
 
+// 二階美術:分支 A/B 從這階開始外觀分岔,所以用 Archetype+JobBranch 兩層 key,跟一階
+// (不分分支,單一 Archetype key)結構不同。
+const TIER2_ART: Record<Archetype, Record<JobBranch, HeroArt>> = {
+  physicalMelee: {
+    A: {
+      open: require('../assets/sprites/hero/jobs2/physicalMelee_A.png'),
+      click: require('../assets/sprites/hero/jobs2/physicalMelee_A_click.png'),
+      openAspectRatio: 360 / 746,
+      clickAspectRatio: 443 / 746,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs2/physicalMelee_B.png'),
+      click: require('../assets/sprites/hero/jobs2/physicalMelee_B_click.png'),
+      openAspectRatio: 342 / 746,
+      clickAspectRatio: 443 / 746,
+    },
+  },
+  physicalRanged: {
+    A: {
+      open: require('../assets/sprites/hero/jobs2/physicalRanged_A.png'),
+      click: require('../assets/sprites/hero/jobs2/physicalRanged_A_click.png'),
+      openAspectRatio: 464 / 740,
+      clickAspectRatio: 437 / 740,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs2/physicalRanged_B.png'),
+      click: require('../assets/sprites/hero/jobs2/physicalRanged_B_click.png'),
+      openAspectRatio: 458 / 740,
+      clickAspectRatio: 437 / 740,
+    },
+  },
+  physicalSupport: {
+    A: {
+      open: require('../assets/sprites/hero/jobs2/physicalSupport_A.png'),
+      click: require('../assets/sprites/hero/jobs2/physicalSupport_A_click.png'),
+      openAspectRatio: 400 / 734,
+      clickAspectRatio: 437 / 734,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs2/physicalSupport_B.png'),
+      click: require('../assets/sprites/hero/jobs2/physicalSupport_B_click.png'),
+      openAspectRatio: 382 / 734,
+      clickAspectRatio: 365 / 734,
+    },
+  },
+  magicMelee: {
+    A: {
+      open: require('../assets/sprites/hero/jobs2/magicMelee_A.png'),
+      click: require('../assets/sprites/hero/jobs2/magicMelee_A_click.png'),
+      openAspectRatio: 365 / 734,
+      clickAspectRatio: 300 / 734,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs2/magicMelee_B.png'),
+      click: require('../assets/sprites/hero/jobs2/magicMelee_B_click.png'),
+      openAspectRatio: 458 / 752,
+      clickAspectRatio: 449 / 734,
+    },
+  },
+  magicRanged: {
+    A: {
+      open: require('../assets/sprites/hero/jobs2/magicRanged_A.png'),
+      click: require('../assets/sprites/hero/jobs2/magicRanged_A_click.png'),
+      openAspectRatio: 294 / 734,
+      clickAspectRatio: 418 / 740,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs2/magicRanged_B.png'),
+      click: require('../assets/sprites/hero/jobs2/magicRanged_B_click.png'),
+      openAspectRatio: 434 / 734,
+      clickAspectRatio: 414 / 734,
+    },
+  },
+  magicSupport: {
+    A: {
+      open: require('../assets/sprites/hero/jobs2/magicSupport_A.png'),
+      click: require('../assets/sprites/hero/jobs2/magicSupport_A_click.png'),
+      openAspectRatio: 417 / 734,
+      clickAspectRatio: 414 / 734,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs2/magicSupport_B.png'),
+      click: require('../assets/sprites/hero/jobs2/magicSupport_B_click.png'),
+      openAspectRatio: 417 / 734,
+      clickAspectRatio: 417 / 734,
+    },
+  },
+};
+
 interface HeroWalkSpriteProps {
   height?: number;
   onPress?: () => void;
@@ -82,8 +167,15 @@ interface HeroWalkSpriteProps {
 export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const archetype = useGameState((state) => state.job.archetype);
+  const branch = useGameState((state) => state.job.branch);
+  const level = useGameState((state) => state.level.level);
 
-  const art = hasChosenJob ? JOB_ART[archetype] : STUDENT_ART;
+  const currentTier = getCurrentTier(level);
+  const art = !hasChosenJob
+    ? STUDENT_ART
+    : currentTier >= 2
+      ? TIER2_ART[archetype][branch]
+      : (JOB_ART[archetype] ?? STUDENT_ART);
   const [showClickArt, setShowClickArt] = useState(false);
   const clickTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
