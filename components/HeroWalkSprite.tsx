@@ -172,21 +172,28 @@ const TIER2_ART: Record<Archetype, Record<JobBranch, HeroArt>> = {
 // 手部位置,顯示時乘上 (height / nativeCharHeight) 縮放,不管 HeroWalkSprite 的 height
 // prop 傳多少都能對齊。physicalMelee 目前武器命名其實是「工作手套/鐵鎚」這類工具,不是
 // 奇幻劍,先當通用武器圖示套用(不管實際物品名稱)。拳擊館學員(tier2 分支B)雙手是拳擊
-// 手套格鬥姿勢,疊劍會很怪,先不疊。其餘職業/分支尚未校準座標,也先不疊。
+// 手套格鬥姿勢,沒地方握,改成 floating:true 浮在身側搖擺。其餘職業/分支尚未校準座標,
+// 先不疊。
 interface WeaponAnchor {
   nativeCharHeight: number;
   weaponNativeHeight: number;
   pasteX: number;
   pasteY: number;
+  // 拳擊館學員雙手是拳擊手套格鬥姿勢,武器沒地方「握」,改成浮在身側持續搖擺,
+  // 不嘗試對齊手部——呼應「反差萌」的荒謬感(打拳打到一半旁邊還飄著一把劍)。
+  floating?: boolean;
 }
 
 const SWORD_ICON: ImageSourcePropType = require('../assets/sprites/items/sword_test.png');
 const SWORD_ASPECT_RATIO = 996 / 1014;
 
-const PHYSICAL_MELEE_WEAPON_ANCHORS: Partial<Record<'tier1' | 'tier2A', WeaponAnchor>> = {
+const PHYSICAL_MELEE_WEAPON_ANCHORS: Partial<Record<'tier1' | 'tier2A' | 'tier2B', WeaponAnchor>> = {
   tier1: { nativeCharHeight: 746, weaponNativeHeight: 210, pasteX: 300, pasteY: 400 },
   tier2A: { nativeCharHeight: 746, weaponNativeHeight: 200, pasteX: 250, pasteY: 430 },
+  tier2B: { nativeCharHeight: 746, weaponNativeHeight: 190, pasteX: 260, pasteY: 260, floating: true },
 };
+const WEAPON_SWING_DEG = 16;
+const WEAPON_SWING_MS = 700;
 
 interface HeroWalkSpriteProps {
   height?: number;
@@ -252,10 +259,32 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
     !showClickArt && mainhandId !== undefined && hasChosenJob && archetype === 'physicalMelee'
       ? currentTier === 1
         ? PHYSICAL_MELEE_WEAPON_ANCHORS.tier1
-        : currentTier >= 2 && branch === 'A'
-          ? PHYSICAL_MELEE_WEAPON_ANCHORS.tier2A
+        : currentTier >= 2
+          ? branch === 'A'
+            ? PHYSICAL_MELEE_WEAPON_ANCHORS.tier2A
+            : PHYSICAL_MELEE_WEAPON_ANCHORS.tier2B
           : undefined
       : undefined;
+
+  const weaponSwing = useSharedValue(0);
+  useEffect(() => {
+    if (!weaponAnchor?.floating) {
+      weaponSwing.value = 0;
+      return;
+    }
+    weaponSwing.value = withRepeat(
+      withSequence(
+        withTiming(WEAPON_SWING_DEG, { duration: WEAPON_SWING_MS, easing: Easing.inOut(Easing.quad) }),
+        withTiming(-WEAPON_SWING_DEG, { duration: WEAPON_SWING_MS, easing: Easing.inOut(Easing.quad) })
+      ),
+      -1,
+      true
+    );
+  }, [weaponAnchor?.floating, weaponSwing]);
+
+  const weaponAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${weaponSwing.value}deg` }],
+  }));
 
   return (
     <Pressable onPress={handlePress}>
@@ -263,17 +292,25 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
         <View style={{ height, width: height * aspectRatio }}>
           <Image source={source} style={{ height, width: height * aspectRatio }} resizeMode="contain" />
           {weaponAnchor && (
-            <Image
-              source={SWORD_ICON}
-              style={{
-                position: 'absolute',
-                left: weaponAnchor.pasteX * (height / weaponAnchor.nativeCharHeight),
-                top: weaponAnchor.pasteY * (height / weaponAnchor.nativeCharHeight),
-                height: weaponAnchor.weaponNativeHeight * (height / weaponAnchor.nativeCharHeight),
-                width: weaponAnchor.weaponNativeHeight * (height / weaponAnchor.nativeCharHeight) * SWORD_ASPECT_RATIO,
-              }}
-              resizeMode="contain"
-            />
+            <Animated.View
+              style={[
+                {
+                  position: 'absolute',
+                  left: weaponAnchor.pasteX * (height / weaponAnchor.nativeCharHeight),
+                  top: weaponAnchor.pasteY * (height / weaponAnchor.nativeCharHeight),
+                },
+                weaponAnchor.floating && weaponAnimatedStyle,
+              ]}
+            >
+              <Image
+                source={SWORD_ICON}
+                style={{
+                  height: weaponAnchor.weaponNativeHeight * (height / weaponAnchor.nativeCharHeight),
+                  width: weaponAnchor.weaponNativeHeight * (height / weaponAnchor.nativeCharHeight) * SWORD_ASPECT_RATIO,
+                }}
+                resizeMode="contain"
+              />
+            </Animated.View>
           )}
         </View>
       </Animated.View>
