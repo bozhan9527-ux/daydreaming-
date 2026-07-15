@@ -226,6 +226,18 @@ const WEAPON_ICONS: Partial<Record<Archetype, Record<JobTier, { oneHanded: Weapo
   physicalMelee: PHYSICAL_MELEE_WEAPON_ICONS,
 };
 
+// 不限職業的通用起始武器(LEGACY_EQUIPMENT_ITEMS,見 game/equipment.ts),名稱本來就是
+// 「短劍/雙手大劍」,套職業武器組(工作手套/鐵鎚)的圖不對——直接照 item id 對到最初測試
+// 用的那張劍圖示,比對 archetype+tier+twoHanded 那條路徑優先權更高。
+const LEGACY_SWORD_ICON: WeaponIconData = {
+  source: require('../assets/sprites/items/legacy_sword.png'),
+  aspectRatio: 996 / 1014,
+};
+const ITEM_ID_WEAPON_ICON_OVERRIDES: Partial<Record<string, WeaponIconData>> = {
+  'mainhand-01': LEGACY_SWORD_ICON,
+  'mainhand-02': LEGACY_SWORD_ICON,
+};
+
 interface HeroWalkSpriteProps {
   height?: number;
   onPress?: () => void;
@@ -288,9 +300,10 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
   // 只有裝備了主手武器、該武器所屬職業有配圖、且目前是校準過座標的姿勢才顯示。
   const mainhandItem = mainhandId !== undefined ? getItemById(mainhandId) : undefined;
   const weaponIcon = mainhandItem
-    ? WEAPON_ICONS[mainhandItem.archetype ?? archetype]?.[getCurrentTier(mainhandItem.requiredLevel ?? 1)][
+    ? (ITEM_ID_WEAPON_ICON_OVERRIDES[mainhandItem.id] ??
+      WEAPON_ICONS[mainhandItem.archetype ?? archetype]?.[getCurrentTier(mainhandItem.requiredLevel ?? 1)][
         mainhandItem.twoHanded ? 'twoHanded' : 'oneHanded'
-      ]
+      ])
     : undefined;
 
   const weaponAnchor =
