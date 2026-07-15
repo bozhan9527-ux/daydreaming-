@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, ImageSourcePropType, Pressable } from 'react-native';
+import { Image, ImageSourcePropType, Pressable, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -166,6 +166,28 @@ const TIER2_ART: Record<Archetype, Record<JobBranch, HeroArt>> = {
   },
 };
 
+// 主手武器圖示測試:AI 畫的通用武器圖示(非「畫在角色身上的裝備」,是疊在角色手邊的
+// 獨立物件),跟角色圖示同一套「原生像素座標 + 顯示時等比縮放」手法——nativeCharHeight
+// 對到該角色圖原生高度,weaponNativeHeight/pasteX/pasteY 都是在那個原生尺寸下量出來的
+// 手部位置,顯示時乘上 (height / nativeCharHeight) 縮放,不管 HeroWalkSprite 的 height
+// prop 傳多少都能對齊。physicalMelee 目前武器命名其實是「工作手套/鐵鎚」這類工具,不是
+// 奇幻劍,先當通用武器圖示套用(不管實際物品名稱)。拳擊館學員(tier2 分支B)雙手是拳擊
+// 手套格鬥姿勢,疊劍會很怪,先不疊。其餘職業/分支尚未校準座標,也先不疊。
+interface WeaponAnchor {
+  nativeCharHeight: number;
+  weaponNativeHeight: number;
+  pasteX: number;
+  pasteY: number;
+}
+
+const SWORD_ICON: ImageSourcePropType = require('../assets/sprites/items/sword_test.png');
+const SWORD_ASPECT_RATIO = 996 / 1014;
+
+const PHYSICAL_MELEE_WEAPON_ANCHORS: Partial<Record<'tier1' | 'tier2A', WeaponAnchor>> = {
+  tier1: { nativeCharHeight: 746, weaponNativeHeight: 210, pasteX: 300, pasteY: 400 },
+  tier2A: { nativeCharHeight: 746, weaponNativeHeight: 200, pasteX: 250, pasteY: 430 },
+};
+
 interface HeroWalkSpriteProps {
   height?: number;
   onPress?: () => void;
@@ -176,6 +198,7 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
   const archetype = useGameState((state) => state.job.archetype);
   const branch = useGameState((state) => state.job.branch);
   const level = useGameState((state) => state.level.level);
+  const mainhandId = useGameState((state) => state.equipment.mainhand);
 
   const currentTier = getCurrentTier(level);
   const art = !hasChosenJob
@@ -223,10 +246,36 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
   const source = showClickArt ? art.click : art.open;
   const aspectRatio = showClickArt ? art.clickAspectRatio : art.openAspectRatio;
 
+  // 武器疊圖只在「開啟畫格」顯示(showClickArt 期間先隱藏,姿勢不同、座標校準不了),
+  // 只有裝備了主手武器、且目前是校準過座標的 physicalMelee 姿勢才顯示。
+  const weaponAnchor =
+    !showClickArt && mainhandId !== undefined && hasChosenJob && archetype === 'physicalMelee'
+      ? currentTier === 1
+        ? PHYSICAL_MELEE_WEAPON_ANCHORS.tier1
+        : currentTier >= 2 && branch === 'A'
+          ? PHYSICAL_MELEE_WEAPON_ANCHORS.tier2A
+          : undefined
+      : undefined;
+
   return (
     <Pressable onPress={handlePress}>
       <Animated.View style={animatedStyle}>
-        <Image source={source} style={{ height, width: height * aspectRatio }} resizeMode="contain" />
+        <View style={{ height, width: height * aspectRatio }}>
+          <Image source={source} style={{ height, width: height * aspectRatio }} resizeMode="contain" />
+          {weaponAnchor && (
+            <Image
+              source={SWORD_ICON}
+              style={{
+                position: 'absolute',
+                left: weaponAnchor.pasteX * (height / weaponAnchor.nativeCharHeight),
+                top: weaponAnchor.pasteY * (height / weaponAnchor.nativeCharHeight),
+                height: weaponAnchor.weaponNativeHeight * (height / weaponAnchor.nativeCharHeight),
+                width: weaponAnchor.weaponNativeHeight * (height / weaponAnchor.nativeCharHeight) * SWORD_ASPECT_RATIO,
+              }}
+              resizeMode="contain"
+            />
+          )}
+        </View>
       </Animated.View>
     </Pressable>
   );
