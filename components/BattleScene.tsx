@@ -151,7 +151,7 @@ function WeaponSwingEffect({ frame, palette, active }: WeaponSwingEffectProps) {
   }, [active, swing]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${swing.value * -50}deg` }],
+    transform: [{ rotate: `${swing.value * 50}deg` }],
     opacity: active ? 1 : 0,
   }));
 
