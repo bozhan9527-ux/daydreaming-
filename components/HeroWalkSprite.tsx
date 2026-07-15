@@ -9,10 +9,11 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Archetype, getCurrentTier, JobBranch, JobTier } from '../game/combat';
+import { Archetype, getCurrentTier, JobBranch } from '../game/combat';
 import { getItemById } from '../game/equipment';
 import { useGameState } from '../hooks/useGameState';
 import { playClick } from '../lib/sounds';
+import { getWeaponIconForItem } from './weaponIcons';
 
 // AI 美術測試:戰鬥畫面專用的勇者圖,取代 PixelSprite 程式產生的方塊小人。畢業前(!hasChosenJob)
 // 顯示「學生」單張圖,畢業選定主職後改顯示對應職業的一階美術圖(素材見 assets/art-drafts,
@@ -188,53 +189,6 @@ const PHYSICAL_MELEE_WEAPON_ANCHORS: Partial<Record<'tier1' | 'tier2A' | 'tier2B
 const WEAPON_SWING_DEG = 16;
 const WEAPON_SWING_MS = 700;
 
-// 武器圖示:5 階各一組單手/雙手,對應 game/equipment.ts 的 WEAPON_NOUNS_BY_TIER
-// physicalMelee 那份命名(工作手套/鐵鎚 → 突擊步槍),裁自同一張 2x5 網格生成圖,
-// 部分工具原始生成方向朝左,已鏡像成統一朝右(跟角色慣用的攻擊方向一致)。
-interface WeaponIconData {
-  source: ImageSourcePropType;
-  aspectRatio: number;
-}
-
-const PHYSICAL_MELEE_WEAPON_ICONS: Record<JobTier, { oneHanded: WeaponIconData; twoHanded: WeaponIconData }> = {
-  1: {
-    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t1_1h.png'), aspectRatio: 293 / 262 },
-    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t1_2h.png'), aspectRatio: 282 / 281 },
-  },
-  2: {
-    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t2_1h.png'), aspectRatio: 285 / 232 },
-    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t2_2h.png'), aspectRatio: 307 / 297 },
-  },
-  3: {
-    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t3_1h.png'), aspectRatio: 394 / 254 },
-    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t3_2h.png'), aspectRatio: 408 / 292 },
-  },
-  4: {
-    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t4_1h.png'), aspectRatio: 280 / 307 },
-    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t4_2h.png'), aspectRatio: 355 / 307 },
-  },
-  5: {
-    oneHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t5_1h.png'), aspectRatio: 375 / 228 },
-    twoHanded: { source: require('../assets/sprites/items/physicalMelee/physicalMelee_t5_2h.png'), aspectRatio: 387 / 218 },
-  },
-};
-
-const WEAPON_ICONS: Partial<Record<Archetype, Record<JobTier, { oneHanded: WeaponIconData; twoHanded: WeaponIconData }>>> = {
-  physicalMelee: PHYSICAL_MELEE_WEAPON_ICONS,
-};
-
-// 不限職業的通用起始武器(LEGACY_EQUIPMENT_ITEMS,見 game/equipment.ts),名稱本來就是
-// 「短劍/雙手大劍」,套職業武器組(工作手套/鐵鎚)的圖不對——直接照 item id 對到最初測試
-// 用的那張劍圖示,比對 archetype+tier+twoHanded 那條路徑優先權更高。
-const LEGACY_SWORD_ICON: WeaponIconData = {
-  source: require('../assets/sprites/items/legacy_sword.png'),
-  aspectRatio: 996 / 1014,
-};
-const ITEM_ID_WEAPON_ICON_OVERRIDES: Partial<Record<string, WeaponIconData>> = {
-  'mainhand-01': LEGACY_SWORD_ICON,
-  'mainhand-02': LEGACY_SWORD_ICON,
-};
-
 interface HeroWalkSpriteProps {
   height?: number;
   onPress?: () => void;
@@ -294,14 +248,9 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
   const aspectRatio = showClickArt ? art.clickAspectRatio : art.openAspectRatio;
 
   // 武器疊圖只在「開啟畫格」顯示(showClickArt 期間先隱藏,姿勢不同、座標校準不了),
-  // 只有裝備了主手武器、該武器所屬職業有配圖、且目前是校準過座標的姿勢才顯示。
+  // 只有裝備了主手武器、該武器有 AI 圖示、且目前是校準過座標的姿勢才顯示。
   const mainhandItem = mainhandId !== undefined ? getItemById(mainhandId) : undefined;
-  const weaponIcon = mainhandItem
-    ? (ITEM_ID_WEAPON_ICON_OVERRIDES[mainhandItem.id] ??
-      WEAPON_ICONS[mainhandItem.archetype ?? archetype]?.[getCurrentTier(mainhandItem.requiredLevel ?? 1)][
-        mainhandItem.twoHanded ? 'twoHanded' : 'oneHanded'
-      ])
-    : undefined;
+  const weaponIcon = mainhandItem ? getWeaponIconForItem(mainhandItem) : undefined;
 
   const weaponAnchor =
     !showClickArt && weaponIcon !== undefined && hasChosenJob && archetype === 'physicalMelee'

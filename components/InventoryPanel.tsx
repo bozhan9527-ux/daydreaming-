@@ -14,9 +14,10 @@ import {
   ItemInstanceData,
   SubstatType,
 } from '../game/equipment';
-import { getEquipmentSlotIcon, getItemIcon } from '../game/sprites/equipmentIcons';
+import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
+import { ItemIcon } from './ItemIcon';
 import { PixelSprite } from './PixelSprite';
 import { ResourceBar } from './ResourceBar';
 
@@ -161,8 +162,8 @@ export function InventoryPanel() {
   function renderSlotButton(slot: EquipmentSlot) {
     const slotItemId = equipment[slot];
     const slotItem = slotItemId !== undefined ? getItemById(slotItemId) : undefined;
-    const icon = slotItem ? getItemIcon(slotItem) : getEquipmentSlotIcon(slot);
     const iconColor = slotItem ? slotItem.color : EMPTY_ICON_COLOR;
+    const emptySlotIcon = getEquipmentSlotIcon(slot);
     const active = slot === selectedSlot;
     return (
       <Pressable
@@ -170,7 +171,11 @@ export function InventoryPanel() {
         style={[styles.slotButton, active && styles.slotButtonActive]}
         onPress={() => setSelectedSlot(slot)}
       >
-        <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+        {slotItem ? (
+          <ItemIcon item={slotItem} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
+        ) : (
+          <PixelSprite frame={emptySlotIcon.frame} palette={{ [emptySlotIcon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+        )}
         <Text style={styles.slotButtonLabel} numberOfLines={1}>
           {SLOT_LABELS[slot]}
         </Text>
@@ -179,7 +184,6 @@ export function InventoryPanel() {
   }
 
   function renderBagItemRow(item: EquipmentItem) {
-    const icon = getItemIcon(item);
     const instance = itemInstances[item.id];
     const canIdentify = instance !== undefined && !instance.identified;
     const equipped = item.id === currentId;
@@ -191,7 +195,7 @@ export function InventoryPanel() {
         >
           <View style={styles.rowLeft}>
             <View style={styles.iconWrap}>
-              <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={ICON_PIXEL_SIZE} />
+              <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
             </View>
             <Text style={styles.itemRowLabel}>
               {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})

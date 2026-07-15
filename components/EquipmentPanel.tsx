@@ -16,11 +16,12 @@ import {
   ItemInstanceData,
   SubstatType,
 } from '../game/equipment';
-import { getEquipmentSlotIcon, getItemIcon } from '../game/sprites/equipmentIcons';
+import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { EnhancementPanel } from './EnhancementPanel';
 import { HeroSprite } from './HeroSprite';
+import { ItemIcon } from './ItemIcon';
 import { PixelSprite } from './PixelSprite';
 import { SocketPanel } from './SocketPanel';
 
@@ -188,8 +189,8 @@ export function EquipmentPanel() {
   function renderSlotButton(slot: EquipmentSlot) {
     const slotItemId = equipment[slot];
     const slotItem = slotItemId !== undefined ? getItemById(slotItemId) : undefined;
-    const icon = slotItem ? getItemIcon(slotItem) : getEquipmentSlotIcon(slot);
     const iconColor = slotItem ? slotItem.color : EMPTY_ICON_COLOR;
+    const emptySlotIcon = getEquipmentSlotIcon(slot);
     const active = slot === selectedSlot;
     return (
       <Pressable
@@ -197,7 +198,11 @@ export function EquipmentPanel() {
         style={[styles.slotButton, slotItem && styles.slotButtonFilled, active && styles.slotButtonActive]}
         onPress={() => setSelectedSlot(slot)}
       >
-        <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+        {slotItem ? (
+          <ItemIcon item={slotItem} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
+        ) : (
+          <PixelSprite frame={emptySlotIcon.frame} palette={{ [emptySlotIcon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+        )}
         <Text style={styles.slotButtonLabel} numberOfLines={1}>
           {SLOT_LABELS[slot]}
         </Text>
@@ -209,12 +214,11 @@ export function EquipmentPanel() {
   // (背包款式的鑑定/點擊裝備邏輯搬到 components/InventoryPanel.tsx 去了)。
   function renderShopItemRow(item: EquipmentItem) {
     const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
-    const icon = getItemIcon(item);
     return (
       <Pressable key={item.id} style={[styles.itemRow, locked && styles.itemRowLocked]} onPress={() => pickItem(item)} disabled={locked}>
         <View style={styles.rowLeft}>
           <View style={styles.iconWrap}>
-            <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={ICON_PIXEL_SIZE} />
+            <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
           </View>
           <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
             {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
