@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, ImageSourcePropType, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -17,8 +17,9 @@ import { getItemById } from '../game/equipment';
 import { getItemIcon } from '../game/sprites/equipmentIcons';
 import { getMonsterFrame } from '../game/sprites/monsters';
 import { useGameState } from '../hooks/useGameState';
-import { hasAiWeaponOverlay, HeroWalkSprite } from './HeroWalkSprite';
+import { HeroWalkSprite } from './HeroWalkSprite';
 import { PixelSprite } from './PixelSprite';
+import { getWeaponIconForItem } from './weaponIcons';
 
 // 場景畫布尺寸固定不變:不管角色/特效怎麼換,SCENE_HEIGHT 都是同一個數字,版面不會因為
 // 內容增減而跳動。背景圖(含關卡/小關文字)改由外層 MainVisual 統一繪製並往下延伸到按鈕區,
@@ -60,6 +61,10 @@ const SWING_BACK_MS = 220;
 // 揮擊小圖示,普通攻擊的揮動動作才不會在還沒買武器前直接整個消失不見。
 const FIST_FRAME = ['.X.', 'XXX', '.X.'];
 const FIST_PALETTE: Record<string, string> = { X: '#d8c9a8' };
+// 主手武器有 AI 圖示的話優先顯示 AI 圖(見 components/weaponIcons.ts),沒有才 fallback
+// 回程式產生圖示/赤手空拳。位置維持跟舊版程式特效完全相同的固定插槽(swingSlot),
+// 不管職業/姿勢一律同一個位置,不個別校準。
+const AI_WEAPON_ICON_HEIGHT = 32;
 
 // 底下持續往左捲動的地面刻度線,製造「勇者往右前進」的錯覺,跟戰鬥狀態無關,一直跑。
 function GroundScroll() {
@@ -124,14 +129,16 @@ function AttackTravelEffect({ frame, palette, active }: AttackTravelEffectProps)
 interface WeaponSwingEffectProps {
   frame: string[];
   palette: Record<string, string>;
+  aiIcon: { source: ImageSourcePropType; aspectRatio: number } | undefined;
   active: boolean;
 }
 
 // 普通攻擊:武器圖示在勇者手邊短促揮動(旋轉來回),不像技能特效那樣衝去怪物那邊——
 // 呼應「近身揮武器造成傷害」而不是「發招打過去」的視覺差異。只要還在戰鬥中就會持續循環,
 // 代表基礎攻擊一直在打,不需要對到 useBattleLoop 裡任何離散的攻擊時間點(戰鬥本來就是
-// 連續進度條模型,沒有逐次的攻擊時間戳)。
-function WeaponSwingEffect({ frame, palette, active }: WeaponSwingEffectProps) {
+// 連續進度條模型,沒有逐次的攻擊時間戳)。aiIcon 有值就疊 AI 武器圖示,沒有才退回程式產生
+// 的 PixelSprite(含赤手空拳 fallback),兩者共用同一個插槽位置跟揮動動畫。
+function WeaponSwingEffect({ frame, palette, aiIcon, active }: WeaponSwingEffectProps) {
   const swing = useSharedValue(0);
 
   useEffect(() => {
@@ -157,7 +164,15 @@ function WeaponSwingEffect({ frame, palette, active }: WeaponSwingEffectProps) {
 
   return (
     <Animated.View style={[styles.swingSlot, animatedStyle]}>
-      <PixelSprite frame={frame} palette={palette} pixelSize={1.5} />
+      {aiIcon ? (
+        <Image
+          source={aiIcon.source}
+          style={{ height: AI_WEAPON_ICON_HEIGHT, width: AI_WEAPON_ICON_HEIGHT * aiIcon.aspectRatio }}
+          resizeMode="contain"
+        />
+      ) : (
+        <PixelSprite frame={frame} palette={palette} pixelSize={1.5} />
+      )}
     </Animated.View>
   );
 }
@@ -226,8 +241,6 @@ export function BattleScene() {
 
   const equipment = useGameState((state) => state.equipment);
   const job = useGameState((state) => state.job);
-  const hasChosenJob = useGameState((state) => state.hasChosenJob);
-  const level = useGameState((state) => state.level.level);
   const companions = useGameState((state) => state.companions);
   const currentEncounter = useGameState((state) => state.currentEncounter);
   const fightStartedAt = useGameState((state) => state.fightStartedAt);
@@ -249,9 +262,10 @@ export function BattleScene() {
     (lastSecondarySkillTriggerAt !== null && now - lastSecondarySkillTriggerAt < SKILL_FLASH_WINDOW_MS);
   const mainhandId = equipment.mainhand;
   const mainhandItem = mainhandId !== undefined ? getItemById(mainhandId) : undefined;
-  const weaponIcon = mainhandItem ? getItemIcon(mainhandItem) : undefined;
-  const swingFrame = weaponIcon ? weaponIcon.frame : FIST_FRAME;
-  const swingPalette = weaponIcon && mainhandItem ? { [weaponIcon.fillKey]: mainhandItem.color } : FIST_PALETTE;
+  const proceduralIcon = mainhandItem ? getItemIcon(mainhandItem) : undefined;
+  const swingFrame = proceduralIcon ? proceduralIcon.frame : FIST_FRAME;
+  const swingPalette = proceduralIcon && mainhandItem ? { [proceduralIcon.fillKey]: mainhandItem.color } : FIST_PALETTE;
+  const aiWeaponIcon = mainhandItem ? getWeaponIconForItem(mainhandItem) : undefined;
 
   const progress = currentEncounter ? Math.min(1, fightElapsedMs / currentEncounter.fightDurationMs) : 0;
 
@@ -283,15 +297,7 @@ export function BattleScene() {
         </View>
       )}
 
-      {/* 目前這個職業/等級/裝備組合有 AI 武器圖示疊在 HeroWalkSprite 裡(見
-          components/HeroWalkSprite.tsx 的 hasAiWeaponOverlay)的話,位置跟這個程式產生的揮動
-          圖示幾乎重疊,兩個一起顯示會糊成一團,先關掉這個舊版效果;沒裝備武器(還沒買/AI圖示
-          還沒配到)則繼續用這個(含赤手空拳 fallback)當作揮擊回饋。 */}
-      <WeaponSwingEffect
-        frame={swingFrame}
-        palette={swingPalette}
-        active={!!currentEncounter && !hasAiWeaponOverlay(hasChosenJob, job.archetype, job.branch, level, mainhandId)}
-      />
+      <WeaponSwingEffect frame={swingFrame} palette={swingPalette} aiIcon={aiWeaponIcon} active={!!currentEncounter} />
 
       <AttackTravelEffect frame={effect.frame} palette={effect.palette} active={skillJustTriggered} />
 
