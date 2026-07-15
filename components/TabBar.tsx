@@ -53,7 +53,7 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, attention, onSelec
               }}
             >
               <View style={styles.iconBox}>
-                <PixelSprite frame={frame} palette={palette} pixelSize={4} />
+                <PixelSprite frame={frame} palette={palette} pixelSize={3} />
                 {showDot && <View style={styles.attentionDot} />}
               </View>
               <Text style={styles.label} numberOfLines={unlocked ? 1 : 2}>
