@@ -61,11 +61,14 @@ const ARCHETYPES: Archetype[] = [
 const TIERS: JobTier[] = [1, 2, 3, 4, 5];
 const BRANCHES: JobBranch[] = ['A', 'B'];
 
-// AI 美術測試:目前只有「學生」+ 一階職業其中 5 種(缺 physicalSupport,生成圖裡混進了
-// 讀得出來的品牌文字,先不採用,等重生再補)。只是靜態肖像,不影響戰鬥用的 HeroSprite。
+// AI 美術測試:學生 + 一階職業 6 種全部到齊。physicalSupport 原始生成圖混進讀得出來的品牌
+// 文字(名牌+店名),手動塗色蓋掉(取旁邊乾淨區域顏色逐行覆蓋),細看看得出修過的痕跡,
+// 使用者已確認接受這個品質,先用著,之後有更好的圖再換掉。只是靜態肖像,不影響戰鬥用的
+// HeroSprite/PixelSprite 程式產生系統。
 const JOB_PORTRAITS: Partial<Record<Archetype, ImageSourcePropType>> = {
   physicalMelee: require('../assets/sprites/jobs/tier1_physicalMelee.png'),
   physicalRanged: require('../assets/sprites/jobs/tier1_physicalRanged.png'),
+  physicalSupport: require('../assets/sprites/jobs/tier1_physicalSupport.png'),
   magicMelee: require('../assets/sprites/jobs/tier1_magicMelee.png'),
   magicRanged: require('../assets/sprites/jobs/tier1_magicRanged.png'),
   magicSupport: require('../assets/sprites/jobs/tier1_magicSupport.png'),
