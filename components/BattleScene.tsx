@@ -17,7 +17,7 @@ import { getItemById } from '../game/equipment';
 import { getItemIcon } from '../game/sprites/equipmentIcons';
 import { getMonsterFrame } from '../game/sprites/monsters';
 import { useGameState } from '../hooks/useGameState';
-import { HeroWalkSprite } from './HeroWalkSprite';
+import { hasAiWeaponOverlay, HeroWalkSprite } from './HeroWalkSprite';
 import { PixelSprite } from './PixelSprite';
 
 // 場景畫布尺寸固定不變:不管角色/特效怎麼換,SCENE_HEIGHT 都是同一個數字,版面不會因為
@@ -227,6 +227,7 @@ export function BattleScene() {
   const equipment = useGameState((state) => state.equipment);
   const job = useGameState((state) => state.job);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
+  const level = useGameState((state) => state.level.level);
   const companions = useGameState((state) => state.companions);
   const currentEncounter = useGameState((state) => state.currentEncounter);
   const fightStartedAt = useGameState((state) => state.fightStartedAt);
@@ -282,13 +283,14 @@ export function BattleScene() {
         </View>
       )}
 
-      {/* physicalMelee 已經有 AI 武器圖示疊在 HeroWalkSprite 裡(見 components/HeroWalkSprite.tsx),
-          位置跟這個程式產生的揮動圖示幾乎重疊,兩個一起顯示會糊成一團,該職業先關掉這個舊版效果。
-          其餘職業還沒有 AI 圖示,繼續用這個當作揮擊回饋。 */}
+      {/* 目前這個職業/等級/裝備組合有 AI 武器圖示疊在 HeroWalkSprite 裡(見
+          components/HeroWalkSprite.tsx 的 hasAiWeaponOverlay)的話,位置跟這個程式產生的揮動
+          圖示幾乎重疊,兩個一起顯示會糊成一團,先關掉這個舊版效果;沒裝備武器(還沒買/AI圖示
+          還沒配到)則繼續用這個(含赤手空拳 fallback)當作揮擊回饋。 */}
       <WeaponSwingEffect
         frame={swingFrame}
         palette={swingPalette}
-        active={!!currentEncounter && !(hasChosenJob && job.archetype === 'physicalMelee')}
+        active={!!currentEncounter && !hasAiWeaponOverlay(hasChosenJob, job.archetype, job.branch, level, mainhandId)}
       />
 
       <AttackTravelEffect frame={effect.frame} palette={effect.palette} active={skillJustTriggered} />

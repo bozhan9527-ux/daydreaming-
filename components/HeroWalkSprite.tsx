@@ -173,7 +173,7 @@ const TIER2_ART: Record<Archetype, Record<JobBranch, HeroArt>> = {
 // 該角色圖原生高度,weaponNativeHeight/pasteX/pasteY 都是在那個原生尺寸下量出來的手部
 // (或拳擊館學員那種沒地方握、浮在身側的)位置,顯示時乘上 (height / nativeCharHeight)
 // 縮放,不管 HeroWalkSprite 的 height prop 傳多少都能對齊。所有武器持續搖擺,呼應
-// 「持續輸出」的攻擊動作感。其餘職業/分支尚未校準座標,也還沒配圖,先不疊。
+// 「持續輸出」的攻擊動作感。六大職業 x 3 種姿勢(一階/二階 A/二階 B)都已校準座標。
 interface WeaponAnchor {
   nativeCharHeight: number;
   weaponNativeHeight: number;
@@ -181,13 +181,71 @@ interface WeaponAnchor {
   pasteY: number;
 }
 
-const PHYSICAL_MELEE_WEAPON_ANCHORS: Partial<Record<'tier1' | 'tier2A' | 'tier2B', WeaponAnchor>> = {
-  tier1: { nativeCharHeight: 746, weaponNativeHeight: 210, pasteX: 300, pasteY: 400 },
-  tier2A: { nativeCharHeight: 746, weaponNativeHeight: 200, pasteX: 250, pasteY: 430 },
-  tier2B: { nativeCharHeight: 746, weaponNativeHeight: 190, pasteX: 260, pasteY: 260 },
+// 六大職業、每個職業 3 種姿勢(一階 / 二階 A / 二階 B)都各自校準一組錨點,對應該姿勢
+// 那張美術圖原生的手部(或沒地方握、就近貼在身側)位置。nativeCharHeight 是那張圖實際的
+// 原生像素高度(各姿勢美術圖尺寸不一,不能共用同一個值)。
+const WEAPON_ANCHORS: Record<Archetype, Partial<Record<'tier1' | 'tier2A' | 'tier2B', WeaponAnchor>>> = {
+  physicalMelee: {
+    tier1: { nativeCharHeight: 746, weaponNativeHeight: 210, pasteX: 300, pasteY: 400 },
+    tier2A: { nativeCharHeight: 746, weaponNativeHeight: 200, pasteX: 250, pasteY: 430 },
+    tier2B: { nativeCharHeight: 746, weaponNativeHeight: 190, pasteX: 260, pasteY: 260 },
+  },
+  physicalRanged: {
+    tier1: { nativeCharHeight: 746, weaponNativeHeight: 140, pasteX: 315, pasteY: 320 },
+    tier2A: { nativeCharHeight: 740, weaponNativeHeight: 150, pasteX: 330, pasteY: 260 },
+    tier2B: { nativeCharHeight: 740, weaponNativeHeight: 130, pasteX: 150, pasteY: 330 },
+  },
+  physicalSupport: {
+    tier1: { nativeCharHeight: 716, weaponNativeHeight: 130, pasteX: 260, pasteY: 240 },
+    tier2A: { nativeCharHeight: 734, weaponNativeHeight: 120, pasteX: 280, pasteY: 280 },
+    tier2B: { nativeCharHeight: 734, weaponNativeHeight: 110, pasteX: 210, pasteY: 300 },
+  },
+  magicMelee: {
+    tier1: { nativeCharHeight: 734, weaponNativeHeight: 190, pasteX: 5, pasteY: 370 },
+    tier2A: { nativeCharHeight: 734, weaponNativeHeight: 160, pasteX: 5, pasteY: 190 },
+    tier2B: { nativeCharHeight: 752, weaponNativeHeight: 170, pasteX: 345, pasteY: 150 },
+  },
+  magicRanged: {
+    tier1: { nativeCharHeight: 716, weaponNativeHeight: 130, pasteX: 320, pasteY: 320 },
+    tier2A: { nativeCharHeight: 734, weaponNativeHeight: 120, pasteX: 30, pasteY: 350 },
+    tier2B: { nativeCharHeight: 734, weaponNativeHeight: 120, pasteX: 60, pasteY: 350 },
+  },
+  magicSupport: {
+    tier1: { nativeCharHeight: 716, weaponNativeHeight: 100, pasteX: 300, pasteY: 100 },
+    tier2A: { nativeCharHeight: 734, weaponNativeHeight: 110, pasteX: 300, pasteY: 240 },
+    tier2B: { nativeCharHeight: 734, weaponNativeHeight: 100, pasteX: 300, pasteY: 220 },
+  },
 };
 const WEAPON_SWING_DEG = 16;
 const WEAPON_SWING_MS = 700;
+
+function getWeaponAnchor(
+  hasChosenJob: boolean,
+  archetype: Archetype,
+  branch: JobBranch,
+  currentTier: number
+): WeaponAnchor | undefined {
+  if (!hasChosenJob) return undefined;
+  const archetypeAnchors = WEAPON_ANCHORS[archetype];
+  if (currentTier === 1) return archetypeAnchors.tier1;
+  if (currentTier >= 2) return branch === 'A' ? archetypeAnchors.tier2A : archetypeAnchors.tier2B;
+  return undefined;
+}
+
+// 給 BattleScene 用:判斷「這個職業/等級/裝備組合現在會不會顯示 AI 武器疊圖」,
+// 是的話 BattleScene 要關掉舊版的程式產生揮擊特效(WeaponSwingEffect),避免兩者疊在一起糊掉。
+export function hasAiWeaponOverlay(
+  hasChosenJob: boolean,
+  archetype: Archetype,
+  branch: JobBranch,
+  level: number,
+  mainhandId: string | undefined
+): boolean {
+  const mainhandItem = mainhandId !== undefined ? getItemById(mainhandId) : undefined;
+  const weaponIcon = mainhandItem ? getWeaponIconForItem(mainhandItem) : undefined;
+  if (!weaponIcon) return false;
+  return getWeaponAnchor(hasChosenJob, archetype, branch, getCurrentTier(level)) !== undefined;
+}
 
 interface HeroWalkSpriteProps {
   height?: number;
@@ -253,14 +311,8 @@ export function HeroWalkSprite({ height = 98, onPress }: HeroWalkSpriteProps) {
   const weaponIcon = mainhandItem ? getWeaponIconForItem(mainhandItem) : undefined;
 
   const weaponAnchor =
-    !showClickArt && weaponIcon !== undefined && hasChosenJob && archetype === 'physicalMelee'
-      ? currentTier === 1
-        ? PHYSICAL_MELEE_WEAPON_ANCHORS.tier1
-        : currentTier >= 2
-          ? branch === 'A'
-            ? PHYSICAL_MELEE_WEAPON_ANCHORS.tier2A
-            : PHYSICAL_MELEE_WEAPON_ANCHORS.tier2B
-          : undefined
+    !showClickArt && weaponIcon !== undefined
+      ? getWeaponAnchor(hasChosenJob, archetype, branch, currentTier)
       : undefined;
 
   // 武器持續搖擺(不管是浮空還是握在手上的),呼應「持續輸出」的攻擊動作感,
