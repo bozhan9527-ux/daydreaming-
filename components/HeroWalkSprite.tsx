@@ -35,8 +35,9 @@ const STUDENT_ART: HeroArt = {
   clickAspectRatio: 355 / 746,
 };
 
-// 一階美術:magicMelee(中二國中生)原本的生成圖畫風跟其他幾張落差較大,先移除等重生,
-// 缺的期間 art 選擇邏輯會 fallback 回學生圖(見下面 HeroWalkSprite 內的 art 判斷)。
+// 一階美術:magicMelee(中二國中生)是重生過的版本(原圖畫風落差較大,已換成跟其他幾張
+// 一致的白底風格)。其餘職業缺圖時 art 選擇邏輯會 fallback 回學生圖(見下面 HeroWalkSprite
+// 內的 art 判斷),目前 6 種都齊了,Partial 型別留著方便之後單獨抽換/重生某一款。
 const JOB_ART: Partial<Record<Archetype, HeroArt>> = {
   physicalMelee: {
     open: require('../assets/sprites/hero/jobs/physicalMelee.png'),
@@ -55,6 +56,12 @@ const JOB_ART: Partial<Record<Archetype, HeroArt>> = {
     click: require('../assets/sprites/hero/jobs/physicalSupport_click.png'),
     openAspectRatio: 364 / 716,
     clickAspectRatio: 396 / 722,
+  },
+  magicMelee: {
+    open: require('../assets/sprites/hero/jobs/magicMelee.png'),
+    click: require('../assets/sprites/hero/jobs/magicMelee_click.png'),
+    openAspectRatio: 370 / 734,
+    clickAspectRatio: 417 / 734,
   },
   magicRanged: {
     open: require('../assets/sprites/hero/jobs/magicRanged.png'),
