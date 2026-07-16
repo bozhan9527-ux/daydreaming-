@@ -504,7 +504,7 @@ export function JobSelector() {
           branch={hasChosenJob ? job.branch : selectedBranch}
           currentTier={currentTier}
           hasChosenJob={hasChosenJob}
-          graduateLevel={TIER_UNLOCK_LEVELS[2]}
+          graduateLevel={TIER_UNLOCK_LEVELS[1]}
           currentLevel={level.level}
           dualClassUnlocked={dualClassUnlocked}
           transferFragmentCount={transferFragments[viewingArchetype] ?? 0}

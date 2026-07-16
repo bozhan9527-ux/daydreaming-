@@ -1306,12 +1306,12 @@ export const useGameState = create<GameState>((set, get) => ({
   setJob: (archetype, branch) => {
     const { job, secondaryJob, equipment, transferProofs, transferFragments, hasChosenJob, level } = get();
 
-    // 「學生」畢業:第一次真正選定主職,對齊 TIER_UNLOCK_LEVELS[2](Lv30)這個既有里程碑,
+    // 「學生」畢業:第一次真正選定主職,對齊 TIER_UNLOCK_LEVELS[1](Lv30)這個既有里程碑,
     // 免費、不受轉職證明限制——job 目前存的值只是畢業前的佔位預設,不是玩家真的選過的職業,
     // 不能套用 #57 那套「換到不同 archetype 要道具」的邏輯,否則畢業選職業會被誤判成「轉職」。
     if (!hasChosenJob) {
-      if (level.level < TIER_UNLOCK_LEVELS[2]) {
-        useToast.getState().show(`Lv${TIER_UNLOCK_LEVELS[2]} 畢業後才能選定主職`);
+      if (level.level < TIER_UNLOCK_LEVELS[1]) {
+        useToast.getState().show(`Lv${TIER_UNLOCK_LEVELS[1]} 畢業後才能選定主職`);
         return;
       }
       set({

@@ -198,7 +198,7 @@ const QUALITY_WORDS = ['簡易', '耐用', '精良', '強化', '特製', '稀有
 function qualityWordForBracket(bracket: number): string {
   return QUALITY_WORDS[(bracket - 1) % QUALITY_WORDS.length];
 }
-// 職業鎖裝呼應「畢業才穿職業裝」的身分設定,從 Lv30(畢業,見 TIER_UNLOCK_LEVELS[2])才開始解鎖,
+// 職業鎖裝呼應「畢業才穿職業裝」的身分設定,從 Lv30(畢業,見 TIER_UNLOCK_LEVELS[1])才開始解鎖,
 // 50 個等級檔(bracket 1~50)平均分佈在 Lv30~MAX_LEVEL 之間,bracket1=Lv30、bracket50=MAX_LEVEL。
 const MIN_BRACKET_LEVEL = 30;
 const MAX_BRACKET_LEVEL = MAX_LEVEL;

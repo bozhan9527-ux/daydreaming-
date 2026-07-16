@@ -246,7 +246,7 @@ function computeChannelColor(archetype: Archetype, branch: JobBranch, tier: JobT
   return color;
 }
 
-// 場景色調隨大關數緩慢漂移:職業階級只會變化4次(Lv30/80/200/350解鎖下一階),玩家在
+// 場景色調隨大關數緩慢漂移:職業階級只會變化4次(Lv80/250/300/400解鎖下一階),玩家在
 // 同一階級裡可能要打完幾十甚至上百個大關,背景卻完全靜止,「持續前進」感只能靠關卡數字
 // 文字傳達。這裡只微調天空色相(skyTop/skyBottom),不動 ground/motif,才不會打亂
 // MOOD_SHIFTS 已經設計好的情境色識別度(地面/造型物是「這是哪個職業場景」的主要辨識線索,

@@ -10,7 +10,7 @@ export const TAB_UNLOCK_LEVELS: Record<string, number> = {
   achievement: 6,
   companion: 8,
   // 副本挑戰的是「指定職業」的轉職試煉(見 game/dungeon.ts),等級門檻給低一點也沒關係——
-  // 下面 hasChosenJob 那道閘門已經確保實際解鎖時機一定落在畢業(TIER_UNLOCK_LEVELS[2]=Lv30)之後。
+  // 下面 hasChosenJob 那道閘門已經確保實際解鎖時機一定落在畢業(TIER_UNLOCK_LEVELS[1]=Lv30)之後。
   dungeon: 8,
   // 輪迴/轉生系統(見 game/ascension.ts):要打完一整輪 3000 關才會真正拿到轉生點數,門檻
   // 給 Lv50(比其餘系統晚很多)單純是不讓分頁列一開始就塞一個「打開來空空如也」的項目,

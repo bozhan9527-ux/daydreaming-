@@ -37,17 +37,17 @@ const DAMAGE_TYPE_BONUS: Record<DamageType, Record<JobTier, number>> = {
   magic: { 1: -0.02, 2: -0.01, 3: 0.01, 4: 0.02, 5: 0 },
 };
 
-export const TIER_UNLOCK_LEVELS: Record<JobTier, number> = { 1: 1, 2: 30, 3: 80, 4: 200, 5: 350 };
+export const TIER_UNLOCK_LEVELS: Record<JobTier, number> = { 1: 30, 2: 80, 3: 250, 4: 300, 5: 400 };
 
 export function calcCombatMultiplier(archetype: Archetype, tier: JobTier): number {
   const { subtype, damageType } = ARCHETYPE_COMPOSITION[archetype];
   return BASE_MULTIPLIER[tier] + SUBTYPE_BONUS[subtype][tier] + DAMAGE_TYPE_BONUS[damageType][tier];
 }
 
-// 雙職兼修:Lv120 解鎖,可另選一個副職archetype。副職只吃自己那份倍率「超出 1.0 的部分」
+// 雙職兼修:Lv160 解鎖,可另選一個副職archetype。副職只吃自己那份倍率「超出 1.0 的部分」
 // 的一半,不會整個疊上去,維持主職才是數值主力的定位。獨立於階級門檻(TIER_UNLOCK_LEVELS)之外,
 // 純粹是留給雙職這個系統自己的解鎖等級。
-export const DUAL_CLASS_UNLOCK_LEVEL = 120;
+export const DUAL_CLASS_UNLOCK_LEVEL = 160;
 const SECONDARY_JOB_WEIGHT = 0.5;
 
 export function canUnlockDualClass(level: number): boolean {

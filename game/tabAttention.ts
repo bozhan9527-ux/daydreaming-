@@ -70,7 +70,7 @@ function hasAnyCompanionGearUpgrade(gear: CompanionGearState, level: number, coi
 }
 
 export function computeTabAttentionFlags(input: TabAttentionInput): TabAttentionFlags {
-  const canGraduate = !input.hasChosenJob && input.level >= TIER_UNLOCK_LEVELS[2];
+  const canGraduate = !input.hasChosenJob && input.level >= TIER_UNLOCK_LEVELS[1];
   const hasUsableTransferProof = Object.values(input.transferProofs).some((count) => (count ?? 0) >= 1);
   const canDualClass = input.hasChosenJob && input.level >= DUAL_CLASS_UNLOCK_LEVEL;
 
