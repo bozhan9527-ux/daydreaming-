@@ -17,12 +17,10 @@ type Frame = 'idle' | 'windup' | 'strike';
 const NEXT_FRAME: Record<Frame, Frame> = { idle: 'windup', windup: 'strike', strike: 'idle' };
 const FRAME_DURATION: Record<Frame, number> = { idle: IDLE_MS, windup: WINDUP_MS, strike: STRIKE_MS };
 
-// AI 圖原生比例落差很大(從瘦長 0.6 到寬扁 2.18 都有)。玩家判斷「這隻怪物大不大」主要看
-// 站在同一條地面線上的高度(跟勇者比高矮),不是面積——面積固定但高度忽高忽低(65px~123px)
-// 一樣會顯得忽大忽小。改成「高度永遠固定=height 參數」,寬度依原生比例算,但超過寬度上限的
-// 部分用 resizeMode="cover" 裁掉左右兩側(不擠壓變形),不會壓縮/拉伸高度。這樣每隻怪物的
-// 高度都跟勇者一致,只有極寬的怪物(例如飛行系)會被裁掉一點左右邊緣。
-const MAX_WIDTH_RATIO = 1.6; // 寬度上限 = height 參數的這個倍率
+// AI 圖原生比例落差很大(從瘦長 0.6 到寬扁 2.18 都有)。預設高度固定 = height 參數、寬度依
+// 原生比例算;但寬度不能無限吃版面,超過寬度上限時「整張等比縮小」到寬度上限為止(寧可
+// 這隻怪物整體矮一點,也不要裁掉牠的身體部位)——不裁圖、不擠壓變形,單純整體 contain 縮放。
+const MAX_WIDTH_RATIO = 1.5; // 寬度上限 = height 參數的這個倍率
 
 interface MonsterSpriteProps {
   monsterId: string;
@@ -61,7 +59,10 @@ export function MonsterSprite({ monsterId, height }: MonsterSpriteProps) {
 
   const source = art[frame];
   const aspectRatio = art[`${frame}AspectRatio`];
-  const displayWidth = Math.min(height * aspectRatio, height * MAX_WIDTH_RATIO);
+  const maxWidth = height * MAX_WIDTH_RATIO;
+  const naturalWidth = height * aspectRatio;
+  const displayHeight = naturalWidth > maxWidth ? maxWidth / aspectRatio : height;
+  const displayWidth = naturalWidth > maxWidth ? maxWidth : naturalWidth;
 
-  return <Image source={source} style={{ height, width: displayWidth }} resizeMode="cover" />;
+  return <Image source={source} style={{ height: displayHeight, width: displayWidth }} resizeMode="contain" />;
 }
