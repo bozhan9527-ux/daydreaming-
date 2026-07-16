@@ -17,6 +17,13 @@ type Frame = 'idle' | 'windup' | 'strike';
 const NEXT_FRAME: Record<Frame, Frame> = { idle: 'windup', windup: 'strike', strike: 'idle' };
 const FRAME_DURATION: Record<Frame, number> = { idle: IDLE_MS, windup: WINDUP_MS, strike: STRIKE_MS };
 
+// AI 圖原生比例落差很大(從瘦長 0.6 到寬扁 2.18 都有)。純用 height 反推寬度,不同怪物的
+// 「視覺面積」會差很多倍(寬扁的怪物光是寬度就吃很大,瘦長的怪物反而顯得單薄),玩家感覺
+// 忽大忽小不一致。改成「面積固定、依原生比例分配長寬」:h*w 這個乘積(視覺份量)在所有怪物
+// 間保持一致,形狀依原生比例變(寬扁的變矮胖、瘦長的變細高),而不是形狀不變、份量亂跳。
+// MAX_DIMENSION_RATIO 是安全上限,避免極端比例(例如 flying 2.18)算出的單邊長度爆出場景外。
+const MAX_DIMENSION_RATIO = 1.5; // 長或寬都不能超過 height 參數的這個倍率
+
 interface MonsterSpriteProps {
   monsterId: string;
   height: number;
@@ -55,5 +62,18 @@ export function MonsterSprite({ monsterId, height }: MonsterSpriteProps) {
   const source = art[frame];
   const aspectRatio = art[`${frame}AspectRatio`];
 
-  return <Image source={source} style={{ height, width: height * aspectRatio }} resizeMode="contain" />;
+  const targetArea = height * height;
+  let displayHeight = Math.sqrt(targetArea / aspectRatio);
+  let displayWidth = Math.sqrt(targetArea * aspectRatio);
+
+  const maxDimension = height * MAX_DIMENSION_RATIO;
+  if (displayHeight > maxDimension) {
+    displayWidth *= maxDimension / displayHeight;
+    displayHeight = maxDimension;
+  } else if (displayWidth > maxDimension) {
+    displayHeight *= maxDimension / displayWidth;
+    displayWidth = maxDimension;
+  }
+
+  return <Image source={source} style={{ height: displayHeight, width: displayWidth }} resizeMode="contain" />;
 }
