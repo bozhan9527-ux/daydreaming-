@@ -59,9 +59,10 @@ export function MonsterSprite({ monsterId, height }: MonsterSpriteProps) {
 
   const source = art[frame];
   const aspectRatio = art[`${frame}AspectRatio`];
-  const maxWidth = height * MAX_WIDTH_RATIO;
-  const naturalWidth = height * aspectRatio;
-  const displayHeight = naturalWidth > maxWidth ? maxWidth / aspectRatio : height;
+  const scaledHeight = height * (art.scale ?? 1);
+  const maxWidth = scaledHeight * MAX_WIDTH_RATIO;
+  const naturalWidth = scaledHeight * aspectRatio;
+  const displayHeight = naturalWidth > maxWidth ? maxWidth / aspectRatio : scaledHeight;
   const displayWidth = naturalWidth > maxWidth ? maxWidth : naturalWidth;
 
   return <Image source={source} style={{ height: displayHeight, width: displayWidth }} resizeMode="contain" />;

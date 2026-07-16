@@ -13,6 +13,7 @@ export interface MonsterArt {
   idleAspectRatio: number;
   windupAspectRatio: number;
   strikeAspectRatio: number;
+  scale?: number; // 相對於 MonsterSprite 傳入的 height 的縮放倍率,預設 1(不縮放)
 }
 
 const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
@@ -24,6 +25,8 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     windupAspectRatio: 401 / 203,
     strikeAspectRatio: 538 / 255,
   },
+  // 蝙蝠/甲蟲/哥布林/狼(flying/insect/biped/quadruped)體型設定上比其他原型小一號,
+  // 縮小成 0.5 倍讓牠們在畫面上看起來確實比較嬌小,不是跟其他怪物同一個量級。
   flying: {
     idle: require('../assets/sprites/monsters/ai/flying_open.png'),
     windup: require('../assets/sprites/monsters/ai/flying_middle.png'),
@@ -31,6 +34,7 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 543 / 249,
     windupAspectRatio: 382 / 252,
     strikeAspectRatio: 594 / 292,
+    scale: 0.5,
   },
   biped: {
     idle: require('../assets/sprites/monsters/ai/biped_open.png'),
@@ -39,6 +43,7 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 336 / 453,
     windupAspectRatio: 584 / 359,
     strikeAspectRatio: 428 / 380,
+    scale: 0.5,
   },
   fungal: {
     idle: require('../assets/sprites/monsters/ai/fungal_open.png'),
@@ -79,6 +84,7 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 383 / 306,
     windupAspectRatio: 454 / 303,
     strikeAspectRatio: 465 / 301,
+    scale: 0.5,
   },
   insect: {
     idle: require('../assets/sprites/monsters/ai/insect_open.png'),
@@ -87,6 +93,7 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 419 / 323,
     windupAspectRatio: 479 / 344,
     strikeAspectRatio: 488 / 371,
+    scale: 0.5,
   },
   aquatic: {
     idle: require('../assets/sprites/monsters/ai/aquatic_open.png'),
