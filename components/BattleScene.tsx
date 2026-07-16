@@ -18,6 +18,8 @@ import { getItemIcon } from '../game/sprites/equipmentIcons';
 import { getMonsterFrame } from '../game/sprites/monsters';
 import { useGameState } from '../hooks/useGameState';
 import { HeroWalkSprite } from './HeroWalkSprite';
+import { MonsterSprite } from './MonsterSprite';
+import { getMonsterArt } from './monsterArt';
 import { PixelSprite } from './PixelSprite';
 import { getWeaponIconForItem } from './weaponIcons';
 
@@ -305,11 +307,15 @@ export function BattleScene() {
         <View key={fightStartedAt ?? 'none'} style={styles.monsterSlot}>
           <LegendaryGlow active={currentEncounter.rarity === 'legendary'} />
           <MonsterHitReaction active={!!currentEncounter}>
-            <PixelSprite
-              frame={getMonsterFrame(currentEncounter.monster.id).frame}
-              palette={getMonsterFrame(currentEncounter.monster.id).palette}
-              pixelSize={MONSTER_TARGET_HEIGHT / getMonsterFrame(currentEncounter.monster.id).frame.length}
-            />
+            {getMonsterArt(currentEncounter.monster.id) ? (
+              <MonsterSprite monsterId={currentEncounter.monster.id} height={MONSTER_TARGET_HEIGHT} />
+            ) : (
+              <PixelSprite
+                frame={getMonsterFrame(currentEncounter.monster.id).frame}
+                palette={getMonsterFrame(currentEncounter.monster.id).palette}
+                pixelSize={MONSTER_TARGET_HEIGHT / getMonsterFrame(currentEncounter.monster.id).frame.length}
+              />
+            )}
           </MonsterHitReaction>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
