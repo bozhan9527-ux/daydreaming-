@@ -1,15 +1,15 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { EquipmentSlot, getItemById, SLOT_Z_ORDER } from '../game/equipment';
-import { getItemIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
-import { PixelSprite } from './PixelSprite';
+import { ItemIcon } from './ItemIcon';
 
 // 9 插槽 + 8 個間距要在最窄的手機寬度(扣掉左右 padding 後淨寬約 288px)也能排成一行,
 // 不然「已裝備」跟「未裝備」款式尺寸就會因為換行而看起來不一致。28px×9 + 3px×8=276px,
 // 留了一點餘裕。
 const TILE_SIZE = 28;
 const ICON_PIXEL_SIZE = 0.6;
+const AI_ICON_HEIGHT = 22;
 const EMPTY_SLOT_COLOR = '#3a3a45';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
@@ -45,10 +45,9 @@ export function EquippedItemsStrip() {
           );
         }
 
-        const icon = getItemIcon(item);
         return (
           <View key={slot} style={styles.tile}>
-            <PixelSprite frame={icon.frame} palette={{ [icon.fillKey]: item.color }} pixelSize={ICON_PIXEL_SIZE} />
+            <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={AI_ICON_HEIGHT} />
             <View style={styles.levelBadge}>
               <Text style={styles.levelText}>Lv{item.requiredLevel ?? 1}</Text>
             </View>

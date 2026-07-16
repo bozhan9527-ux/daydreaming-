@@ -64,7 +64,7 @@ const FIST_PALETTE: Record<string, string> = { X: '#d8c9a8' };
 // 主手武器有 AI 圖示的話優先顯示 AI 圖(見 components/weaponIcons.ts),沒有才 fallback
 // 回程式產生圖示/赤手空拳。位置維持跟舊版程式特效完全相同的固定插槽(swingSlot),
 // 不管職業/姿勢一律同一個位置,不個別校準。
-const AI_WEAPON_ICON_HEIGHT = 32;
+const AI_WEAPON_ICON_HEIGHT = 48;
 
 // 底下持續往左捲動的地面刻度線,製造「勇者往右前進」的錯覺,跟戰鬥狀態無關,一直跑。
 function GroundScroll() {

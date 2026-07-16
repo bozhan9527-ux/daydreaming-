@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype } from '../game/combat';
 import {
@@ -20,10 +20,46 @@ import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { EnhancementPanel } from './EnhancementPanel';
-import { HeroSprite } from './HeroSprite';
 import { ItemIcon } from './ItemIcon';
 import { PixelSprite } from './PixelSprite';
 import { SocketPanel } from './SocketPanel';
+import { useHeroArt } from './HeroWalkSprite';
+
+// 裝備分頁的角色預覽:跟戰鬥畫面共用同一份 AI 美術(useHeroArt),平常顯示 open,點一下
+// 短暫換成 middle(來源三聯圖中間那張動作格)再彈回來——跟 HeroWalkSprite 點擊顯示 click
+// (最右格)是同一個「點一下看另一張」手感,只是這裡看的是中間那張。這個預覽不會疊裝備
+// 圖層(AI 美術不是逐插槽疊圖系統),純粹替換掉原本 HeroSprite 的程式產生疊圖角色。
+const HERO_PREVIEW_HEIGHT = 130;
+const HERO_PREVIEW_CLICK_MS = 500;
+
+function EquipmentHeroPreview() {
+  const art = useHeroArt();
+  const [showMiddle, setShowMiddle] = useState(false);
+  const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    return () => clearTimeout(timeout.current);
+  }, []);
+
+  function handlePress() {
+    setShowMiddle(true);
+    clearTimeout(timeout.current);
+    timeout.current = setTimeout(() => setShowMiddle(false), HERO_PREVIEW_CLICK_MS);
+  }
+
+  const source = showMiddle ? art.middle : art.open;
+  const aspectRatio = showMiddle ? art.middleAspectRatio : art.openAspectRatio;
+
+  return (
+    <Pressable onPress={handlePress}>
+      <Image
+        source={source}
+        style={{ height: HERO_PREVIEW_HEIGHT, width: HERO_PREVIEW_HEIGHT * aspectRatio }}
+        resizeMode="contain"
+      />
+    </Pressable>
+  );
+}
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   back: '背飾',
@@ -138,7 +174,6 @@ function formatItemStats(item: EquipmentItem, instance: ItemInstanceData | undef
 }
 
 export function EquipmentPanel() {
-  const bodyType = useGameState((state) => state.bodyType);
   const equipment = useGameState((state) => state.equipment);
   const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
   const itemInstances = useGameState((state) => state.itemInstances);
@@ -234,7 +269,7 @@ export function EquipmentPanel() {
       <View style={styles.paperdollRow}>
         <View style={styles.slotColumn}>{LEFT_COLUMN.map(renderSlotButton)}</View>
         <View style={styles.heroWrap}>
-          <HeroSprite bodyType={bodyType} equipment={equipment} pixelSize={2.5} />
+          <EquipmentHeroPreview />
         </View>
         <View style={styles.slotColumn}>{RIGHT_COLUMN.map(renderSlotButton)}</View>
       </View>
