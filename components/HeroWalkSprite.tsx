@@ -207,8 +207,121 @@ const TIER2_ART: Record<Archetype, Record<JobBranch, HeroArt>> = {
   },
 };
 
-// 取得目前這個玩家該顯示的勇者美術(學生/一階/二階),戰鬥畫面(HeroWalkSprite)跟裝備
+// 三階美術:分支從二階就已經分岔,這階延續同一組 Archetype+JobBranch 兩層 key。
+const TIER3_ART: Record<Archetype, Record<JobBranch, HeroArt>> = {
+  physicalMelee: {
+    A: {
+      open: require('../assets/sprites/hero/jobs3/physicalMelee_A_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/physicalMelee_A_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/physicalMelee_A_click.png'),
+      openAspectRatio: 372 / 734,
+      middleAspectRatio: 470 / 734,
+      clickAspectRatio: 423 / 734,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs3/physicalMelee_B_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/physicalMelee_B_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/physicalMelee_B_click.png'),
+      openAspectRatio: 365 / 710,
+      middleAspectRatio: 411 / 693,
+      clickAspectRatio: 429 / 728,
+    },
+  },
+  physicalRanged: {
+    A: {
+      open: require('../assets/sprites/hero/jobs3/physicalRanged_A_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/physicalRanged_A_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/physicalRanged_A_click.png'),
+      openAspectRatio: 347 / 716,
+      middleAspectRatio: 376 / 699,
+      clickAspectRatio: 429 / 734,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs3/physicalRanged_B_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/physicalRanged_B_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/physicalRanged_B_click.png'),
+      openAspectRatio: 335 / 710,
+      middleAspectRatio: 376 / 693,
+      clickAspectRatio: 429 / 728,
+    },
+  },
+  physicalSupport: {
+    A: {
+      open: require('../assets/sprites/hero/jobs3/physicalSupport_A_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/physicalSupport_A_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/physicalSupport_A_click.png'),
+      openAspectRatio: 347 / 710,
+      middleAspectRatio: 376 / 693,
+      clickAspectRatio: 441 / 728,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs3/physicalSupport_B_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/physicalSupport_B_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/physicalSupport_B_click.png'),
+      openAspectRatio: 365 / 710,
+      middleAspectRatio: 376 / 693,
+      clickAspectRatio: 441 / 728,
+    },
+  },
+  magicMelee: {
+    A: {
+      open: require('../assets/sprites/hero/jobs3/magicMelee_A_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/magicMelee_A_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/magicMelee_A_click.png'),
+      openAspectRatio: 312 / 705,
+      middleAspectRatio: 394 / 711,
+      clickAspectRatio: 447 / 740,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs3/magicMelee_B_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/magicMelee_B_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/magicMelee_B_click.png'),
+      openAspectRatio: 365 / 699,
+      middleAspectRatio: 436 / 646,
+      clickAspectRatio: 380 / 540,
+    },
+  },
+  magicRanged: {
+    A: {
+      open: require('../assets/sprites/hero/jobs3/magicRanged_A_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/magicRanged_A_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/magicRanged_A_click.png'),
+      openAspectRatio: 359 / 676,
+      middleAspectRatio: 412 / 652,
+      clickAspectRatio: 430 / 711,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs3/magicRanged_B_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/magicRanged_B_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/magicRanged_B_click.png'),
+      openAspectRatio: 262 / 676,
+      middleAspectRatio: 377 / 652,
+      clickAspectRatio: 394 / 717,
+    },
+  },
+  magicSupport: {
+    A: {
+      open: require('../assets/sprites/hero/jobs3/magicSupport_A_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/magicSupport_A_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/magicSupport_A_click.png'),
+      openAspectRatio: 343 / 878,
+      middleAspectRatio: 453 / 806,
+      clickAspectRatio: 485 / 769,
+    },
+    B: {
+      open: require('../assets/sprites/hero/jobs3/magicSupport_B_open.png'),
+      middle: require('../assets/sprites/hero/jobs3/magicSupport_B_middle.png'),
+      click: require('../assets/sprites/hero/jobs3/magicSupport_B_click.png'),
+      openAspectRatio: 359 / 734,
+      middleAspectRatio: 487 / 664,
+      clickAspectRatio: 365 / 734,
+    },
+  },
+};
+
+// 取得目前這個玩家該顯示的勇者美術(學生/一階/二階/三階),戰鬥畫面(HeroWalkSprite)跟裝備
 // 分頁的角色預覽(EquipmentPanel)共用同一份資料跟挑選邏輯,不必各自維護一份 require() 表。
+// 四階美術尚未處理完,currentTier>=3 暫時統一顯示三階圖,等四階圖處理好再另外拆一層判斷。
 export function useHeroArt(): HeroArt {
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const archetype = useGameState((state) => state.job.archetype);
@@ -218,9 +331,11 @@ export function useHeroArt(): HeroArt {
   const currentTier = getCurrentTier(level);
   return !hasChosenJob
     ? STUDENT_ART
-    : currentTier >= 2
-      ? TIER2_ART[archetype][branch]
-      : (JOB_ART[archetype] ?? STUDENT_ART);
+    : currentTier >= 3
+      ? TIER3_ART[archetype][branch]
+      : currentTier === 2
+        ? TIER2_ART[archetype][branch]
+        : (JOB_ART[archetype] ?? STUDENT_ART);
 }
 
 interface HeroWalkSpriteProps {
