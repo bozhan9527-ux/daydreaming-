@@ -496,17 +496,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  // 關閉鈕改成參考UI設計圖的紅色圓鈕(彈窗右上角的 X),取代原本跟面板同色、不容易一眼找到的
+  // 深灰按鈕。
   modalCloseButton: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#2a2a35',
+    backgroundColor: '#8a2f2f',
+    borderWidth: 1,
+    borderColor: '#d6a23a',
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalCloseLabel: {
     color: '#f2f2f2',
     fontSize: 14,
+    fontWeight: '700',
   },
   modalBody: {
     flexGrow: 0,
