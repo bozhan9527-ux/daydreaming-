@@ -369,8 +369,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0f0f14',
   },
-  // 內容量壓在單一手機螢幕塞得下,正常情況不需要滑動,但外層容器維持 ScrollView
-  // (見上面 JSX 的註解)——這裡不能加 flex:1,contentContainerStyle 要讓內容照自然高度排列。
+  // flexGrow:1 讓內容不足一個螢幕高時,ScrollView 還是把剩餘空間分給下面的 resultBoxWrap
+  // (見該樣式註解),螢幕較高的裝置不會在 TabBar 下方留一大塊空白;內容超過螢幕高度時
+  // flexGrow 不影響捲動行為,ScrollView 照樣正常滑動。
   container: {
     alignItems: 'center',
     backgroundColor: '#0f0f14',
@@ -378,19 +379,23 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
     paddingHorizontal: 12,
+    flexGrow: 1,
   },
   title: {
     fontSize: 20,
     color: '#f2f2f2',
   },
-  // 縮小+加外框:原本100px高、沒有邊框的空白區塊,現在收窄高度並加卡片邊框,
-  // 騰出來的高度讓整頁能塞進一個手機螢幕不用滾動。
+  // 彩蛋反應框吃掉 container 的剩餘高度(flex:1)——裝置螢幕比內容自然高度還高時,
+  // 底下 MainVisual/TabBar 維持原本大小跟間距不變,多出來的空間全部分給這個框長高,
+  // 不會在 TabBar 下方留一片空黑。內容本身還是置中,框變高只是上下留白變多。
   resultBoxWrap: {
     width: '100%',
     maxWidth: 280,
+    flex: 1,
   },
   resultBox: {
     width: '100%',
+    flex: 1,
     minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',

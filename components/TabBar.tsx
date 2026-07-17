@@ -39,10 +39,11 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, attention, onSelec
           <Fragment key={tab.id}>
             {tab.id === 'ascension' && <View style={styles.divider} />}
             <Pressable
-              style={[
+              style={({ pressed }) => [
                 styles.tab,
                 active && styles.tabActive,
-                active && { borderColor: tab.accentColor },
+                active && { borderColor: tab.accentColor, shadowColor: tab.accentColor },
+                pressed && styles.tabPressed,
                 !unlocked && styles.tabLocked,
               ]}
               onPress={() => {
@@ -95,11 +96,17 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#2a2a35',
-    // 固定佔位的透明邊框:啟用時邊框顏色換成該分頁的識別色(見 accentColor),沒有這個
-    // 佔位的話啟用/取消瞬間會因為邊框從0變2px而讓按鈕尺寸跳動。
+    backgroundColor: '#2a2432',
+    // 固定佔位的邊框:啟用時邊框顏色換成該分頁的識別色(見 accentColor),沒有這個
+    // 佔位的話啟用/取消瞬間會因為邊框從0變2px而讓按鈕尺寸跳動。平常是低調的青銅色邊框
+    // (呼應參考圖的「主框架」色),不是完全透明——沒選取的分頁也要看得出是個「畫好框的按鈕」。
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: '#4a3f30',
+  },
+  // 按下瞬間的回饋(參考圖「按下 PRESSED」狀態):背景再壓暗一階,純視覺回饋不用額外邏輯,
+  // Pressable 的 pressed 參數是 RN 內建能力。
+  tabPressed: {
+    backgroundColor: '#1c1922',
   },
   // 固定高度讓不同 pixelSize 的圖示(裝備/技能放大、圖鑑縮小)都能置中,
   // 底下的文字標籤才會對齊同一條線,不會因圖示大小不同而高低不一。
@@ -131,8 +138,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#17171f',
   },
+  // 選取狀態(參考圖「選取 SELECTED」):除了邊框換成識別色,外加一圈同色發光陰影——
+  // shadowColor 在 iOS/web 生效,elevation 是 Android 的等效寫法,兩個都給才能跨平台一致。
   tabActive: {
-    backgroundColor: '#4a4456',
+    backgroundColor: '#3d3450',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    elevation: 6,
   },
   tabLocked: {
     opacity: 0.4,
