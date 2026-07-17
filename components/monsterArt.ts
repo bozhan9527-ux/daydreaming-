@@ -24,9 +24,11 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 376 / 308,
     windupAspectRatio: 401 / 203,
     strikeAspectRatio: 538 / 255,
+    scale: 0.5,
   },
-  // 蝙蝠/甲蟲/哥布林/狼(flying/insect/biped/quadruped)體型設定上比其他原型小一號,
-  // 縮小成 0.5 倍讓牠們在畫面上看起來確實比較嬌小,不是跟其他怪物同一個量級。
+  // 史萊姆/蝙蝠/甲蟲/香菇/幼龍/哥布林/狼(blob/flying/insect/fungal/dragon/biped/quadruped)
+  // 體型設定上比其他原型小一號,縮小成 0.5 倍讓牠們在畫面上看起來確實比較嬌小,
+  // 不是跟其他怪物同一個量級。
   flying: {
     idle: require('../assets/sprites/monsters/ai/flying_open.png'),
     windup: require('../assets/sprites/monsters/ai/flying_middle.png'),
@@ -52,6 +54,7 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 413 / 374,
     windupAspectRatio: 401 / 312,
     strikeAspectRatio: 496 / 307,
+    scale: 0.5,
   },
   undead: {
     idle: require('../assets/sprites/monsters/ai/undead_open.png'),
@@ -76,6 +79,7 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 344 / 462,
     windupAspectRatio: 365 / 453,
     strikeAspectRatio: 508 / 411,
+    scale: 0.5,
   },
   quadruped: {
     idle: require('../assets/sprites/monsters/ai/quadruped_open.png'),
