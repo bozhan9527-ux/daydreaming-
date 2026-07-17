@@ -470,13 +470,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
+  // 邊框套參考UI設計圖的「彈窗 POPUP WINDOW」樣式:青銅色框線(主框架色)取代原本近乎看不見的
+  // 深灰框,頂部邊框加粗到 3px 才看得出畫了一道框,不是隨機的 1px 分隔線。
   modalSheet: {
     maxHeight: '90%',
     backgroundColor: '#17171f',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    borderTopWidth: 1,
-    borderColor: '#3a3a45',
+    borderTopWidth: 3,
+    borderLeftWidth: 2,
+    borderRightWidth: 2,
+    borderColor: '#59462b',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -484,8 +488,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderColor: '#2a2a35',
+    borderBottomWidth: 2,
+    borderColor: '#59462b',
   },
   modalTitle: {
     color: '#f2f2f2',
@@ -528,8 +532,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     backgroundColor: '#17171f',
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#3a3a45',
+    borderWidth: 2,
+    borderColor: '#59462b',
   },
   offlineModalText: {
     color: '#c9a94f',

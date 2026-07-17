@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     gap: 2,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#3a3a45',
+    borderColor: '#59462b',
     backgroundColor: '#1c1c24',
     alignItems: 'center',
     justifyContent: 'center',
@@ -407,11 +407,18 @@ const styles = StyleSheet.create({
     fontSize: 8,
     textAlign: 'center',
   },
+  // 已裝備的插槽邊框換成強調色(呼應參考UI設計圖裝備欄位的稀有度金框語言),空插槽維持
+  // 青銅色框,一眼就能分辨「這格有沒有裝東西」。
   slotButtonFilled: {
-    borderColor: '#6ab0e0',
+    borderColor: '#d6a23a',
   },
   slotButtonActive: {
-    backgroundColor: '#4a4456',
+    backgroundColor: '#3d3450',
+    shadowColor: '#d6a23a',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    elevation: 5,
   },
   hint: {
     color: '#8a8a95',
