@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useGameState } from '../hooks/useGameState';
+
+const GEAR_ICON = require('../assets/sprites/ui/icon_gear.png');
 
 // 設定入口刻意不放進底部8分頁(那邊已經滿了)、也不塞進頂部資源列(TopResourceBar.tsx刻意
 // 只放3顆藥丸,見該檔案的設計取捨)——改成獨立的浮動齒輪按鈕,跟 DailyQuestBadge/
@@ -25,7 +27,7 @@ export function SettingsButton() {
   return (
     <>
       <Pressable style={styles.button} onPress={() => setOpen(true)}>
-        <Text style={styles.icon}>⚙</Text>
+        <Image source={GEAR_ICON} style={styles.icon} resizeMode="contain" />
       </Pressable>
 
       <Modal visible={open} animationType="fade" transparent onRequestClose={close}>
@@ -95,8 +97,8 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   icon: {
-    fontSize: 15,
-    color: '#c8c8d0',
+    width: 20,
+    height: 20,
   },
   backdrop: {
     position: 'absolute',

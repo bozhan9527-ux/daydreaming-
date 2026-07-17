@@ -1,8 +1,12 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+
+const COIN_ICON = require('../assets/sprites/ui/icon_coin.png');
+const SKILLBOOK_ICON = require('../assets/sprites/ui/icon_skillbook.png');
 
 // 頂部資源列:呼應參考圖「畫面最上方就看得到等級/金幣,不用往下滑」的資訊層級——
 // 藥丸狀徽章,金幣旁邊留一個視覺上的強調點(呼應參考圖金幣旁的「+」按鈕位置),
-// 但這裡沒有付費儲值,所以不放真的「+」按鈕,只維持同樣的徽章視覺語言。
+// 但這裡沒有付費儲值,所以不放真的「+」按鈕,只維持同樣的徽章視覺語言。金幣/技能書
+// 換成使用者提供的 UI 素材圖示(取代原本的純色圓點),等級沒有對應素材,維持圓點。
 interface TopResourceBarProps {
   level: number;
   coins: number;
@@ -23,11 +27,11 @@ export function TopResourceBar({ level, coins, skillBooks, onPressLevel }: TopRe
         <Text style={styles.pillText}>Lv.{level}</Text>
       </Pressable>
       <View style={styles.pill}>
-        <View style={[styles.dot, styles.coinDot]} />
+        <Image source={COIN_ICON} style={styles.icon} resizeMode="contain" />
         <Text style={styles.pillText}>{coins.toLocaleString()}</Text>
       </View>
       <View style={styles.pill}>
-        <View style={[styles.dot, styles.skillBookDot]} />
+        <Image source={SKILLBOOK_ICON} style={styles.icon} resizeMode="contain" />
         <Text style={styles.pillText}>技能書 {skillBooks}</Text>
       </View>
     </View>
@@ -59,11 +63,9 @@ const styles = StyleSheet.create({
   levelDot: {
     backgroundColor: '#6ab0e0',
   },
-  coinDot: {
-    backgroundColor: '#c9a94f',
-  },
-  skillBookDot: {
-    backgroundColor: '#8fbfe0',
+  icon: {
+    width: 16,
+    height: 16,
   },
   pillText: {
     color: '#f2f2f2',

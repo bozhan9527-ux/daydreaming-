@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+
+const GIFT_ICON = require('../assets/sprites/ui/icon_gift.png');
 
 import {
   canClaimDailyQuest,
@@ -114,6 +116,7 @@ export function DailyQuestBadge() {
         style={[styles.badge, claimableCount > 0 && styles.badgeReady]}
         onPress={() => setExpanded((prev) => !prev)}
       >
+        <Image source={GIFT_ICON} style={styles.giftIcon} resizeMode="contain" />
         <Text style={styles.title}>任務</Text>
         <Text style={styles.progress}>
           {claimedCount}/{allRows.length}
@@ -162,6 +165,10 @@ const styles = StyleSheet.create({
   badgeReady: {
     borderColor: '#c9a94f',
     backgroundColor: 'rgba(42, 36, 20, 0.92)',
+  },
+  giftIcon: {
+    width: 18,
+    height: 18,
   },
   title: {
     color: '#c9c9d2',

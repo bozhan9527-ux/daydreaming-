@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { isTabUnlocked, tabUnlockLevel } from '../game/onboarding';
 import { getTabIcon } from '../game/sprites/tabIcons';
@@ -7,6 +7,7 @@ import { TabAttentionFlags } from '../game/tabAttention';
 import { useToast } from '../hooks/useToast';
 import { PanelTab } from './panelTabs';
 import { PixelSprite } from './PixelSprite';
+import { TAB_ICON_ART, TAB_LOCK_ICON } from './tabIconArt';
 
 interface TabBarProps {
   tabs: PanelTab[];
@@ -53,8 +54,13 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, attention, onSelec
               }}
             >
               <View style={styles.iconBox}>
-                <PixelSprite frame={frame} palette={palette} pixelSize={3} />
+                {TAB_ICON_ART[tab.id] ? (
+                  <Image source={TAB_ICON_ART[tab.id]} style={styles.iconArt} resizeMode="contain" />
+                ) : (
+                  <PixelSprite frame={frame} palette={palette} pixelSize={3} />
+                )}
                 {showDot && <View style={styles.attentionDot} />}
+                {!unlocked && <Image source={TAB_LOCK_ICON} style={styles.lockIcon} resizeMode="contain" />}
               </View>
               <Text style={styles.label} numberOfLines={unlocked ? 1 : 2}>
                 {unlocked ? tab.label : lockedLabel}
@@ -101,6 +107,15 @@ const styles = StyleSheet.create({
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconArt: {
+    width: 32,
+    height: 32,
+  },
+  lockIcon: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
   },
   // 提醒角標:掛在圖示右上角的小紅點,只表示「這個分頁有事可做」,不帶數字——
   // 數字會逼玩家去對帳(算出來的角標值跟玩家腦中的計算不一致時反而變成困惑來源),
