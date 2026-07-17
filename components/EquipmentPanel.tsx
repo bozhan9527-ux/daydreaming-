@@ -11,6 +11,7 @@ import {
   getEquippableItemsForSlot,
   getIdentifyCost,
   getItemById,
+  getItemRarityColor,
   getSubstatTotals,
   isItemUnlocked,
   ItemInstanceData,
@@ -227,10 +228,16 @@ export function EquipmentPanel() {
     const iconColor = slotItem ? slotItem.color : EMPTY_ICON_COLOR;
     const emptySlotIcon = getEquipmentSlotIcon(slot);
     const active = slot === selectedSlot;
+    // 已裝備插槽邊框換成 getItemRarityColor(依 bracket 分四色,見 game/equipment.ts),
+    // 呼應參考UI設計圖的稀有度框系統;空插槽維持 styles.slotButton 預設的青銅框。
     return (
       <Pressable
         key={slot}
-        style={[styles.slotButton, slotItem && styles.slotButtonFilled, active && styles.slotButtonActive]}
+        style={[
+          styles.slotButton,
+          slotItem && { borderColor: getItemRarityColor(slotItem.bracket) },
+          active && styles.slotButtonActive,
+        ]}
         onPress={() => setSelectedSlot(slot)}
       >
         {slotItem ? (
@@ -406,11 +413,6 @@ const styles = StyleSheet.create({
     color: '#8a8a95',
     fontSize: 8,
     textAlign: 'center',
-  },
-  // 已裝備的插槽邊框換成強調色(呼應參考UI設計圖裝備欄位的稀有度金框語言),空插槽維持
-  // 青銅色框,一眼就能分辨「這格有沒有裝東西」。
-  slotButtonFilled: {
-    borderColor: '#d6a23a',
   },
   slotButtonActive: {
     backgroundColor: '#3d3450',

@@ -190,6 +190,32 @@ const ARCHETYPES: Archetype[] = [
 
 const BRACKET_COUNT = 50;
 
+// 裝備本身沒有獨立的稀有度標籤(平衡數值走 bracket 連續分佈,不是離散稀有度),但「已裝備」
+// 的介面呈現借用參考UI設計圖的稀有度四色框(普通/稀有/史詩/傳說),把 bracket(1~50)切成
+// 四等分對應四種顏色——純粹是視覺分級,不影響任何數值計算,沒有 bracket 的道具(Lv10~29
+// 空窗期免費款)視覺上當作最低一級。
+export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+const RARITY_BORDER_COLOR: Record<ItemRarity, string> = {
+  common: '#8a8a95',
+  rare: '#4a8de6',
+  epic: '#a66bff',
+  legendary: '#f2c15a',
+};
+
+export function getItemRarity(bracket: number | undefined): ItemRarity {
+  if (bracket === undefined) return 'common';
+  const t = (bracket - 1) / (BRACKET_COUNT - 1);
+  if (t < 0.25) return 'common';
+  if (t < 0.5) return 'rare';
+  if (t < 0.75) return 'epic';
+  return 'legendary';
+}
+
+export function getItemRarityColor(bracket: number | undefined): string {
+  return RARITY_BORDER_COLOR[getItemRarity(bracket)];
+}
+
 // 同一階(title+baseNoun)裡的 10 個等級檔,原本只靠「·LvN」數字區分,加一個品質詞前綴
 // 讓名稱本身也看得出差異,不用點進去看等級數字才知道差在哪。依 bracket 循環,不特別對齊
 // 職業階級邊界(職業階級已經用 title 表現了,這裡純粹補等級檔顆粒度)。

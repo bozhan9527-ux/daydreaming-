@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { EquipmentSlot, getItemById, SLOT_Z_ORDER } from '../game/equipment';
+import { EquipmentSlot, getItemById, getItemRarityColor, SLOT_Z_ORDER } from '../game/equipment';
 import { useGameState } from '../hooks/useGameState';
 import { ItemIcon } from './ItemIcon';
 
@@ -46,7 +46,7 @@ export function EquippedItemsStrip() {
         }
 
         return (
-          <View key={slot} style={styles.tile}>
+          <View key={slot} style={[styles.tile, { borderColor: getItemRarityColor(item.bracket) }]}>
             <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={AI_ICON_HEIGHT} />
             <View style={styles.levelBadge}>
               <Text style={styles.levelText}>Lv{item.requiredLevel ?? 1}</Text>
