@@ -305,18 +305,22 @@ export function BattleScene() {
 
       {currentEncounter && (
         <View key={fightStartedAt ?? 'none'} style={styles.monsterSlot}>
-          <LegendaryGlow active={currentEncounter.rarity === 'legendary'} />
-          <MonsterHitReaction active={!!currentEncounter}>
-            {getMonsterArt(currentEncounter.monster.id) ? (
-              <MonsterSprite monsterId={currentEncounter.monster.id} height={MONSTER_TARGET_HEIGHT} />
-            ) : (
-              <PixelSprite
-                frame={getMonsterFrame(currentEncounter.monster.id).frame}
-                palette={getMonsterFrame(currentEncounter.monster.id).palette}
-                pixelSize={MONSTER_TARGET_HEIGHT / getMonsterFrame(currentEncounter.monster.id).frame.length}
-              />
-            )}
-          </MonsterHitReaction>
+          {/* 光暈只包住怪物本體這個相對定位容器,不含下面的進度條——形狀才會是貼合怪物的
+              正圓,不會因為算進進度條高度而變成一顆扁橢圓。 */}
+          <View style={styles.monsterArtWrap}>
+            <LegendaryGlow active={currentEncounter.rarity === 'legendary'} />
+            <MonsterHitReaction active={!!currentEncounter}>
+              {getMonsterArt(currentEncounter.monster.id) ? (
+                <MonsterSprite monsterId={currentEncounter.monster.id} height={MONSTER_TARGET_HEIGHT} />
+              ) : (
+                <PixelSprite
+                  frame={getMonsterFrame(currentEncounter.monster.id).frame}
+                  palette={getMonsterFrame(currentEncounter.monster.id).palette}
+                  pixelSize={MONSTER_TARGET_HEIGHT / getMonsterFrame(currentEncounter.monster.id).frame.length}
+                />
+              )}
+            </MonsterHitReaction>
+          </View>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
@@ -393,12 +397,18 @@ const styles = StyleSheet.create({
     bottom: 20,
     alignItems: 'center',
   },
+  monsterArtWrap: {
+    position: 'relative',
+  },
+  // 光暈原本往外擴 12px,但 monsterSlot 是貼著 scene(固定 SCENE_HEIGHT、overflow:hidden)
+  // 底部站位,滿高度的怪物(例如魔王)頭頂只剩幾 px 空間,擴 12px 會被 scene 邊界切掉一截、
+  // 看起來像美術圖破損。縮小到 4px,滿高度怪物也留得住完整光暈。
   legendaryGlow: {
     position: 'absolute',
-    top: -12,
-    left: -12,
-    right: -12,
-    bottom: -12,
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
     borderRadius: 999,
     backgroundColor: LEGENDARY_GLOW_COLOR,
   },
