@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     marginVertical: 6,
-    backgroundColor: '#3a3a45',
+    backgroundColor: '#59462b',
   },
   tab: {
     flex: 1,

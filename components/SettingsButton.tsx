@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#2a2a35',
+    backgroundColor: '#59462b',
   },
   resetButton: {
     paddingVertical: 8,
