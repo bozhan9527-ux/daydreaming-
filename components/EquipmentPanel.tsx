@@ -12,6 +12,7 @@ import {
   getIdentifyCost,
   getItemById,
   getItemRarity,
+  getRerollCost,
   getSubstatTotals,
   isItemUnlocked,
   ItemInstanceData,
@@ -191,6 +192,8 @@ export function EquipmentPanel() {
   const equip = useGameState((state) => state.equip);
   const unequip = useGameState((state) => state.unequip);
   const purchaseItem = useGameState((state) => state.purchaseItem);
+  const identifyItem = useGameState((state) => state.identifyItem);
+  const rerollEquipmentSubstats = useGameState((state) => state.rerollEquipmentSubstats);
   const showToast = useToast((state) => state.show);
 
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
@@ -231,6 +234,28 @@ export function EquipmentPanel() {
       }
     }
     showToast(formatItemStats(item, useGameState.getState().itemInstances[item.id]));
+  }
+
+  // 鑑定/重擲原本在背包分頁,搬過來跟「穿戴」卡片放一起——這兩個操作只對身上這件裝備有意義
+  // (背包裡沒穿的款式不需要鑑定/重擲),放在正在看的這張卡片旁邊比切去背包分頁再找更直覺。
+  function handleIdentify(item: EquipmentItem) {
+    const cost = getIdentifyCost(item);
+    if (coins < cost) {
+      showToast(`金幣不夠鑑定 ${item.name}(需要 ${cost} 金幣)`);
+      return;
+    }
+    identifyItem(item.id);
+    showToast(`鑑定完成:${item.name}\n${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
+  }
+
+  function handleReroll(item: EquipmentItem) {
+    const cost = getRerollCost(item);
+    if (coins < cost) {
+      showToast(`金幣不夠重擲 ${item.name}(需要 ${cost} 金幣)`);
+      return;
+    }
+    rerollEquipmentSubstats(item.id);
+    showToast(`重擲完成:${item.name}\n${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
   }
 
   function renderSlotButton(slot: EquipmentSlot) {
@@ -353,6 +378,24 @@ export function EquipmentPanel() {
               <Text style={styles.wornItemBonus}>
                 {formatBonus(currentItem.bonus.stat, getEnhancedBonusValue(currentItem, itemInstances[currentItem.id]))}
               </Text>
+              {(() => {
+                const instance = itemInstances[currentItem.id];
+                const canIdentify = instance !== undefined && !instance.identified;
+                return (
+                  <>
+                    {canIdentify && (
+                      <Pressable style={styles.identifyRow} onPress={() => handleIdentify(currentItem)}>
+                        <Text style={styles.identifyLabel}>🔍 鑑定隱藏素質({getIdentifyCost(currentItem)} 金幣)</Text>
+                      </Pressable>
+                    )}
+                    {instance !== undefined && (
+                      <Pressable style={styles.identifyRow} onPress={() => handleReroll(currentItem)}>
+                        <Text style={styles.identifyLabel}>🎲 重擲隨機/隱藏素質({getRerollCost(currentItem)} 金幣)</Text>
+                      </Pressable>
+                    )}
+                  </>
+                );
+              })()}
               <Pressable style={styles.unequipButton} onPress={() => unequip(selectedSlot)}>
                 <Text style={styles.unequipLabel}>卸下</Text>
               </Pressable>
