@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype } from '../game/combat';
 import {
@@ -22,11 +22,12 @@ import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { EnhancementPanel } from './EnhancementPanel';
 import { RARITY_FRAME_PARTS } from './equipmentFrames';
+import { useHeroArt } from './HeroWalkSprite';
 import { ItemIcon } from './ItemIcon';
 import { NineSliceFrame } from './NineSliceFrame';
+import { OrnateFrame } from './OrnateFrame';
 import { PixelSprite } from './PixelSprite';
 import { SocketPanel } from './SocketPanel';
-import { useHeroArt } from './HeroWalkSprite';
 
 // 裝備分頁的角色預覽:跟戰鬥畫面共用同一份 AI 美術(useHeroArt),平常顯示 open,點一下
 // 短暫換成 middle(來源三聯圖中間那張動作格)再彈回來——跟 HeroWalkSprite 點擊顯示 click
@@ -195,6 +196,10 @@ export function EquipmentPanel() {
   const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
   const [subView, setSubView] = useState<SubView>('worn');
   const [shopStatFilter, setShopStatFilter] = useState<StatFilter>('all');
+  // 點商店清單裡的道具原本會直接買/裝上去,只靠事後跳出的 toast 通知——玩家點下去前完全
+  // 看不到屬性,等於盲猜。改成先跳出預覽卡片顯示完整屬性,玩家自己按「裝備」或「卸下」才會
+  // 真的改動裝備狀態,pickItem 的購買/裝備邏輯不變,只是延後到按鈕按下才觸發。
+  const [previewItem, setPreviewItem] = useState<EquipmentItem | null>(null);
 
   const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const substatTotals = getSubstatTotals(equipment, itemInstances);
@@ -267,7 +272,12 @@ export function EquipmentPanel() {
   function renderShopItemRow(item: EquipmentItem) {
     const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
     return (
-      <Pressable key={item.id} style={[styles.itemRow, locked && styles.itemRowLocked]} onPress={() => pickItem(item)} disabled={locked}>
+      <Pressable
+        key={item.id}
+        style={[styles.itemRow, locked && styles.itemRowLocked]}
+        onPress={() => setPreviewItem(item)}
+        disabled={locked}
+      >
         <View style={styles.rowLeft}>
           <View style={styles.iconWrap}>
             <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
@@ -382,6 +392,55 @@ export function EquipmentPanel() {
           </View>
         </>
       )}
+
+      {previewItem && (() => {
+        const isEquipped = equipment[selectedSlot] === previewItem.id;
+        const owned = isItemUnlocked(unlockedItemIds, previewItem.id);
+        const statLines = formatItemStats(previewItem, itemInstances[previewItem.id]).split('\n');
+        return (
+          <Modal visible transparent animationType="fade" onRequestClose={() => setPreviewItem(null)}>
+            <Pressable style={styles.previewBackdrop} onPress={() => setPreviewItem(null)} />
+            <View style={styles.previewCard}>
+              <OrnateFrame />
+              <View style={styles.previewIconWrap}>
+                <ItemIcon item={previewItem} color={previewItem.color} pixelSize={ICON_PIXEL_SIZE * 2} aiHeight={44} />
+              </View>
+              {statLines.map((line, i) => (
+                <Text key={i} style={i === 0 ? styles.previewName : styles.previewStatLine}>
+                  {line}
+                </Text>
+              ))}
+              <View style={styles.previewActions}>
+                {isEquipped ? (
+                  <Pressable
+                    style={styles.previewUnequipButton}
+                    onPress={() => {
+                      unequip(selectedSlot);
+                      setPreviewItem(null);
+                    }}
+                  >
+                    <Text style={styles.previewActionLabel}>卸下</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={[styles.previewEquipButton, !owned && coins < previewItem.price && styles.previewEquipButtonDisabled]}
+                    disabled={!owned && coins < previewItem.price}
+                    onPress={() => {
+                      pickItem(previewItem);
+                      setPreviewItem(null);
+                    }}
+                  >
+                    <Text style={styles.previewActionLabel}>{owned ? '裝備' : `購買並裝備(${previewItem.price}金幣)`}</Text>
+                  </Pressable>
+                )}
+                <Pressable style={styles.previewCancelButton} onPress={() => setPreviewItem(null)}>
+                  <Text style={styles.previewCancelLabel}>取消</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
+        );
+      })()}
     </View>
   );
 }
@@ -611,5 +670,81 @@ const styles = StyleSheet.create({
   identifyLabel: {
     color: '#c9a94f',
     fontSize: 10,
+  },
+  previewBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  previewCard: {
+    position: 'absolute',
+    top: '50%',
+    left: 16,
+    right: 16,
+    transform: [{ translateY: -140 }],
+    maxWidth: 300,
+    alignSelf: 'center',
+    backgroundColor: '#17171f',
+    padding: 20,
+    gap: 4,
+    alignItems: 'center',
+  },
+  previewIconWrap: {
+    marginBottom: 6,
+  },
+  previewName: {
+    color: '#d6a23a',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  previewStatLine: {
+    color: '#e8e8ee',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  previewActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    width: '100%',
+  },
+  previewEquipButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#4a4456',
+  },
+  previewEquipButtonDisabled: {
+    opacity: 0.4,
+  },
+  previewUnequipButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#8a2f2f',
+  },
+  previewActionLabel: {
+    color: '#f2f2f2',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  previewCancelButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#2a2a35',
+  },
+  previewCancelLabel: {
+    color: '#8a8a95',
+    fontSize: 13,
   },
 });
