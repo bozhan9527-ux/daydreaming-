@@ -11,7 +11,7 @@ import {
   getEquippableItemsForSlot,
   getIdentifyCost,
   getItemById,
-  getItemRarityColor,
+  getItemRarity,
   getSubstatTotals,
   isItemUnlocked,
   ItemInstanceData,
@@ -21,6 +21,7 @@ import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { EnhancementPanel } from './EnhancementPanel';
+import { RARITY_FRAME_ART } from './equipmentFrames';
 import { ItemIcon } from './ItemIcon';
 import { PixelSprite } from './PixelSprite';
 import { SocketPanel } from './SocketPanel';
@@ -228,18 +229,17 @@ export function EquipmentPanel() {
     const iconColor = slotItem ? slotItem.color : EMPTY_ICON_COLOR;
     const emptySlotIcon = getEquipmentSlotIcon(slot);
     const active = slot === selectedSlot;
-    // 已裝備插槽邊框換成 getItemRarityColor(依 bracket 分四色,見 game/equipment.ts),
+    // 已裝備插槽邊框換成 RARITY_FRAME_ART 美術圖(依 bracket 分四色,見 game/equipment.ts),
     // 呼應參考UI設計圖的稀有度框系統;空插槽維持 styles.slotButton 預設的青銅框。
     return (
       <Pressable
         key={slot}
-        style={[
-          styles.slotButton,
-          slotItem && { borderColor: getItemRarityColor(slotItem.bracket) },
-          active && styles.slotButtonActive,
-        ]}
+        style={[styles.slotButton, slotItem && styles.slotButtonFilled, active && styles.slotButtonActive]}
         onPress={() => setSelectedSlot(slot)}
       >
+        {slotItem && (
+          <Image source={RARITY_FRAME_ART[getItemRarity(slotItem.bracket)]} style={styles.slotFrameArt} resizeMode="stretch" />
+        )}
         {slotItem ? (
           <ItemIcon item={slotItem} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
         ) : (
@@ -421,6 +421,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.9,
     shadowRadius: 5,
     elevation: 5,
+  },
+  // 已裝備插槽的邊框改用 RARITY_FRAME_ART 美術圖蓋掉,不用 borderWidth 畫框。
+  slotButtonFilled: {
+    borderWidth: 0,
+  },
+  slotFrameArt: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   hint: {
     color: '#8a8a95',

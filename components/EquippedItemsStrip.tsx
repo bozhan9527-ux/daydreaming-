@@ -1,7 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
-import { EquipmentSlot, getItemById, getItemRarityColor, SLOT_Z_ORDER } from '../game/equipment';
+import { EquipmentSlot, getItemById, getItemRarity, SLOT_Z_ORDER } from '../game/equipment';
 import { useGameState } from '../hooks/useGameState';
+import { RARITY_FRAME_ART } from './equipmentFrames';
 import { ItemIcon } from './ItemIcon';
 
 // 9 插槽 + 8 個間距要在最窄的手機寬度(扣掉左右 padding 後淨寬約 288px)也能排成一行,
@@ -46,7 +47,8 @@ export function EquippedItemsStrip() {
         }
 
         return (
-          <View key={slot} style={[styles.tile, { borderColor: getItemRarityColor(item.bracket) }]}>
+          <View key={slot} style={[styles.tile, styles.tileFilled]}>
+            <Image source={RARITY_FRAME_ART[getItemRarity(item.bracket)]} style={styles.frameArt} resizeMode="stretch" />
             <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={AI_ICON_HEIGHT} />
             <View style={styles.levelBadge}>
               <Text style={styles.levelText}>Lv{item.requiredLevel ?? 1}</Text>
@@ -82,6 +84,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  // 已裝備插槽的邊框改用 RARITY_FRAME_ART 的美術圖蓋掉,不用 borderWidth 畫框(避免圖片邊框
+  // 外面又疊一圈 StyleSheet 邊框,看起來雙重疊框)。
+  tileFilled: {
+    borderWidth: 0,
+  },
+  frameArt: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   tileEmpty: {
     borderStyle: 'dashed',
