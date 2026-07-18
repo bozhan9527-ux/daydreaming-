@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     padding: 3,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#3a3a45',
+    borderColor: '#59462b',
     borderStyle: 'dashed',
   },
   socketOption: {

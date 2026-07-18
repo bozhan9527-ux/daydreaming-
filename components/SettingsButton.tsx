@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#1c1c24',
     borderWidth: 1,
-    borderColor: '#3a3a45',
+    borderColor: '#59462b',
     zIndex: 20,
   },
   icon: {

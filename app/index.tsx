@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#3a3a45',
+    borderColor: '#59462b',
     backgroundColor: 'rgba(28, 28, 36, 0.6)',
     paddingHorizontal: 10,
     paddingVertical: 6,

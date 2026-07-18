@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(23, 23, 31, 0.9)',
     borderWidth: 1,
-    borderColor: '#3a3a45',
+    borderColor: '#59462b',
   },
   badgeReady: {
     borderColor: '#c9a94f',
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(23, 23, 31, 0.95)',
     borderWidth: 1,
-    borderColor: '#3a3a45',
+    borderColor: '#59462b',
   },
   sectionLabel: {
     color: '#8a8a95',
