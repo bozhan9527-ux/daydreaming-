@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useGameState } from '../hooks/useGameState';
+import { OrnateFrame } from './OrnateFrame';
 
 const GEAR_ICON = require('../assets/sprites/ui/icon_gear.png');
 
@@ -33,6 +34,7 @@ export function SettingsButton() {
       <Modal visible={open} animationType="fade" transparent onRequestClose={close}>
         <Pressable style={styles.backdrop} onPress={close} />
         <View style={styles.card}>
+          <OrnateFrame />
           <View style={styles.header}>
             <Text style={styles.title}>設定</Text>
             <Pressable style={styles.closeButton} onPress={close}>
@@ -117,9 +119,6 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     alignSelf: 'center',
     backgroundColor: '#17171f',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#59462b',
     padding: 14,
     gap: 10,
   },

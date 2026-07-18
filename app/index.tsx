@@ -12,6 +12,7 @@ import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
 import { HeroHealthBar } from '../components/HeroHealthBar';
 import { MainVisual } from '../components/MainVisual';
+import { OrnateFrame } from '../components/OrnateFrame';
 import { PANEL_TABS } from '../components/panelTabs';
 import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
@@ -261,6 +262,7 @@ export default function HomeScreen() {
       <Modal visible={showOfflineModal} animationType="fade" transparent onRequestClose={() => setOfflineModalDismissed(true)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setOfflineModalDismissed(true)} />
         <View style={styles.offlineModalCard}>
+          <OrnateFrame />
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>離線收益</Text>
             <Pressable style={styles.modalCloseButton} onPress={() => setOfflineModalDismissed(true)}>
@@ -277,6 +279,7 @@ export default function HomeScreen() {
       <Modal visible={showDailyBonusModal} animationType="fade" transparent onRequestClose={() => setDailyBonusModalDismissed(true)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setDailyBonusModalDismissed(true)} />
         <View style={styles.offlineModalCard}>
+          <OrnateFrame />
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>每日登入獎勵</Text>
             <Pressable style={styles.modalCloseButton} onPress={() => setDailyBonusModalDismissed(true)}>
@@ -294,6 +297,7 @@ export default function HomeScreen() {
       <Modal visible={showCareerOverview} animationType="fade" transparent onRequestClose={() => setShowCareerOverview(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setShowCareerOverview(false)} />
         <View style={styles.offlineModalCard}>
+          <OrnateFrame />
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>生涯總覽</Text>
             <Pressable style={styles.modalCloseButton} onPress={() => setShowCareerOverview(false)}>
@@ -537,8 +541,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     backgroundColor: '#17171f',
     borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#59462b',
   },
   offlineModalText: {
     color: '#c9a94f',

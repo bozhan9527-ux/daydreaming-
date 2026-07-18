@@ -1,6 +1,7 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useGameState } from '../hooks/useGameState';
+import { OrnateFrame } from './OrnateFrame';
 
 // 新手引導:原本完全沒有講解核心玩法的畫面,只能靠玩家自己點進各分頁看零散的提示文字——
 // 這裡只在真正第一次啟動時彈一次(見 lib/storage.ts 的 hasSeenWelcome,舊存檔遷移時直接
@@ -17,6 +18,7 @@ export function WelcomeModal() {
     <Modal visible={!hasSeenWelcome} animationType="fade" transparent onRequestClose={dismissWelcome}>
       <View style={styles.backdrop} />
       <View style={styles.card}>
+        <OrnateFrame />
         <Text style={styles.title}>歡迎來到勇者發呆中</Text>
         <View style={styles.stepList}>
           <Text style={styles.step}>① 點擊勇者可以加快戰鬥,不點也會自動迎戰怪物</Text>
@@ -50,9 +52,6 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     alignSelf: 'center',
     backgroundColor: '#17171f',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#59462b',
     padding: 18,
     gap: 14,
   },
