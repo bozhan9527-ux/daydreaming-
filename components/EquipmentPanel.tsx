@@ -21,8 +21,9 @@ import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { EnhancementPanel } from './EnhancementPanel';
-import { RARITY_FRAME_ART } from './equipmentFrames';
+import { RARITY_FRAME_PARTS } from './equipmentFrames';
 import { ItemIcon } from './ItemIcon';
+import { NineSliceFrame } from './NineSliceFrame';
 import { PixelSprite } from './PixelSprite';
 import { SocketPanel } from './SocketPanel';
 import { useHeroArt } from './HeroWalkSprite';
@@ -113,6 +114,10 @@ const EMPTY_ICON_COLOR = '#4a4456';
 // 圖示來源(equipmentIcons.ts/weapons.ts)配合勇者本體密度提升,整張放大了3倍,
 // 這裡用 2/3 抵銷回來,維持清單/選槽按鈕原本的物理尺寸不變。
 const ICON_PIXEL_SIZE = 2 / 3;
+// 插槽按鈕是長方形(圖示+文字標籤,不是正方形),9宮格外框角落尺寸要比單純的正方形插槽小,
+// 邊框段才有足夠空間撐開,不會角落花紋直接連在一起。
+const SLOT_FRAME_CORNER = 14;
+const SLOT_FRAME_EDGE = 5;
 
 // 背包已經拆成獨立頂層分頁(見 components/InventoryPanel.tsx),這裡改收納強化跟鑲嵌
 // 兩個原本各自獨立的分頁——都是圍繞「身上穿的這件裝備」在操作,收在裝備分頁底下比較好找。
@@ -229,8 +234,9 @@ export function EquipmentPanel() {
     const iconColor = slotItem ? slotItem.color : EMPTY_ICON_COLOR;
     const emptySlotIcon = getEquipmentSlotIcon(slot);
     const active = slot === selectedSlot;
-    // 已裝備插槽邊框換成 RARITY_FRAME_ART 美術圖(依 bracket 分四色,見 game/equipment.ts),
-    // 呼應參考UI設計圖的稀有度框系統;空插槽維持 styles.slotButton 預設的青銅框。
+    // 已裝備插槽邊框換成 RARITY_FRAME_PARTS 美術圖的9宮格組合(依 bracket 分四色,見
+    // game/equipment.ts),呼應參考UI設計圖的稀有度框系統;空插槽維持 styles.slotButton
+    // 預設的青銅框。
     return (
       <Pressable
         key={slot}
@@ -238,7 +244,11 @@ export function EquipmentPanel() {
         onPress={() => setSelectedSlot(slot)}
       >
         {slotItem && (
-          <Image source={RARITY_FRAME_ART[getItemRarity(slotItem.bracket)]} style={styles.slotFrameArt} resizeMode="stretch" />
+          <NineSliceFrame
+            parts={RARITY_FRAME_PARTS[getItemRarity(slotItem.bracket)]}
+            cornerSize={SLOT_FRAME_CORNER}
+            edgeThickness={SLOT_FRAME_EDGE}
+          />
         )}
         {slotItem ? (
           <ItemIcon item={slotItem} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
@@ -422,16 +432,9 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 5,
   },
-  // 已裝備插槽的邊框改用 RARITY_FRAME_ART 美術圖蓋掉,不用 borderWidth 畫框。
+  // 已裝備插槽的邊框改用 NineSliceFrame 疊加的美術圖蓋掉,不用 borderWidth 畫框。
   slotButtonFilled: {
     borderWidth: 0,
-  },
-  slotFrameArt: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
   hint: {
     color: '#8a8a95',

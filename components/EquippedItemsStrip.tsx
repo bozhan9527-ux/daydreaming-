@@ -1,9 +1,10 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { EquipmentSlot, getItemById, getItemRarity, SLOT_Z_ORDER } from '../game/equipment';
 import { useGameState } from '../hooks/useGameState';
-import { RARITY_FRAME_ART } from './equipmentFrames';
+import { RARITY_FRAME_PARTS } from './equipmentFrames';
 import { ItemIcon } from './ItemIcon';
+import { NineSliceFrame } from './NineSliceFrame';
 
 // 9 插槽 + 8 個間距要在最窄的手機寬度(扣掉左右 padding 後淨寬約 288px)也能排成一行,
 // 不然「已裝備」跟「未裝備」款式尺寸就會因為換行而看起來不一致。28px×9 + 3px×8=276px,
@@ -12,6 +13,10 @@ const TILE_SIZE = 28;
 const ICON_PIXEL_SIZE = 0.6;
 const AI_ICON_HEIGHT = 22;
 const EMPTY_SLOT_COLOR = '#3a3a45';
+// 縮圖列格子比裝備分頁的插槽小很多(28px vs ~60px),9宮格角落尺寸也要跟著縮小,不然角落
+// 花紋會佔滿整格、擠壓掉中間的邊框段。
+const FRAME_CORNER = 10;
+const FRAME_EDGE = 4;
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   back: '背飾',
@@ -48,7 +53,7 @@ export function EquippedItemsStrip() {
 
         return (
           <View key={slot} style={[styles.tile, styles.tileFilled]}>
-            <Image source={RARITY_FRAME_ART[getItemRarity(item.bracket)]} style={styles.frameArt} resizeMode="stretch" />
+            <NineSliceFrame parts={RARITY_FRAME_PARTS[getItemRarity(item.bracket)]} cornerSize={FRAME_CORNER} edgeThickness={FRAME_EDGE} />
             <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={AI_ICON_HEIGHT} />
             <View style={styles.levelBadge}>
               <Text style={styles.levelText}>Lv{item.requiredLevel ?? 1}</Text>
@@ -85,17 +90,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  // 已裝備插槽的邊框改用 RARITY_FRAME_ART 的美術圖蓋掉,不用 borderWidth 畫框(避免圖片邊框
-  // 外面又疊一圈 StyleSheet 邊框,看起來雙重疊框)。
+  // 已裝備插槽的邊框改用 NineSliceFrame 疊加的美術圖蓋掉,不用 borderWidth 畫框(避免圖片
+  // 邊框外面又疊一圈 StyleSheet 邊框,看起來雙重疊框)。
   tileFilled: {
     borderWidth: 0,
-  },
-  frameArt: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
   tileEmpty: {
     borderStyle: 'dashed',
