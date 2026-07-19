@@ -110,6 +110,8 @@ import {
 } from '../game/weeklyChallenge';
 import { accumulateExp, autoLevelUp, calcOfflineExp, createInitialLevelState, LevelState } from '../game/leveling';
 import {
+  canCraftMaterialTier,
+  craftMaterialTier,
   createEmptyTieredMaterialCounts,
   currentMaterialTier,
   MaterialTier,
@@ -541,6 +543,10 @@ interface GameState {
   rerollEquipmentSubstats: (itemId: string) => void;
   enhanceItem: (itemId: string) => void;
   purchaseEnhanceStone: () => void;
+  // 分階合成(見 game/materials.ts):兩本前一階換一本下一階,tier 是要合成出來的目標階級
+  // (1~5,不能傳0——初階沒有更低階可以合成)。
+  craftSkillBookTier: (tier: MaterialTier) => void;
+  craftEnhanceStoneTier: (tier: MaterialTier) => void;
   purchaseGem: (gemType: GemType) => void;
   socketGem: (itemId: string, socketIndex: number, gemType: GemType) => void;
   unsocketGem: (itemId: string, socketIndex: number) => void;
@@ -1669,6 +1675,20 @@ export const useGameState = create<GameState>((set, get) => ({
     const { coins, enhanceStones } = get();
     if (coins < ENHANCE_STONE_PRICE) return;
     set({ coins: coins - ENHANCE_STONE_PRICE, enhanceStones: grantBasicMaterial(enhanceStones, 1) });
+    persist(get());
+  },
+
+  craftSkillBookTier: (tier) => {
+    const { skillBooks } = get();
+    if (!canCraftMaterialTier(tier, skillBooks)) return;
+    set({ skillBooks: craftMaterialTier(tier, skillBooks) });
+    persist(get());
+  },
+
+  craftEnhanceStoneTier: (tier) => {
+    const { enhanceStones } = get();
+    if (!canCraftMaterialTier(tier, enhanceStones)) return;
+    set({ enhanceStones: craftMaterialTier(tier, enhanceStones) });
     persist(get());
   },
 
