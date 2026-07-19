@@ -29,8 +29,6 @@ interface TaskRow {
 // 兩個徽章疊在畫面上比一個徽章裡分兩段更吵)。徽章本身還是浮在畫面右側的小按鈕(不佔主畫面
 // 高度),點一下展開/收合底下的清單,兩邊全部領完才會整個消失。
 export function DailyQuestBadge() {
-  const [expanded, setExpanded] = useState(false);
-
   const dailyKillCount = useGameState((state) => state.dailyKillCount);
   const dailyQuestClaimed = useGameState((state) => state.dailyQuestClaimed);
   const claimDailyQuest = useGameState((state) => state.claimDailyQuest);
@@ -86,7 +84,16 @@ export function DailyQuestBadge() {
   const claimableCount = allRows.filter((row) => row.canClaim).length + achievementClaimableCount;
   const allClaimed = claimedCount === allRows.length;
 
+  // 三段式收合:預設貼右邊緣只露出一個小三角形(不佔版面),點第一下往左延伸露出禮物圖示
+  // (+待領取數字角標),點第二下才整個攤開完整任務清單,第三下收回三角形。收合成一個
+  // stage 狀態機而不是兩顆獨立布林,避免「icon展開了但清單也還開著」這種不一致組合。
+  const [stage, setStage] = useState<0 | 1 | 2>(0);
+
   if (allClaimed) return null;
+
+  function advance() {
+    setStage((prev) => ((prev + 1) % 3) as 0 | 1 | 2);
+  }
 
   function renderRow(row: TaskRow) {
     return (
@@ -112,20 +119,30 @@ export function DailyQuestBadge() {
 
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
-      <Pressable
-        style={[styles.badge, claimableCount > 0 && styles.badgeReady]}
-        onPress={() => setExpanded((prev) => !prev)}
-      >
-        <Image source={GIFT_ICON} style={styles.giftIcon} resizeMode="contain" />
-        <Text style={styles.title}>任務</Text>
-        <Text style={styles.progress}>
-          {claimedCount}/{allRows.length}
-        </Text>
-        {claimableCount > 0 && <Text style={styles.claimLabel}>{claimableCount} 個待領取</Text>}
-      </Pressable>
+      {stage !== 2 && (
+        <Pressable style={styles.tabRow} onPress={advance}>
+          {stage === 1 && (
+            <View style={[styles.iconPill, claimableCount > 0 && styles.iconPillReady]}>
+              <Image source={GIFT_ICON} style={styles.giftIconSmall} resizeMode="contain" />
+              {claimableCount > 0 && (
+                <View style={styles.miniClaimBadge}>
+                  <Text style={styles.miniClaimText}>{claimableCount}</Text>
+                </View>
+              )}
+            </View>
+          )}
+          <View style={[styles.triangle, claimableCount > 0 && styles.triangleReady]} />
+        </Pressable>
+      )}
 
-      {expanded && (
+      {stage === 2 && (
         <View style={styles.panel}>
+          <Pressable style={styles.panelHeaderRow} onPress={() => setStage(0)}>
+            <Text style={styles.panelHeaderTitle}>
+              任務 {claimedCount}/{allRows.length}
+            </Text>
+            <Text style={styles.panelHeaderClose}>✕</Text>
+          </Pressable>
           <Text style={styles.sectionLabel}>每日任務</Text>
           {dailyRows.map(renderRow)}
           <Text style={styles.sectionLabel}>本週挑戰</Text>
@@ -148,44 +165,67 @@ const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
     top: 74,
-    right: 8,
+    right: 0,
     zIndex: 20,
     alignItems: 'flex-end',
   },
-  badge: {
+  tabRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 10,
+  },
+  // 三角形用 border 撐出來(RN 沒有原生三角形元件):寬高皆0的 View,右邊框設實色、上下
+  // 邊框設透明,視覺上會呈現一個尖端朝左的三角形——貼右邊緣、尖端指向畫面內側,像個可以
+  // 拉出來的標籤把手。
+  triangle: {
+    width: 0,
+    height: 0,
+    borderTopWidth: 15,
+    borderBottomWidth: 15,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderRightWidth: 14,
+    borderRightColor: '#59462b',
+  },
+  triangleReady: {
+    borderRightColor: '#c9a94f',
+  },
+  iconPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: -1,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(23, 23, 31, 0.9)',
     borderWidth: 1,
     borderColor: '#59462b',
   },
-  badgeReady: {
+  iconPillReady: {
     borderColor: '#c9a94f',
     backgroundColor: 'rgba(42, 36, 20, 0.92)',
   },
-  giftIcon: {
-    width: 18,
-    height: 18,
+  giftIconSmall: {
+    width: 16,
+    height: 16,
   },
-  title: {
-    color: '#c9c9d2',
-    fontSize: 9,
+  miniClaimBadge: {
+    position: 'absolute',
+    bottom: -3,
+    right: -3,
+    minWidth: 13,
+    paddingHorizontal: 2,
+    borderRadius: 7,
+    backgroundColor: '#c9a94f',
+    alignItems: 'center',
   },
-  progress: {
-    color: '#f2f2f2',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  claimLabel: {
-    color: '#c9a94f',
-    fontSize: 9,
+  miniClaimText: {
+    color: '#1c1c24',
+    fontSize: 8,
     fontWeight: '700',
   },
   panel: {
     marginTop: 4,
+    marginRight: 8,
     width: 200,
     gap: 4,
     padding: 8,
@@ -193,6 +233,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(23, 23, 31, 0.95)',
     borderWidth: 1,
     borderColor: '#59462b',
+  },
+  panelHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  panelHeaderTitle: {
+    color: '#f2f2f2',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  panelHeaderClose: {
+    color: '#8a8a95',
+    fontSize: 12,
   },
   sectionLabel: {
     color: '#8a8a95',

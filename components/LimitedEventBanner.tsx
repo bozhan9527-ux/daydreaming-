@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getActiveLimitedEvent, getLimitedEventEndsAt } from '../game/limitedEvent';
 
@@ -30,21 +30,45 @@ export function LimitedEventBanner() {
     return () => clearInterval(id);
   }, []);
 
+  // 三段式收合,跟右側 DailyQuestBadge 對稱(見該檔案註解)——貼左邊緣的小三角形,點第一下
+  // 往右延伸露出🎉圖示,點第二下攤開完整活動內容,第三下收回三角形。
+  const [stage, setStage] = useState<0 | 1 | 2>(0);
+
   const now = Date.now();
   const event = getActiveLimitedEvent(now);
   if (!event) return null;
 
   const remainingMs = getLimitedEventEndsAt(now) - now;
 
+  function advance() {
+    setStage((prev) => ((prev + 1) % 3) as 0 | 1 | 2);
+  }
+
   return (
-    <View style={styles.wrapper} pointerEvents="none">
-      <View style={styles.badge}>
-        <Text style={styles.title}>🎉 {event.label}</Text>
-        <Text style={styles.bonus}>
-          {STAT_LABELS[event.stat]} +{Math.round(event.bonus * 100)}%
-        </Text>
-        <Text style={styles.remaining}>剩餘 {formatRemaining(remainingMs)}</Text>
-      </View>
+    <View style={styles.wrapper} pointerEvents="box-none">
+      {stage !== 2 && (
+        <Pressable style={styles.tabRow} onPress={advance}>
+          <View style={styles.triangle} />
+          {stage === 1 && (
+            <View style={styles.iconPill}>
+              <Text style={styles.iconPillEmoji}>🎉</Text>
+            </View>
+          )}
+        </Pressable>
+      )}
+
+      {stage === 2 && (
+        <View style={styles.badge}>
+          <Pressable style={styles.panelHeaderRow} onPress={() => setStage(0)}>
+            <Text style={styles.title}>🎉 {event.label}</Text>
+            <Text style={styles.panelHeaderClose}>✕</Text>
+          </Pressable>
+          <Text style={styles.bonus}>
+            {STAT_LABELS[event.stat]} +{Math.round(event.bonus * 100)}%
+          </Text>
+          <Text style={styles.remaining}>剩餘 {formatRemaining(remainingMs)}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -53,10 +77,42 @@ const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
     top: 74,
-    left: 8,
+    left: 0,
     zIndex: 20,
+    alignItems: 'flex-start',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // 跟 DailyQuestBadge 的三角形鏡射:左邊框設實色、上下透明,尖端朝右指向畫面內側。
+  triangle: {
+    width: 0,
+    height: 0,
+    borderTopWidth: 15,
+    borderBottomWidth: 15,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftWidth: 14,
+    borderLeftColor: '#c9a94f',
+  },
+  iconPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginLeft: -1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(42, 36, 20, 0.92)',
+    borderWidth: 1,
+    borderColor: '#c9a94f',
+  },
+  iconPillEmoji: {
+    fontSize: 14,
   },
   badge: {
+    marginTop: 4,
+    marginLeft: 8,
     alignItems: 'center',
     gap: 1,
     paddingVertical: 6,
@@ -65,6 +121,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(42, 36, 20, 0.92)',
     borderWidth: 1,
     borderColor: '#c9a94f',
+  },
+  panelHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  panelHeaderClose: {
+    color: '#c9c9d2',
+    fontSize: 11,
   },
   title: {
     color: '#f2f2f2',
