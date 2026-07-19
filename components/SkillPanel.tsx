@@ -23,6 +23,7 @@ import {
 } from '../game/studentSkillTree';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
+import { SkillLoadoutEditor } from './SkillLoadoutEditor';
 
 const TILE_SIZE = 56;
 
@@ -86,6 +87,10 @@ export function SkillPanel() {
             ? '畢業前投資的學生技能永久保留,加成疊加在職業技能之上,仍可持續花書升級'
             : '這是你的學生技能,畢業後不會消失,加成會疊加在職業技能之上並可以持續升級'}
       </Text>
+
+      {/* 首頁4個主動技能欄的配置——只跟「職業技能」這棵樹有關(學生技能沒有欄位可選,
+          固定4招),所以只在 showJobTree 時顯示,切去學生技能檢視時收起來。 */}
+      {showJobTree && <SkillLoadoutEditor archetype={archetype} tier={tier} />}
 
       <View style={styles.grid}>
         {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {

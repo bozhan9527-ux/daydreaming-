@@ -28,13 +28,35 @@ export function createInitialSkillTreeLevels(): SkillTreeLevels {
   };
 }
 
-// 技能等級上限改成「累積技能書」制:單一格最高 10 級,依現有轉職階級(1-5階)分段解鎖
-// (階1封頂2級、階2封頂4級...階5封頂10級),呼應「10級的進度比300級好懂太多」的重新設計。
+// 主動技能欄選擇機制:4個欄位(以出現在首頁 SkillTracker 的固定位置為準,決定基準秒數/顯示
+// 順序)各自「指到」某個職業、某個主動格的技能(archetype+sourceSlot)——轉職是這個遊戲的
+// 既有機制,skillTree 本來就永久保留玩家投資過的每個職業的技能等級(見 SkillTreeLevels),
+// 所以玩家可以把「已經點過等級的其他職業主動技能」也放進目前的4個欄位,不限於目前職業自己
+// 的active1-4。null=這個欄位空著,行為等同該格 Lv.0(不參與倒數、不能點擊,見
+// hooks/useGameState.ts 的 applyActiveSkillTriggers)。
+export interface ActiveSkillRef {
+  archetype: Archetype;
+  sourceSlot: ActiveSkillSlotId;
+}
+export type ActiveSkillLoadout = Record<ActiveSkillSlotId, ActiveSkillRef | null>;
+
+// 預設配置=目前職業自己的active1-4(跟這個機制上線前的固定行為完全一致),玩家不特地去改
+// 配置的話畫面上看到的東西不會有任何變化。
+export function createInitialActiveSkillLoadout(archetype: Archetype): ActiveSkillLoadout {
+  const loadout = {} as ActiveSkillLoadout;
+  ACTIVE_SLOT_IDS.forEach((slot) => {
+    loadout[slot] = { archetype, sourceSlot: slot };
+  });
+  return loadout;
+}
+
+// 技能等級上限改成「累積技能書」制:轉職之後(不分職業樹階級)每一格都是直接封頂10級,
+// 不再依1-5階分段解鎖——呼應「10級的進度比300級好懂太多」的重新設計。tier 參數保留只是
+// 為了不用改動全部呼叫端的簽章,實際不影響回傳值。
 export const SKILL_LEVEL_CAP = 10;
-const LEVEL_CAP_PER_TIER = SKILL_LEVEL_CAP / 5;
 
 export function skillSlotLevelCap(tier: JobTier): number {
-  return tier * LEVEL_CAP_PER_TIER;
+  return SKILL_LEVEL_CAP;
 }
 
 // 升級花費改成純粹技能書、倍增制:0→1級要1本、1→2級要2本...9→10級要512本,逼玩家在6格

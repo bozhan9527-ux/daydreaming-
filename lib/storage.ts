@@ -28,6 +28,9 @@ import { createInitialDungeonState, DungeonState } from '../game/dungeon';
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { SkillLevels, SKILL_IDS } from '../game/skills';
 import {
+  ACTIVE_SLOT_IDS,
+  ActiveSkillLoadout,
+  createInitialActiveSkillLoadout,
   createInitialSkillTreeLevels,
   SKILL_LEVEL_CAP,
   SKILL_SLOT_IDS,
@@ -41,7 +44,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 33;
+export const SCHEMA_VERSION = 34;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -200,6 +203,9 @@ export interface SaveData {
   // 背景音樂總開關(見 lib/sounds.ts 的 startMusic/setMusicMuted),獨立於上面的音效開關——
   // 兩者是玩家常見的不同偏好組合(要音效不要一直循環的BGM,或反過來),分開存放。
   musicMuted: boolean;
+  // 主動技能欄自選配置(見 game/skillTree.ts 的 ActiveSkillLoadout):v34 起,首頁4個主動技能欄
+  // 位不再固定綁死「目前職業自己的active1-4」,玩家可以把任何已經投資過等級的職業技能塞進來。
+  activeSkillLoadout: ActiveSkillLoadout;
 }
 
 export function createInitialSaveData(): SaveData {
@@ -250,6 +256,7 @@ export function createInitialSaveData(): SaveData {
     soundMuted: false,
     hasSeenWelcome: false,
     musicMuted: false,
+    activeSkillLoadout: createInitialActiveSkillLoadout(DEFAULT_ARCHETYPE),
   };
 }
 
@@ -1872,15 +1879,45 @@ function isSaveDataV32(value: unknown): value is SaveDataV32 {
   );
 }
 
-// v33(背景音樂上線):現在的 SaveData 完整形狀,比 v32 多了 musicMuted。這是 migrate() 的
-// 第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
-function isSaveDataV33(value: unknown): value is SaveData {
+// v33(背景音樂上線,技能欄自選上線前的最後一版):比 v32 多了 musicMuted,沒有
+// activeSkillLoadout。凍結成明確獨立的 interface+literal版本號檢查,形狀直接繼承
+// SaveDataV32(只換 version 字面量、疊加新欄位)。
+interface SaveDataV33 extends Omit<SaveDataV32, 'version'> {
+  version: 33;
+  musicMuted: boolean;
+}
+
+function isSaveDataV33(value: unknown): value is SaveDataV33 {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 33 &&
+    isSaveDataV32({ ...record, version: 32 }) &&
+    typeof record.musicMuted === 'boolean'
+  );
+}
+
+function isActiveSkillLoadout(value: unknown): value is ActiveSkillLoadout {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return ACTIVE_SLOT_IDS.every((slot) => {
+    const ref = record[slot];
+    if (ref === null) return true;
+    if (typeof ref !== 'object') return false;
+    const refRecord = ref as Record<string, unknown>;
+    return typeof refRecord.archetype === 'string' && typeof refRecord.sourceSlot === 'string';
+  });
+}
+
+// v34(主動技能欄自選上線):現在的 SaveData 完整形狀,比 v33 多了 activeSkillLoadout。這是
+// migrate() 的第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
+function isSaveDataV34(value: unknown): value is SaveData {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
     record.version === SCHEMA_VERSION &&
-    isSaveDataV32({ ...record, version: 32 }) &&
-    typeof record.musicMuted === 'boolean'
+    isSaveDataV33({ ...record, version: 33 }) &&
+    isActiveSkillLoadout(record.activeSkillLoadout)
   );
 }
 
@@ -1963,14 +2000,25 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // v32→v33 沒有 musicMuted(見背景音樂系統):補 false——背景音樂是新功能,舊存檔沒有
 // 「選擇過關掉BGM」這件事,一律視為預設開啟,呼應 soundMuted 當初上線時同樣選擇「維持
 // 原樣、不平白幫玩家關掉」的既有慣例。
+// v33→v34 沒有 activeSkillLoadout(見 game/skillTree.ts 的主動技能欄自選機制):補「目前職業
+// 自己的active1-4」預設配置(createInitialActiveSkillLoadout(value.job.archetype)),行為
+// 跟這個機制上線前完全一致,玩家不特地去改配置的話畫面不會有任何變化。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV33(value)) return value;
+  if (isSaveDataV34(value)) return value;
+  if (isSaveDataV33(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+    };
+  }
   if (isSaveDataV32(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
     };
   }
   if (isSaveDataV31(value)) {
@@ -1980,6 +2028,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
     };
   }
   if (isSaveDataV30(value)) {
@@ -1989,6 +2038,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       weeklyChallengeWeekIndex: weekIndex(),
       weeklyChallengeProgress: {},
       weeklyChallengeClaimedIds: [],
@@ -2001,6 +2051,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       ascensionPoints: 0,
       ascensionUpgrades: {},
       weeklyChallengeWeekIndex: weekIndex(),
@@ -2015,6 +2066,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
@@ -2031,6 +2083,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -2048,6 +2101,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
       totalStagesCleared: 0,
@@ -2068,6 +2122,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       claimedAchievementIds: [...value.unlockedAchievementIds],
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
@@ -2089,6 +2144,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: 0,
@@ -2111,6 +2167,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
@@ -2134,6 +2191,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
@@ -2158,6 +2216,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
@@ -2182,6 +2241,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
@@ -2208,6 +2268,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
@@ -2235,6 +2296,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       unlockedAchievementIds: [],
       claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
@@ -2265,6 +2327,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       hasChosenJob: true,
       unlockedAchievementIds: [],
       claimedAchievementIds: [],
@@ -2295,6 +2358,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2345,6 +2409,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2395,6 +2460,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2445,6 +2511,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2495,6 +2562,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2545,6 +2613,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2595,6 +2664,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2645,6 +2715,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2695,6 +2766,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2745,6 +2817,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2795,6 +2868,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2845,6 +2919,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2895,6 +2970,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2945,6 +3021,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2995,6 +3072,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(DEFAULT_ARCHETYPE),
       level: value.level,
       trigger: value.trigger,
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
@@ -3045,6 +3123,7 @@ function migrate(value: unknown): SaveData {
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
+      activeSkillLoadout: createInitialActiveSkillLoadout(DEFAULT_ARCHETYPE),
       level: value.level,
       trigger: createInitialTriggerState(),
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },

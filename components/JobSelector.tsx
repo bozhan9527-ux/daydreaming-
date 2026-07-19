@@ -40,7 +40,7 @@ import { PixelSprite } from './PixelSprite';
 const PREVIEW_TILE_SIZE = 48;
 const ARCHETYPE_ICON_SIZE = 44;
 
-const ARCHETYPE_LABELS: Record<Archetype, string> = {
+export const ARCHETYPE_LABELS: Record<Archetype, string> = {
   physicalMelee: '物理近戰',
   physicalRanged: '物理遠程',
   physicalSupport: '物理輔助',
@@ -49,7 +49,7 @@ const ARCHETYPE_LABELS: Record<Archetype, string> = {
   magicSupport: '魔法輔助',
 };
 
-const ARCHETYPES: Archetype[] = [
+export const ARCHETYPES: Archetype[] = [
   'physicalMelee',
   'physicalRanged',
   'physicalSupport',

@@ -160,6 +160,7 @@ export function SkillTracker() {
   const job = useGameState((state) => state.job);
   const secondaryJob = useGameState((state) => state.secondaryJob);
   const skillTree = useGameState((state) => state.skillTree);
+  const activeSkillLoadout = useGameState((state) => state.activeSkillLoadout);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const level = useGameState((state) => state.level);
   const activeSkillTimers = useGameState((state) => state.activeSkillTimers);
@@ -206,14 +207,26 @@ export function SkillTracker() {
         {ACTIVE_SLOT_IDS.map((slot: ActiveSkillSlotId) => {
           // 學生期(!hasChosenJob)還沒有主職,job.archetype 只是佔位值不代表真的職業——
           // 名稱/等級/倒數秒數改吃 studentSkillTree,圖示照樣借用 job.archetype 當視覺樣板即可。
-          const slotLevel = hasChosenJob ? skillTree[job.archetype][slot] : studentSkillTree[slot];
-          const label = hasChosenJob ? SKILL_SLOT_NAMES[job.archetype][slot] : getStudentSkillFlavor(level.level, slot).name;
+          // 畢業後這4格改吃 activeSkillLoadout(見 game/skillTree.ts):每個位置各自指到「某個
+          // 已投資過的職業技能」,不一定是目前職業自己的active1-4——空位(ref=null)一律當成
+          // Lv.0處理,跟既有的「未學會」邏輯共用同一套顯示/防呆。
+          const loadoutRef = hasChosenJob ? activeSkillLoadout[slot] : null;
+          const tileArchetype = hasChosenJob ? (loadoutRef?.archetype ?? job.archetype) : job.archetype;
+          const tileSourceSlot = hasChosenJob ? (loadoutRef?.sourceSlot ?? slot) : slot;
+          const slotLevel = hasChosenJob
+            ? loadoutRef
+              ? skillTree[loadoutRef.archetype][loadoutRef.sourceSlot]
+              : 0
+            : studentSkillTree[slot];
+          const label = hasChosenJob
+            ? SKILL_SLOT_NAMES[tileArchetype][tileSourceSlot]
+            : getStudentSkillFlavor(level.level, slot).name;
           const armed = hasChosenJob ? armedActiveSkills[slot] === true : armedStudentActiveSkills[slot] === true;
           return (
             <SkillTile
               key={slot}
-              archetype={job.archetype}
-              slot={slot}
+              archetype={tileArchetype}
+              slot={tileSourceSlot}
               label={label}
               level={slotLevel}
               tier={tier}

@@ -113,8 +113,11 @@ import {
   activeSkillTriggerIntervalSeconds,
   ACTIVE_SLOT_IDS,
   ActiveEffectKind,
+  ActiveSkillLoadout,
+  ActiveSkillRef,
   ActiveSkillSlotId,
   canUpgradeSkillSlot,
+  createInitialActiveSkillLoadout,
   createInitialSkillTreeLevels,
   getActiveEffectKind,
   getBonusCoinsAmount,
@@ -198,15 +201,47 @@ function omitArmedSlots(
   return next;
 }
 
+// 手動點擊技能(armSkill/armSecondarySkill)時,如果當下正好有一場戰鬥在進行中,把它的
+// 「開始時間」直接往前搬到剛好等於 fightDurationMs——下一次 tickBattle(最多300ms後,近乎
+// 即時)就會判定這場戰鬥已經打完,用剛武裝好的技能效果結算這次擊殺。呼應「只要點擊技能就會
+// 觸發」的需求:不用再乾等這場戰鬥自然跑完計時器才看得到反應。沒有進行中的戰鬥(例如倒地
+// 恢復中)就不強制,武裝狀態會留著,等下一場戰鬥自然結算。
+function forceResolveCurrentFightUpdate(state: {
+  currentEncounter: Encounter | null;
+  fightStartedAt: number | null;
+}): { fightStartedAt?: number } {
+  if (!state.currentEncounter || state.fightStartedAt === null) return {};
+  return { fightStartedAt: Date.now() - state.currentEncounter.fightDurationMs };
+}
+
 // 主動技能觸發判定共用邏輯:職業技能樹跟學生技能樹畢業後永久並存(各自獨立計時器),
 // 這個函式抽出來讓 tickBattle 對兩邊各呼叫一次,避免同一段判定寫兩份。
+// 主動技能欄自選(見 game/skillTree.ts 的 ActiveSkillLoadout):4個位置各自透過 loadout 指到
+// 「某個職業、某個主動格」的技能,不再固定等於目前職業自己的active1-4。這裡把 loadout 攤平成
+// applyActiveSkillTriggers 原本就吃的 Record<ActiveSkillSlotId, number> 形狀——空位(null)直接
+// 給0級,跟既有的 Lv.0 gating(見該函式內的 slotLevels[slot]<=0 continue)完全共用同一套「不
+// 參與倒數、不能觸發」邏輯,不用另外寫一套「空欄位」的特殊處理。
+function resolveLoadoutLevels(loadout: ActiveSkillLoadout, skillTree: SkillTreeLevels): Record<ActiveSkillSlotId, number> {
+  const levels = {} as Record<ActiveSkillSlotId, number>;
+  ACTIVE_SLOT_IDS.forEach((slot) => {
+    const ref = loadout[slot];
+    levels[slot] = ref ? skillTree[ref.archetype][ref.sourceSlot] : 0;
+  });
+  return levels;
+}
+
+function resolveLoadoutEffectKind(loadout: ActiveSkillLoadout, slot: ActiveSkillSlotId): ActiveEffectKind | null {
+  const ref = loadout[slot];
+  return ref ? getActiveEffectKind(ref.archetype, ref.sourceSlot) : null;
+}
+
 // Lv60 前(或玩家自己關掉 AUTO)是手動模式:冷卻好了不會自動在下次擊殺生效,要等玩家
 // 點過那顆技能(armedSlots 記到)才算數,呼應「新增AUTO自動釋放按鈕,滿60等前需自行點擊」
 // 的設計——冷卻判定本身不變,差別只在「冷卻好了」跟「真的觸發」中間多一道玩家操作。
 function applyActiveSkillTriggers(
   slotLevels: Record<ActiveSkillSlotId, number>,
   timers: Record<ActiveSkillSlotId, number>,
-  getEffect: (slot: ActiveSkillSlotId) => ActiveEffectKind,
+  getEffect: (slot: ActiveSkillSlotId) => ActiveEffectKind | null,
   now: number,
   exp: number,
   coins: number,
@@ -222,10 +257,11 @@ function applyActiveSkillTriggers(
     const intervalMs = activeSkillTriggerIntervalSeconds(slot, slotLevels[slot]) * 1000;
     if (now - timers[slot] < intervalMs) continue;
     if (!autoMode && !armedSlots[slot]) continue;
+    const effect = getEffect(slot);
+    if (effect === null) continue;
     nextTimers[slot] = now;
     firedSlots.push(slot);
     triggered = true;
-    const effect = getEffect(slot);
     if (effect === 'doubleReward') {
       exp *= 2;
       coins *= 2;
@@ -347,6 +383,9 @@ interface GameState {
   equipment: EquipmentLoadout;
   bodyType: BodyType;
   skillTree: SkillTreeLevels;
+  // 主動技能欄自選配置(見 game/skillTree.ts 的 ActiveSkillLoadout):4個位置各自指到某個
+  // 已投資過等級的職業主動技能(archetype+sourceSlot),不限於目前職業自己的active1-4。
+  activeSkillLoadout: ActiveSkillLoadout;
   // 「學生」期(!hasChosenJob)專屬技能樹(見 game/studentSkillTree.ts):獨立於 skillTree
   // 之外,只有一套 6 格,不分職業。
   studentSkillTree: Record<SkillSlotId, number>;
@@ -494,6 +533,10 @@ interface GameState {
   armSkill: (kind: 'job' | 'student', slot: ActiveSkillSlotId) => void;
   armSecondarySkill: () => void;
   toggleAutoSkills: () => void;
+  // 主動技能欄自選(見 game/skillTree.ts 的 ActiveSkillLoadout):position 是首頁4個固定位置
+  // 之一,ref=null 代表把這格清空。只能指到「已經投資過等級(>0)」的職業主動技能,防呆檢查
+  // 在 action 內部做,UI 端(SkillLoadoutEditor.tsx)本來就只會列出已學過的選項可選。
+  setActiveSkillLoadout: (position: ActiveSkillSlotId, ref: ActiveSkillRef | null) => void;
 }
 
 type PersistableState = Pick<
@@ -504,6 +547,7 @@ type PersistableState = Pick<
   | 'equipment'
   | 'bodyType'
   | 'skillTree'
+  | 'activeSkillLoadout'
   | 'studentSkillTree'
   | 'gender'
   | 'coins'
@@ -553,6 +597,7 @@ function persist(state: PersistableState): void {
     equipment: state.equipment,
     bodyType: state.bodyType,
     skillTree: state.skillTree,
+    activeSkillLoadout: state.activeSkillLoadout,
     studentSkillTree: state.studentSkillTree,
     gender: state.gender,
     coins: state.coins,
@@ -685,6 +730,7 @@ export const useGameState = create<GameState>((set, get) => ({
   equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
   bodyType: DEFAULT_BODY_TYPE,
   skillTree: createInitialSkillTreeLevels(),
+  activeSkillLoadout: createInitialActiveSkillLoadout(DEFAULT_JOB.archetype),
   studentSkillTree: createInitialStudentSkillTreeLevels(),
   gender: DEFAULT_GENDER,
   coins: 0,
@@ -821,6 +867,7 @@ export const useGameState = create<GameState>((set, get) => ({
       equipment: save.equipment,
       bodyType: save.bodyType,
       skillTree: save.skillTree,
+      activeSkillLoadout: save.activeSkillLoadout,
       studentSkillTree: save.studentSkillTree,
       gender: save.gender,
       coins,
@@ -1099,9 +1146,9 @@ export const useGameState = create<GameState>((set, get) => ({
     let jobFiredSlots: ActiveSkillSlotId[] = [];
     if (state.hasChosenJob) {
       const jobTrigger = applyActiveSkillTriggers(
-        state.skillTree[state.job.archetype],
+        resolveLoadoutLevels(state.activeSkillLoadout, state.skillTree),
         state.activeSkillTimers,
-        (slot) => getActiveEffectKind(state.job.archetype, slot),
+        (slot) => resolveLoadoutEffectKind(state.activeSkillLoadout, slot),
         now,
         exp,
         coins,
@@ -1166,7 +1213,8 @@ export const useGameState = create<GameState>((set, get) => ({
       }
       if (state.hasChosenJob) {
         for (const slot of jobFiredSlots) {
-          firedNames.push(SKILL_SLOT_NAMES[state.job.archetype][slot]);
+          const ref = state.activeSkillLoadout[slot];
+          if (ref) firedNames.push(SKILL_SLOT_NAMES[ref.archetype][ref.sourceSlot]);
         }
       }
       if (state.secondaryJob && secondaryTriggered) {
@@ -1859,7 +1907,13 @@ export const useGameState = create<GameState>((set, get) => ({
 
   armSkill: (kind, slot) => {
     const state = get();
-    const level = kind === 'job' ? state.skillTree[state.job.archetype][slot] : state.studentSkillTree[slot];
+    const jobRef = state.activeSkillLoadout[slot];
+    const level =
+      kind === 'job'
+        ? jobRef
+          ? state.skillTree[jobRef.archetype][jobRef.sourceSlot]
+          : 0
+        : state.studentSkillTree[slot];
     // Lv.0(還沒點過這個技能)不能被點擊發動,純防呆(SkillTracker.tsx 正常不會讓 Lv.0
     // 的圖示觸發這個 action,onPress 在那邊已經擋掉了)。
     if (level <= 0) return;
@@ -1867,11 +1921,11 @@ export const useGameState = create<GameState>((set, get) => ({
     const intervalMs = activeSkillTriggerIntervalSeconds(slot, level) * 1000;
     // 還在倒數中點了不算數,純防呆(SkillTracker.tsx 正常不會讓還在倒數的圖示觸發這個 action)。
     if (Date.now() - timerStartedAt < intervalMs) return;
-    if (kind === 'job') {
-      set({ armedActiveSkills: { ...state.armedActiveSkills, [slot]: true } });
-    } else {
-      set({ armedStudentActiveSkills: { ...state.armedStudentActiveSkills, [slot]: true } });
-    }
+    const armedUpdate =
+      kind === 'job'
+        ? { armedActiveSkills: { ...state.armedActiveSkills, [slot]: true } }
+        : { armedStudentActiveSkills: { ...state.armedStudentActiveSkills, [slot]: true } };
+    set({ ...armedUpdate, ...forceResolveCurrentFightUpdate(state) });
   },
 
   armSecondarySkill: () => {
@@ -1881,10 +1935,20 @@ export const useGameState = create<GameState>((set, get) => ({
     if (level <= 0) return;
     const intervalMs = secondaryActiveSkillTriggerIntervalSeconds(level) * 1000;
     if (Date.now() - state.secondarySkillTimerStartedAt < intervalMs) return;
-    set({ armedSecondarySkill: true });
+    set({ armedSecondarySkill: true, ...forceResolveCurrentFightUpdate(state) });
   },
 
   toggleAutoSkills: () => {
     set((state) => ({ autoSkillsEnabled: !state.autoSkillsEnabled }));
+  },
+
+  setActiveSkillLoadout: (position, ref) => {
+    const state = get();
+    // 清空這格一定合法;指到某個技能的話,那個技能一定要「已經投資過等級」才能放進來——
+    // 呼應「從已學習的職業技能中選擇」的需求,UI 本來就只會列出已學過的選項,這裡再擋一次
+    // 純防呆(避免透過非正規管道塞進一個等級 0、還沒點過的技能)。
+    if (ref !== null && state.skillTree[ref.archetype][ref.sourceSlot] <= 0) return;
+    set({ activeSkillLoadout: { ...state.activeSkillLoadout, [position]: ref } });
+    persist(get());
   },
 }));
