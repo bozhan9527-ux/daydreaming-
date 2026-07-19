@@ -6,13 +6,17 @@ import {
   EquipmentItem,
   EquipmentSlot,
   getEquippableItemsForSlot,
+  getIdentifyCost,
   getItemById,
+  getRerollCost,
   isItemUnlocked,
 } from '../game/equipment';
 import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
+import { formatBonus, formatItemStats } from './itemFormatting';
 import { ItemIcon } from './ItemIcon';
+import { ItemPreviewModal } from './ItemPreviewModal';
 import { PixelSprite } from './PixelSprite';
 import { ResourceBar } from './ResourceBar';
 
@@ -26,12 +30,6 @@ const SLOT_LABELS: Record<EquipmentSlot, string> = {
   gloves: '手套',
   offhand: '副手',
   mainhand: '主手武器',
-};
-
-const STAT_LABELS: Record<EquipmentBonusStat, string> = {
-  exp: '經驗',
-  coins: '金幣',
-  speed: '戰鬥速度',
 };
 
 // 9個部位排成一列橫向選槽,不需要像裝備分頁那樣圍著紙娃娃排兩欄——這裡的重點是
@@ -56,10 +54,6 @@ const STAT_FILTER_LABELS: Record<StatFilter, string> = {
   speed: '速度',
 };
 
-function formatBonus(stat: EquipmentBonusStat, value: number): string {
-  return `${STAT_LABELS[stat]} +${Math.round(value * 100)}%`;
-}
-
 interface InventoryPanelProps {
   selectedSlot: EquipmentSlot;
   onSelectSlot: (slot: EquipmentSlot) => void;
@@ -70,12 +64,20 @@ interface InventoryPanelProps {
 export function InventoryPanel({ selectedSlot, onSelectSlot }: InventoryPanelProps) {
   const equipment = useGameState((state) => state.equipment);
   const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
+  const itemInstances = useGameState((state) => state.itemInstances);
+  const coins = useGameState((state) => state.coins);
   const job = useGameState((state) => state.job);
   const equip = useGameState((state) => state.equip);
+  const unequip = useGameState((state) => state.unequip);
+  const identifyItem = useGameState((state) => state.identifyItem);
+  const rerollEquipmentSubstats = useGameState((state) => state.rerollEquipmentSubstats);
   const showToast = useToast((state) => state.show);
 
   const [statFilter, setStatFilter] = useState<StatFilter>('all');
   const [sortDesc, setSortDesc] = useState(false);
+  // 點擊道具icon不再直接裝備,先跳出預覽卡片(見 ItemPreviewModal.tsx)顯示完整屬性,
+  // 玩家自己按「裝備」才會真的改動裝備狀態——跟裝備分頁商店子分頁共用同一套流程。
+  const [previewItem, setPreviewItem] = useState<EquipmentItem | null>(null);
 
   const currentId = equipment[selectedSlot];
   const items = getEquippableItemsForSlot(selectedSlot, job.archetype);
@@ -90,6 +92,26 @@ export function InventoryPanel({ selectedSlot, onSelectSlot }: InventoryPanelPro
     // 螢幕上,提示訊息疊在畫面底部太高的話會蓋住清單最底下那幾列的「點擊裝備」按鈕,
     // 玩家連續換裝時反而點不到下一件。
     showToast(`已裝備:${item.name}(${formatBonus(item.bonus.stat, item.bonus.value)})`);
+  }
+
+  function handleIdentify(item: EquipmentItem) {
+    const cost = getIdentifyCost(item);
+    if (coins < cost) {
+      showToast(`金幣不夠鑑定 ${item.name}(需要 ${cost} 金幣)`);
+      return;
+    }
+    identifyItem(item.id);
+    showToast(`鑑定完成:${item.name}\n${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
+  }
+
+  function handleReroll(item: EquipmentItem) {
+    const cost = getRerollCost(item);
+    if (coins < cost) {
+      showToast(`金幣不夠重擲 ${item.name}(需要 ${cost} 金幣)`);
+      return;
+    }
+    rerollEquipmentSubstats(item.id);
+    showToast(`重擲完成:${item.name}\n${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
   }
 
   function renderSlotButton(slot: EquipmentSlot) {
@@ -120,25 +142,17 @@ export function InventoryPanel({ selectedSlot, onSelectSlot }: InventoryPanelPro
     );
   }
 
-  function renderBagItemRow(item: EquipmentItem) {
+  // 1:1方框icon,點擊開預覽卡片(見 ItemPreviewModal.tsx)而不是直接裝備——玩家先看完整
+  // 屬性(含已裝備的鑑定/重擲選項),自己按按鈕才會真的改動狀態。
+  function renderBagItemTile(item: EquipmentItem) {
     const equipped = item.id === currentId;
     return (
       <Pressable
         key={item.id}
-        style={[styles.itemRow, equipped && styles.itemRowEquipped]}
-        onPress={() => !equipped && handleEquip(item)}
+        style={[styles.itemTile, equipped && styles.itemTileEquipped]}
+        onPress={() => setPreviewItem(item)}
       >
-        <View style={styles.rowLeft}>
-          <View style={styles.iconWrap}>
-            <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
-          </View>
-          <Text style={styles.itemRowLabel}>
-            {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
-          </Text>
-        </View>
-        <Text style={[styles.itemRowMeta, equipped && styles.itemRowMetaEquipped]}>
-          {equipped ? '已裝備' : '點擊裝備'}
-        </Text>
+        <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={30} />
       </Pressable>
     );
   }
@@ -166,15 +180,36 @@ export function InventoryPanel({ selectedSlot, onSelectSlot }: InventoryPanelPro
           <Text style={styles.filterChipLabel}>需求等級 {sortDesc ? '高→低' : '低→高'}</Text>
         </Pressable>
       </View>
-      <View style={styles.itemList}>
+      <View style={styles.itemGrid}>
         {bagItems.length === 0 ? (
           <Text style={styles.emptyText}>
             {statFilter === 'all' ? '背包裡沒有這個部位的其他款式,去上面的「裝備」子分頁逛商店' : '這個篩選條件下沒有符合的款式'}
           </Text>
         ) : (
-          bagItems.map(renderBagItemRow)
+          bagItems.map(renderBagItemTile)
         )}
       </View>
+
+      {previewItem && (
+        <ItemPreviewModal
+          item={previewItem}
+          instance={itemInstances[previewItem.id]}
+          coins={coins}
+          isEquipped={previewItem.id === currentId}
+          owned
+          onClose={() => setPreviewItem(null)}
+          onEquipOrBuy={() => {
+            handleEquip(previewItem);
+            setPreviewItem(null);
+          }}
+          onUnequip={() => {
+            unequip(selectedSlot);
+            setPreviewItem(null);
+          }}
+          onIdentify={() => handleIdentify(previewItem)}
+          onReroll={() => handleReroll(previewItem)}
+        />
+      )}
     </View>
   );
 }
@@ -249,8 +284,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a35',
   },
-  itemList: {
-    gap: 3,
+  itemGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
   },
   emptyText: {
     color: '#8a8a95',
@@ -258,43 +296,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 8,
   },
-  rowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 1,
-  },
-  iconWrap: {
-    width: 24,
-    height: 24,
+  itemTile: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#59462b',
+    backgroundColor: '#1c1c24',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    backgroundColor: '#1c1c24',
-  },
-  itemRowEquipped: {
+  itemTileEquipped: {
     backgroundColor: '#243424',
-    borderWidth: 1,
     borderColor: '#5fa563',
-  },
-  itemRowLabel: {
-    color: '#f2f2f2',
-    fontSize: 11,
-    flexShrink: 1,
-  },
-  itemRowMeta: {
-    color: '#8a8a95',
-    fontSize: 11,
-  },
-  itemRowMetaEquipped: {
-    color: '#8fd992',
-    fontWeight: '600',
   },
 });

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Archetype } from '../game/combat';
 import {
   EquipmentBonusStat,
   EquipmentItem,
@@ -15,15 +14,15 @@ import {
   getRerollCost,
   getSubstatTotals,
   isItemUnlocked,
-  ItemInstanceData,
-  SubstatType,
 } from '../game/equipment';
 import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { RARITY_FRAME_PARTS } from './equipmentFrames';
 import { useHeroArt } from './HeroWalkSprite';
+import { formatBonus, formatItemStats } from './itemFormatting';
 import { ItemIcon } from './ItemIcon';
+import { ItemPreviewModal } from './ItemPreviewModal';
 import { NineSliceFrame } from './NineSliceFrame';
 import { OrnateFrame } from './OrnateFrame';
 import { PixelSprite } from './PixelSprite';
@@ -77,36 +76,6 @@ const SLOT_LABELS: Record<EquipmentSlot, string> = {
   mainhand: '主手武器',
 };
 
-const ARCHETYPE_LABELS: Record<Archetype, string> = {
-  physicalMelee: '物理近戰',
-  physicalRanged: '物理遠程',
-  physicalSupport: '物理輔助',
-  magicMelee: '魔法近戰',
-  magicRanged: '魔法遠程',
-  magicSupport: '魔法輔助',
-};
-
-const STAT_LABELS: Record<EquipmentBonusStat, string> = {
-  exp: '經驗',
-  coins: '金幣',
-  speed: '戰鬥速度',
-};
-
-const SUBSTAT_LABELS: Record<SubstatType, string> = {
-  critRate: '爆擊率',
-  resistance: '抗性',
-  physicalResistance: '物理抗性',
-  magicResistance: '魔法抗性',
-  physicalCritRate: '物理爆擊率',
-  physicalCritDamage: '物理爆擊傷害',
-  magicCritRate: '魔法爆擊率',
-  magicCritDamage: '魔法爆擊傷害',
-  physicalAttack: '物理攻擊力',
-  magicAttack: '魔法攻擊力',
-  lifesteal: '吸血',
-  hpRegen: '自動回血',
-};
-
 // 角色紙娃娃兩側各一欄圖示按鈕:武器(主手/副手)對放最上排,其餘裝備往下排。
 const LEFT_COLUMN: EquipmentSlot[] = ['offhand', 'headwear', 'top', 'belt', 'bottom'];
 const RIGHT_COLUMN: EquipmentSlot[] = ['mainhand', 'face', 'back', 'gloves'];
@@ -145,14 +114,6 @@ const STAT_FILTER_LABELS: Record<StatFilter, string> = {
   speed: '速度',
 };
 
-function formatBonus(stat: EquipmentBonusStat, value: number): string {
-  return `${STAT_LABELS[stat]} +${Math.round(value * 100)}%`;
-}
-
-function formatSubstat(stat: SubstatType, value: number): string {
-  return `${SUBSTAT_LABELS[stat]} +${Math.round(value * 100)}%`;
-}
-
 // 素質格數值為0(+0%)時用暗色淡化,取代跟旁邊真正有投資的欄位一樣的視覺權重——這個格子
 // 集中了8+2個素質,新玩家/沒點的方向常年停在+0%,不淡化的話很難一眼看出「哪些欄位真的有加成」。
 function SubstatCell({ label, value }: { label: string; value: number }) {
@@ -163,22 +124,6 @@ function SubstatCell({ label, value }: { label: string; value: number }) {
       <Text style={[styles.substatCellValue, pct === 0 && styles.substatCellValueZero]}>+{pct}%</Text>
     </View>
   );
-}
-
-function formatItemStats(item: EquipmentItem, instance: ItemInstanceData | undefined): string {
-  const lines = [item.name, `主加成:${formatBonus(item.bonus.stat, item.bonus.value)}`];
-  if (instance) {
-    lines.push(`隨機素質:${formatSubstat(instance.randomSubstat.type, instance.randomSubstat.value)}`);
-    lines.push(
-      instance.identified
-        ? `隱藏素質:${formatSubstat(instance.hiddenSubstat.type, instance.hiddenSubstat.value)}`
-        : `隱藏素質:未鑑定(花 ${getIdentifyCost(item)} 金幣鑑定)`
-    );
-  }
-  if (item.requiredLevel !== undefined) lines.push(`需求等級:Lv${item.requiredLevel}`);
-  if (item.archetype !== undefined) lines.push(`限定職業:${ARCHETYPE_LABELS[item.archetype]}`);
-  if (item.twoHanded) lines.push('雙手武器,裝備後會清空副手');
-  return lines.join('\n');
 }
 
 interface EquipmentPanelProps {
@@ -302,26 +247,21 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
     );
   }
 
-  // 背包分頁拆出去之後,這裡只剩「商店」會用到這個 row 渲染,不用再分 bag/shop 兩種模式
-  // (背包款式的鑑定/點擊裝備邏輯搬到 components/InventoryPanel.tsx 去了)。
-  function renderShopItemRow(item: EquipmentItem) {
+  // 背包分頁拆出去之後,這裡只剩「商店」會用到這個渲染,不用再分 bag/shop 兩種模式
+  // (背包款式的鑑定/點擊裝備邏輯搬到 components/InventoryPanel.tsx 去了)。改成1:1方框icon
+  // 方格,點擊只開預覽(ItemPreviewModal),不再直接顯示文字名稱/價格——跟背包分頁的
+  // 道具方格共用同一套「先看icon,點了才看到完整資訊」的瀏覽習慣。
+  function renderShopItemTile(item: EquipmentItem) {
     const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
     return (
       <Pressable
         key={item.id}
-        style={[styles.itemRow, locked && styles.itemRowLocked]}
+        style={[styles.itemTile, locked && styles.itemTileLocked]}
         onPress={() => setPreviewItem(item)}
         disabled={locked}
       >
-        <View style={styles.rowLeft}>
-          <View style={styles.iconWrap}>
-            <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
-          </View>
-          <Text style={[styles.itemRowLabel, locked && styles.itemRowLabelLocked]}>
-            {item.name} ({formatBonus(item.bonus.stat, item.bonus.value)})
-          </Text>
-        </View>
-        <Text style={styles.itemRowMeta}>{locked ? `Lv${item.requiredLevel} 解鎖` : `${item.price} 金幣`}</Text>
+        <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={30} />
+        {locked && <Text style={styles.itemTileLockLabel}>Lv{item.requiredLevel}</Text>}
       </Pressable>
     );
   }
@@ -432,66 +372,38 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
               </Pressable>
             ))}
           </View>
-          <View style={styles.itemList}>
+          <View style={styles.itemGrid}>
             {filteredShopItems.length === 0 ? (
               <Text style={styles.wornEmptyText}>
                 {shopStatFilter === 'all' ? '這個部位的款式都收集齊了' : '這個篩選條件下沒有符合的款式'}
               </Text>
             ) : (
-              filteredShopItems.map(renderShopItemRow)
+              filteredShopItems.map(renderShopItemTile)
             )}
           </View>
         </>
       )}
 
-      {previewItem && (() => {
-        const isEquipped = equipment[selectedSlot] === previewItem.id;
-        const owned = isItemUnlocked(unlockedItemIds, previewItem.id);
-        const statLines = formatItemStats(previewItem, itemInstances[previewItem.id]).split('\n');
-        return (
-          <Modal visible transparent animationType="fade" onRequestClose={() => setPreviewItem(null)}>
-            <Pressable style={styles.previewBackdrop} onPress={() => setPreviewItem(null)} />
-            <View style={styles.previewCard}>
-              <OrnateFrame />
-              <View style={styles.previewIconWrap}>
-                <ItemIcon item={previewItem} color={previewItem.color} pixelSize={ICON_PIXEL_SIZE * 2} aiHeight={44} />
-              </View>
-              {statLines.map((line, i) => (
-                <Text key={i} style={i === 0 ? styles.previewName : styles.previewStatLine}>
-                  {line}
-                </Text>
-              ))}
-              <View style={styles.previewActions}>
-                {isEquipped ? (
-                  <Pressable
-                    style={styles.previewUnequipButton}
-                    onPress={() => {
-                      unequip(selectedSlot);
-                      setPreviewItem(null);
-                    }}
-                  >
-                    <Text style={styles.previewActionLabel}>卸下</Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    style={[styles.previewEquipButton, !owned && coins < previewItem.price && styles.previewEquipButtonDisabled]}
-                    disabled={!owned && coins < previewItem.price}
-                    onPress={() => {
-                      pickItem(previewItem);
-                      setPreviewItem(null);
-                    }}
-                  >
-                    <Text style={styles.previewActionLabel}>{owned ? '裝備' : `購買並裝備(${previewItem.price}金幣)`}</Text>
-                  </Pressable>
-                )}
-                <Pressable style={styles.previewCancelButton} onPress={() => setPreviewItem(null)}>
-                  <Text style={styles.previewCancelLabel}>取消</Text>
-                </Pressable>
-              </View>
-            </View>
-          </Modal>
-        );
-      })()}
+      {previewItem && (
+        <ItemPreviewModal
+          item={previewItem}
+          instance={itemInstances[previewItem.id]}
+          coins={coins}
+          isEquipped={equipment[selectedSlot] === previewItem.id}
+          owned={isItemUnlocked(unlockedItemIds, previewItem.id)}
+          onClose={() => setPreviewItem(null)}
+          onEquipOrBuy={() => {
+            pickItem(previewItem);
+            setPreviewItem(null);
+          }}
+          onUnequip={() => {
+            unequip(selectedSlot);
+            setPreviewItem(null);
+          }}
+          onIdentify={() => handleIdentify(previewItem)}
+          onReroll={() => handleReroll(previewItem)}
+        />
+      )}
     </View>
   );
 }
@@ -650,8 +562,30 @@ const styles = StyleSheet.create({
     color: '#f2f2f2',
     fontSize: 12,
   },
-  itemList: {
-    gap: 3,
+  itemGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  itemTile: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#59462b',
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemTileLocked: {
+    opacity: 0.45,
+  },
+  itemTileLockLabel: {
+    position: 'absolute',
+    bottom: 2,
+    color: '#8a8a95',
+    fontSize: 9,
   },
   filterRow: {
     flexDirection: 'row',
@@ -676,42 +610,6 @@ const styles = StyleSheet.create({
     color: '#c8c8d0',
     fontSize: 11,
   },
-  rowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 1,
-  },
-  iconWrap: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    backgroundColor: '#1c1c24',
-  },
-  itemRowLocked: {
-    opacity: 0.45,
-  },
-  itemRowLabel: {
-    color: '#f2f2f2',
-    fontSize: 11,
-    flexShrink: 1,
-  },
-  itemRowLabelLocked: {
-    color: '#8a8a95',
-  },
-  itemRowMeta: {
-    color: '#8a8a95',
-    fontSize: 11,
-  },
   identifyRow: {
     marginTop: 2,
     marginBottom: 2,
@@ -723,81 +621,5 @@ const styles = StyleSheet.create({
   identifyLabel: {
     color: '#c9a94f',
     fontSize: 11,
-  },
-  previewBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  previewCard: {
-    position: 'absolute',
-    top: '50%',
-    left: 16,
-    right: 16,
-    transform: [{ translateY: -140 }],
-    maxWidth: 300,
-    alignSelf: 'center',
-    backgroundColor: '#17171f',
-    padding: 20,
-    gap: 4,
-    alignItems: 'center',
-  },
-  previewIconWrap: {
-    marginBottom: 6,
-  },
-  previewName: {
-    color: '#d6a23a',
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  previewStatLine: {
-    color: '#e8e8ee',
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  previewActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-    width: '100%',
-  },
-  previewEquipButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: '#4a4456',
-  },
-  previewEquipButtonDisabled: {
-    opacity: 0.4,
-  },
-  previewUnequipButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: '#8a2f2f',
-  },
-  previewActionLabel: {
-    color: '#f2f2f2',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  previewCancelButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: '#2a2a35',
-  },
-  previewCancelLabel: {
-    color: '#8a8a95',
-    fontSize: 13,
   },
 });
