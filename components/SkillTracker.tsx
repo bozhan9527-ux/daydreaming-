@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 import { Archetype, getCurrentTier, JobTier } from '../game/combat';
@@ -13,7 +13,7 @@ import {
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { getStudentSkillFlavor } from '../game/studentSkillTree';
-import { useGameState } from '../hooks/useGameState';
+import { AUTO_SKILLS_UNLOCK_LEVEL, useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
 
 const FLASH_WINDOW_MS = 900;
@@ -32,6 +32,11 @@ interface SkillTileProps {
   intervalSeconds: number;
   justTriggered: boolean;
   now: number;
+  // Lv60 且 AUTO 開啟時是全自動(冷卻好就發動,行為跟改版前一樣);否則冷卻好只代表「可以點了」,
+  // 要玩家自己點一下(armed 記到,等下次擊殺結算才真的生效)。
+  autoMode: boolean;
+  armed: boolean;
+  onPress?: () => void;
 }
 
 const RING_SIZE = TILE_SIZE + BORDER_THICKNESS * 2;
@@ -74,7 +79,21 @@ function CircularCountdown({ progress }: { progress: number }) {
   );
 }
 
-function SkillTile({ tag, archetype, slot, label, level, tier, timerStartedAt, intervalSeconds, justTriggered, now }: SkillTileProps) {
+function SkillTile({
+  tag,
+  archetype,
+  slot,
+  label,
+  level,
+  tier,
+  timerStartedAt,
+  intervalSeconds,
+  justTriggered,
+  now,
+  autoMode,
+  armed,
+  onPress,
+}: SkillTileProps) {
   'use no memo';
   const icon = getSkillIcon(archetype, slot, tier);
   const intervalMs = intervalSeconds * 1000;
@@ -85,17 +104,35 @@ function SkillTile({ tag, archetype, slot, label, level, tier, timerStartedAt, i
   // 用金色發光框強調)/COOLDOWN(倒數環本身就是這個狀態,不用額外樣式)/DISABLED(Lv.0
   // 還沒點過這個技能,整顆圖示淡化,跟「正在倒數中」的技能區分開)。
   const isDisabled = level <= 0 && !justTriggered;
+  const ready = secondsLeft <= 0;
+  // 手動模式下冷卻好但還沒點過:用藍色發光提示「可以點了」——藍色是全站統一的「互動中/
+  // 可操作」訊號色(跟裝備分頁選取插槽同一套語言,見 EquipmentPanel.tsx 的說明),金色專門
+  // 留給 PRESSED 態那種「已經觸發」的慶祝感,兩者不共用同一個顏色才分得清楚差異。
+  const readyToTap = !autoMode && ready && !armed && !isDisabled && !justTriggered;
+
+  let countdownLabel: string;
+  if (justTriggered) countdownLabel = '發動!';
+  else if (!autoMode && ready && armed) countdownLabel = '待命中';
+  else if (!autoMode && ready) countdownLabel = '點我!';
+  else countdownLabel = `${secondsLeft}s`;
 
   return (
     <View style={styles.tileGroup}>
-      <View style={styles.tileWrapper}>
+      <Pressable style={styles.tileWrapper} onPress={onPress} disabled={!onPress}>
         <CircularCountdown progress={justTriggered ? 1 : progress} />
-        <View style={[styles.tile, justTriggered && styles.tileFlash, isDisabled && styles.tileDisabled]}>
+        <View
+          style={[
+            styles.tile,
+            justTriggered && styles.tileFlash,
+            isDisabled && styles.tileDisabled,
+            readyToTap && styles.tileReadyToTap,
+          ]}
+        >
           <View style={[styles.iconWrap, isDisabled && styles.iconDisabled]}>
             <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={3} />
           </View>
           <View style={styles.countdownBadge}>
-            <Text style={styles.countdownText}>{justTriggered ? '發動!' : `${secondsLeft}s`}</Text>
+            <Text style={styles.countdownText}>{countdownLabel}</Text>
           </View>
           {tag && (
             <View style={styles.kindTag}>
@@ -103,7 +140,7 @@ function SkillTile({ tag, archetype, slot, label, level, tier, timerStartedAt, i
             </View>
           )}
         </View>
-      </View>
+      </Pressable>
       <Text style={styles.caption} numberOfLines={2}>
         {label} Lv.{level}
       </Text>
@@ -123,9 +160,17 @@ export function SkillTracker() {
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const level = useGameState((state) => state.level);
   const activeSkillTimers = useGameState((state) => state.activeSkillTimers);
+  const studentActiveSkillTimers = useGameState((state) => state.studentActiveSkillTimers);
   const secondarySkillTimerStartedAt = useGameState((state) => state.secondarySkillTimerStartedAt);
   const lastSkillTriggerAt = useGameState((state) => state.lastSkillTriggerAt);
   const lastSecondarySkillTriggerAt = useGameState((state) => state.lastSecondarySkillTriggerAt);
+  const armedActiveSkills = useGameState((state) => state.armedActiveSkills);
+  const armedStudentActiveSkills = useGameState((state) => state.armedStudentActiveSkills);
+  const armedSecondarySkill = useGameState((state) => state.armedSecondarySkill);
+  const autoSkillsEnabled = useGameState((state) => state.autoSkillsEnabled);
+  const armSkill = useGameState((state) => state.armSkill);
+  const armSecondarySkill = useGameState((state) => state.armSecondarySkill);
+  const toggleAutoSkills = useGameState((state) => state.toggleAutoSkills);
 
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -139,15 +184,28 @@ export function SkillTracker() {
   // 圖示現在直接吃真正的職業階級(JobTier),不是技能等級——跟下面 SkillTile 顯示的
   // 「Lv.X」技能等級數字是兩件事,那個數字繼續吃 slotLevel,不受這裡影響。
   const tier = getCurrentTier(level.level);
+  const autoUnlocked = level.level >= AUTO_SKILLS_UNLOCK_LEVEL;
+  const autoMode = autoUnlocked && autoSkillsEnabled;
 
   return (
     <View style={styles.wrapper}>
+      {/* AUTO 開關:Lv60 前技能不會自動觸發,冷卻好要玩家自己點技能圖示才算數(SkillTile 的
+          onPress 接 armSkill/armSecondarySkill)。滿 Lv60 才解鎖這顆開關,關掉的話即使 Lv60+
+          也會維持手動模式,方便玩家自己選要不要保留手動點擊的節奏感。 */}
+      {autoUnlocked ? (
+        <Pressable style={[styles.autoButton, autoSkillsEnabled && styles.autoButtonActive]} onPress={toggleAutoSkills}>
+          <Text style={styles.autoButtonLabel}>AUTO {autoSkillsEnabled ? '開' : '關'}</Text>
+        </Pressable>
+      ) : (
+        <Text style={styles.autoHint}>Lv{AUTO_SKILLS_UNLOCK_LEVEL} 解鎖自動戰鬥,之前技能冷卻好要自己點擊發動</Text>
+      )}
       <View style={styles.container}>
         {ACTIVE_SLOT_IDS.map((slot: ActiveSkillSlotId) => {
           // 學生期(!hasChosenJob)還沒有主職,job.archetype 只是佔位值不代表真的職業——
           // 名稱/等級/倒數秒數改吃 studentSkillTree,圖示照樣借用 job.archetype 當視覺樣板即可。
           const slotLevel = hasChosenJob ? skillTree[job.archetype][slot] : studentSkillTree[slot];
           const label = hasChosenJob ? SKILL_SLOT_NAMES[job.archetype][slot] : getStudentSkillFlavor(level.level, slot).name;
+          const armed = hasChosenJob ? armedActiveSkills[slot] === true : armedStudentActiveSkills[slot] === true;
           return (
             <SkillTile
               key={slot}
@@ -156,10 +214,13 @@ export function SkillTracker() {
               label={label}
               level={slotLevel}
               tier={tier}
-              timerStartedAt={activeSkillTimers[slot]}
+              timerStartedAt={hasChosenJob ? activeSkillTimers[slot] : studentActiveSkillTimers[slot]}
               intervalSeconds={activeSkillTriggerIntervalSeconds(slot, slotLevel)}
               justTriggered={primaryJustTriggered}
               now={now}
+              autoMode={autoMode}
+              armed={armed}
+              onPress={autoMode ? undefined : () => armSkill(hasChosenJob ? 'job' : 'student', slot)}
             />
           );
         })}
@@ -180,6 +241,9 @@ export function SkillTracker() {
             intervalSeconds={secondaryActiveSkillTriggerIntervalSeconds(skillTree[secondaryJob].active1)}
             justTriggered={secondaryJustTriggered}
             now={now}
+            autoMode={autoMode}
+            armed={armedSecondarySkill}
+            onPress={autoMode ? undefined : armSecondarySkill}
           />
         </View>
       )}
@@ -191,6 +255,30 @@ const styles = StyleSheet.create({
   wrapper: {
     alignItems: 'center',
     gap: 8,
+  },
+  autoButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: '#1c1c24',
+    borderWidth: 1,
+    borderColor: '#59462b',
+  },
+  // AUTO 開啟中用藍色(互動中訊號色,跟全站選取態同一套語言)標示,不用金色——金色留給裝飾外框。
+  autoButtonActive: {
+    backgroundColor: '#274357',
+    borderColor: '#6ab0e0',
+  },
+  autoButtonLabel: {
+    color: '#f2f2f2',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  autoHint: {
+    color: '#8a8a95',
+    fontSize: 11,
+    textAlign: 'center',
+    maxWidth: 260,
   },
   container: {
     flexDirection: 'row',
@@ -248,6 +336,15 @@ const styles = StyleSheet.create({
   // DISABLED 態:整顆淡化,區分「還沒點過這個技能」跟「技能倒數中」。
   tileDisabled: {
     opacity: 0.5,
+  },
+  // 手動模式下冷卻好、還沒點過:藍色發光提示「可以點了」(互動中訊號色,見上面 autoButtonActive
+  // 同一套邏輯的說明)。
+  tileReadyToTap: {
+    shadowColor: '#6ab0e0',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    elevation: 6,
   },
   iconWrap: {
     width: TILE_SIZE,
