@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
   },
   tileLevelText: {
     color: '#f2f2f2',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '700',
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
     paddingHorizontal: 4,

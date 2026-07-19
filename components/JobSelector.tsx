@@ -622,7 +622,7 @@ const styles = StyleSheet.create({
   },
   archetypeTileTag: {
     color: '#c9a94f',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
   },
   panelCard: {
@@ -673,10 +673,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // 選取中狀態統一用藍色(#6ab0e0)當訊號色,金色專門留給裝飾性外框。
   archetypeSwitchIconWrapActive: {
     backgroundColor: '#4a4456',
     borderWidth: 2,
-    borderColor: '#c9a94f',
+    borderColor: '#6ab0e0',
   },
   tierRow: {
     flexDirection: 'row',
@@ -706,7 +707,7 @@ const styles = StyleSheet.create({
   },
   tierButtonLockHint: {
     color: '#8a8a95',
-    fontSize: 9,
+    fontSize: 11,
   },
   previewGrid: {
     flexDirection: 'row',
@@ -795,7 +796,7 @@ const styles = StyleSheet.create({
   },
   detailTagText: {
     color: '#c9a94f',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
   },
   detailDesc: {
@@ -826,7 +827,7 @@ const styles = StyleSheet.create({
   },
   previewBadgeText: {
     color: '#8fbfe0',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
   },
   detailCombatBonus: {
@@ -903,6 +904,6 @@ const styles = StyleSheet.create({
   },
   studentSkillDesc: {
     color: '#8fd4a8',
-    fontSize: 10,
+    fontSize: 11,
   },
 });

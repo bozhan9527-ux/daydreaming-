@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   },
   costText: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
   },
   maxedText: {
     color: '#c9a94f',

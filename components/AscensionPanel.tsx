@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   },
   summarySubtext: {
     color: '#c9c9d2',
-    fontSize: 10,
+    fontSize: 11,
     textAlign: 'center',
   },
   pointsText: {
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   },
   sectionHint: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
     textAlign: 'center',
   },
   card: {
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   },
   description: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
   },
   bonusText: {
     color: '#c9a94f',

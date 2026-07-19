@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
   },
   value: {
     color: '#f2f2f2',

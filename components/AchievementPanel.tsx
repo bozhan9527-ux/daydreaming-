@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   },
   bonusText: {
     color: '#8fd4a8',
-    fontSize: 10,
+    fontSize: 11,
     textAlign: 'center',
     marginBottom: 4,
   },
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   },
   unlockedBadge: {
     color: '#c9a94f',
-    fontSize: 10,
+    fontSize: 11,
   },
   description: {
     color: '#8a8a95',

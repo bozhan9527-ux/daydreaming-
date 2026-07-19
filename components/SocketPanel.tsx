@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   },
   gemBuyPrice: {
     color: '#c9a94f',
-    fontSize: 9,
+    fontSize: 11,
   },
   emptyHint: {
     color: '#8a8a95',
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   },
   socketFilledLabel: {
     color: '#f2f2f2',
-    fontSize: 10,
+    fontSize: 11,
   },
   socketEmpty: {
     flexDirection: 'row',
@@ -216,10 +216,10 @@ const styles = StyleSheet.create({
   },
   socketOptionLabel: {
     color: '#8a8a95',
-    fontSize: 9,
+    fontSize: 11,
   },
   noSocketText: {
     color: '#6a6a75',
-    fontSize: 10,
+    fontSize: 11,
   },
 });

@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   stageLabel: {
     textAlign: 'center',
     color: '#f2f2f2',
-    fontSize: 10,
+    fontSize: 11,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
     marginBottom: 4,
   },

@@ -63,7 +63,7 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, attention, onSelec
                 {showDot && <View style={styles.attentionDot} />}
                 {!unlocked && <Image source={TAB_LOCK_ICON} style={styles.lockIcon} resizeMode="contain" />}
               </View>
-              <Text style={styles.label} numberOfLines={unlocked ? 1 : 2}>
+              <Text style={[styles.label, !unlocked && styles.labelLocked]} numberOfLines={unlocked ? 1 : 2}>
                 {unlocked ? tab.label : lockedLabel}
               </Text>
             </Pressable>
@@ -152,7 +152,12 @@ const styles = StyleSheet.create({
   },
   label: {
     color: '#f2f2f2',
-    fontSize: 9,
+    fontSize: 11,
     textAlign: 'center',
+  },
+  // 鎖住的分頁要塞「名稱+Lv門檻」兩行,字級跟解鎖分頁一樣大時較長的名稱(如「寵物坐騎」)
+  // 會擠出第三行被截斷——縮小一級,這兩行本來就是次要的等待提示,不用跟主要標籤一樣大。
+  labelLocked: {
+    fontSize: 9,
   },
 });

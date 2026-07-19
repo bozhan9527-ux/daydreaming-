@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
     textAlign: 'center',
   },
   shareButton: {

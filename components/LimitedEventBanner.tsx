@@ -30,9 +30,9 @@ export function LimitedEventBanner() {
     return () => clearInterval(id);
   }, []);
 
-  // 三段式收合,跟右側 DailyQuestBadge 對稱(見該檔案註解)——貼左邊緣的小三角形,點第一下
-  // 往右延伸露出🎉圖示,點第二下攤開完整活動內容,第三下收回三角形。
-  const [stage, setStage] = useState<0 | 1 | 2>(0);
+  // 三段式收合,跟右側 DailyQuestBadge 對稱(見該檔案註解)——遊戲一開始預設完整展開,
+  // 玩家自己點兩下收合成貼左邊緣的小三角形。
+  const [stage, setStage] = useState<0 | 1 | 2>(2);
 
   const now = Date.now();
   const event = getActiveLimitedEvent(now);
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#f2f2f2',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
   },
   bonus: {
@@ -143,6 +143,6 @@ const styles = StyleSheet.create({
   },
   remaining: {
     color: '#c9c9d2',
-    fontSize: 9,
+    fontSize: 11,
   },
 });

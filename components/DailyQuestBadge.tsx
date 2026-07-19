@@ -84,10 +84,11 @@ export function DailyQuestBadge() {
   const claimableCount = allRows.filter((row) => row.canClaim).length + achievementClaimableCount;
   const allClaimed = claimedCount === allRows.length;
 
-  // 三段式收合:預設貼右邊緣只露出一個小三角形(不佔版面),點第一下往左延伸露出禮物圖示
-  // (+待領取數字角標),點第二下才整個攤開完整任務清單,第三下收回三角形。收合成一個
+  // 三段式收合:遊戲一開始預設完整展開(玩家第一眼就看到今天有哪些任務,不用自己去發現
+  // 這顆徽章),玩家自己點兩下收合成小三角形貼邊(不佔版面)。點第一下先退到只露出禮物圖示
+  // (+待領取數字角標)的中間態,點第二下才收回三角形,再點一下重新展開。收合成一個
   // stage 狀態機而不是兩顆獨立布林,避免「icon展開了但清單也還開著」這種不一致組合。
-  const [stage, setStage] = useState<0 | 1 | 2>(0);
+  const [stage, setStage] = useState<0 | 1 | 2>(2);
 
   if (allClaimed) return null;
 
@@ -251,13 +252,13 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     color: '#8a8a95',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
   },
   achievementHint: {
     color: '#c9a94f',
-    fontSize: 10,
+    fontSize: 11,
   },
   row: {
     flexDirection: 'row',
@@ -267,16 +268,16 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     color: '#e0e0e6',
-    fontSize: 10,
+    fontSize: 11,
     flexShrink: 1,
   },
   rowProgress: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
   },
   rowDone: {
     color: '#5fa563',
-    fontSize: 10,
+    fontSize: 11,
   },
   rowClaimButton: {
     paddingVertical: 2,
@@ -286,7 +287,7 @@ const styles = StyleSheet.create({
   },
   rowClaimButtonText: {
     color: '#1c1c24',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
   },
 });

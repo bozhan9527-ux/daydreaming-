@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
     textAlign: 'center',
     marginBottom: 2,
   },
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   },
   filterChipLabel: {
     color: '#c8c8d0',
-    fontSize: 9,
+    fontSize: 11,
   },
   sortButton: {
     paddingVertical: 3,

@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   },
   secondaryLabel: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
   },
   tileGroup: {
     alignItems: 'center',
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   },
   countdownText: {
     color: '#f2f2f2',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
     paddingHorizontal: 5,
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   },
   caption: {
     color: '#f2f2f2',
-    fontSize: 9,
+    fontSize: 11,
     textAlign: 'center',
   },
 });

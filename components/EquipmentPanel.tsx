@@ -526,9 +526,11 @@ const styles = StyleSheet.create({
     fontSize: 8,
     textAlign: 'center',
   },
+  // 選取中狀態統一用藍色(#6ab0e0)當「互動中/選取中」訊號色,金色專門留給裝飾性外框——
+  // 跟背包分頁的插槽選取樣式對齊,不要兩個分頁各用一套顏色語言。
   slotButtonActive: {
     backgroundColor: '#3d3450',
-    shadowColor: '#d6a23a',
+    shadowColor: '#6ab0e0',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 5,
@@ -540,7 +542,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
     textAlign: 'center',
     marginBottom: 2,
   },
@@ -563,7 +565,7 @@ const styles = StyleSheet.create({
   substatRowLabel: {
     width: 28,
     color: '#8fbfe0',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
   },
   substatCell: {
@@ -577,7 +579,7 @@ const styles = StyleSheet.create({
   },
   substatCellLabel: {
     color: '#8a8a95',
-    fontSize: 9,
+    fontSize: 11,
   },
   substatCellValue: {
     color: '#c9a94f',
@@ -664,7 +666,7 @@ const styles = StyleSheet.create({
   },
   filterChipLabel: {
     color: '#c8c8d0',
-    fontSize: 9,
+    fontSize: 11,
   },
   rowLeft: {
     flexDirection: 'row',
@@ -712,7 +714,7 @@ const styles = StyleSheet.create({
   },
   identifyLabel: {
     color: '#c9a94f',
-    fontSize: 10,
+    fontSize: 11,
   },
   previewBackdrop: {
     position: 'absolute',

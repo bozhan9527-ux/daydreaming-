@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
   },
   resultRarity: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
   },
   // 文字疊在右上角:插圖鋪滿整框後直接放文字會被蓋在圖片上看不清楚,墊一層半透明底色的
   // 小卡片,靠右上角放才不會蓋到柱子(EasterEggFrame 柱寬34px,right留40px淨空)。
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
   },
   resultText: {
     color: '#f2f2f2',
-    fontSize: 10,
+    fontSize: 11,
     textAlign: 'left',
     lineHeight: 14,
   },

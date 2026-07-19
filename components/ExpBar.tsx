@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   },
   barText: {
     color: '#f2f2f2',
-    fontSize: 10,
+    fontSize: 11,
     textAlign: 'center',
   },
 });
