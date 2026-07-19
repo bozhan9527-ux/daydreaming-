@@ -461,7 +461,7 @@ interface GameState {
   // 成就系統(見 game/achievements.ts):unlockedAchievementIds 是「條件已達成」成就 id 的持久化
   // 清單。v26 起改成手動領取制,獎勵不再隨條件達成自動發放——claimedAchievementIds 是「已經按過
   // 領取按鈕、拿到獎勵」的 id 清單,unlockedAchievementIds 減去 claimedAchievementIds 就是玩家
-  // 在成就分頁看到的「待領取」清單。
+  // 在右側任務徽章的成就區塊(見 DailyQuestBadge.tsx)看到的「待領取」清單。
   // hasEverAssembledTransferProof/hasEverSwitchedJob 是給轉職類成就用的一次性旗標,設為 true
   // 後永不重置(轉職證明會被 setJob 消耗,單看當下數值看不出「有沒有發生過」)。
   unlockedAchievementIds: string[];
@@ -729,7 +729,7 @@ function incrementWeeklyChallengeProgress(
 // 成就偵測的共用入口:每次呼叫都是全量重新計算(見 evaluateUnlockedAchievementIds 的註解),
 // 跟已持久化的 unlockedAchievementIds 做 diff 找出「這次新達成」的項目,更新 unlockedAchievementIds
 // 並跳 toast 提示。v26 起改成手動領取制,這裡只負責「偵測條件達成」,不再自動發獎勵——
-// 獎勵改由玩家在成就分頁按「領取」觸發(見 claimAchievement/claimAllAchievements),避免玩家
+// 獎勵改由玩家在右側任務徽章的成就區塊按「領取」觸發(見 claimAchievement/claimAllAchievements),避免玩家
 // 沒注意到就被動拿走獎勵。刻意不在這裡呼叫 persist(get())——呼叫端每個 mutation 本來就會在
 // 自己的 set() 後面接一次 persist(get()),這裡的 set() 只要發生在那之前,新達成清單就會被
 // 一起存進去。
@@ -745,10 +745,10 @@ function checkAndUnlockAchievements(get: () => GameState, set: (partial: Partial
   });
 
   if (newlyUnlocked.length > 1) {
-    useToast.getState().show(`達成了 ${newlyUnlocked.length} 個成就(可到成就分頁領取獎勵)`);
+    useToast.getState().show(`達成了 ${newlyUnlocked.length} 個成就(可到右側任務徽章的成就區塊領取獎勵)`);
   } else {
     const def = ACHIEVEMENTS[newlyUnlocked[0]];
-    useToast.getState().show(`達成成就:${def.title}(可到成就分頁領取獎勵)`);
+    useToast.getState().show(`達成成就:${def.title}(可到右側任務徽章的成就區塊領取獎勵)`);
   }
 }
 
@@ -1909,7 +1909,7 @@ export const useGameState = create<GameState>((set, get) => ({
   },
 
   // 成就手動領取(見成就系統改成手動領取制):條件達成(unlockedAchievementIds)只是「可以領」,
-  // 要玩家在成就分頁按這個才真的發獎勵並記進 claimedAchievementIds。發獎邏輯照抄舊版
+  // 要玩家在右側任務徽章的成就區塊按這個才真的發獎勵並記進 claimedAchievementIds。發獎邏輯照抄舊版
   // checkAndUnlockAchievements 自動發獎年代的那段計算。
   claimAchievement: (id) => {
     const { unlockedAchievementIds, claimedAchievementIds, coins, enhanceStones, gemCounts } = get();

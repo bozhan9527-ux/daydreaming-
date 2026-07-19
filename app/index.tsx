@@ -60,8 +60,6 @@ export default function HomeScreen() {
   const companionGear = useGameState((state) => state.companionGear);
   const dungeon = useGameState((state) => state.dungeon);
   const transferProofs = useGameState((state) => state.transferProofs);
-  const unlockedAchievementIds = useGameState((state) => state.unlockedAchievementIds);
-  const claimedAchievementIds = useGameState((state) => state.claimedAchievementIds);
 
   const [openTabId, setOpenTabId] = useState<string | null>(null);
   const openTab = PANEL_TABS.find((tab) => tab.id === openTabId) ?? null;
@@ -156,8 +154,6 @@ export default function HomeScreen() {
     skillBooks,
     companionGear,
     dungeon,
-    unlockedAchievementIds,
-    claimedAchievementIds,
   });
   // 「技能」併進「職業」分頁、「裝備」併進「背包」分頁當子分頁後(見 panelTabs.tsx),
   // TabBar 的角標只認頂層分頁 id(job/inventory),原本各自獨立的 skill/equipment 提醒條件

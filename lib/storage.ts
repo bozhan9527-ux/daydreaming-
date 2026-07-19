@@ -1995,7 +1995,7 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // 這個功能上線前的存檔不會被誤判成「已經達成過轉職相關成就」,但下一次 load() 的
 // 全量重新計算(見 hooks/useGameState.ts 的 checkAndUnlockAchievements)會立刻幫舊存檔
 // 追溯性標記所有已經達標的成就為「可領取」(例如已經 Lv400 的老存檔會馬上補到
-// level_30~level_200 可領,實際入帳仍要玩家自己去成就分頁按領取)。
+// level_30~level_200 可領,實際入帳仍要玩家自己去右側任務徽章的成就區塊按領取)。
 // v19 沒有 killCount(累計擊殺數,先前只活在記憶體裡沒存檔,重整就歸零),補 0——
 // 舊玩家的歷史擊殺數已經無法追回,只能從這次更新後重新累加,不影響其他任何進度。
 // v20 沒有勇者血量/戰敗風險系統欄位(見 game/heroHealth.ts),補 heroHp = 50 + 目前等級*2
