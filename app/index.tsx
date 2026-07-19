@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { BattleScene } from '../components/BattleScene';
 import { CareerOverviewPanel } from '../components/CareerOverviewPanel';
 import { DailyQuestBadge } from '../components/DailyQuestBadge';
+import { EasterEggFrame } from '../components/EasterEggFrame';
 import { LimitedEventBanner } from '../components/LimitedEventBanner';
 import { SettingsButton } from '../components/SettingsButton';
 import { WelcomeModal } from '../components/WelcomeModal';
@@ -185,6 +186,7 @@ export default function HomeScreen() {
           圖示本身(EventIcon 依 rarity 換色)已經傳達稀有度,拿掉這行讓彩蛋文字能多占一行。 */}
       <View style={styles.resultBoxWrap}>
         <View style={styles.resultBox}>
+          <EasterEggFrame />
           {lastEvent !== null ? (
             <>
               <View style={styles.resultIconWrap}>
@@ -397,6 +399,9 @@ const styles = StyleSheet.create({
     maxWidth: 280,
     flex: 1,
   },
+  // 邊框改用 EasterEggFrame 疊加的柱子+鑲邊美術圖(裁自參考UI設計圖「EASTER EGG BANNER
+  // FRAME」),不用 borderWidth 畫框;左右內距加大到蓋過柱子寬度(34px),避免圖示/文字被
+  // 疊在柱子後面看不清楚。
   resultBox: {
     width: '100%',
     flex: 1,
@@ -406,11 +411,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#59462b',
     backgroundColor: 'rgba(28, 28, 36, 0.6)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 38,
+    paddingVertical: 12,
   },
   // 掛在彩蛋框正下方的掉落通知,絕對定位不占版面高度,顯示1秒後由 stageDropBanner 變 null
   // 直接消失(卡片本身很短命,沒有另外做淡出動畫的必要)。

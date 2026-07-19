@@ -23,28 +23,25 @@ interface NineSliceFrameProps {
 }
 
 export function NineSliceFrame({ parts, cornerSize, edgeThickness }: NineSliceFrameProps) {
+  // RN 的 Image 就算給了 resizeMode="stretch",只用 top+bottom(或 left+right)兩個相對
+  // 邊界撐版面、沒給明確的 width/height 數值時,還是會退回原圖原生尺寸當版面大小,邊框段
+  // 就會卡在原生寬度貼在角落旁邊、填不滿角與角之間的空隙(留一塊沒畫到的空白)。外面包一層
+  // View(View 沒有原生尺寸這個問題,top+bottom/left+right 能正常撐出正確大小)、裡面的
+  // Image 再用 100%/100% 貼滿,才會真的填滿整段邊。
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Image
-        source={parts.top}
-        resizeMode="stretch"
-        style={[styles.edge, { top: 0, left: cornerSize, right: cornerSize, height: edgeThickness }]}
-      />
-      <Image
-        source={parts.bottom}
-        resizeMode="stretch"
-        style={[styles.edge, { bottom: 0, left: cornerSize, right: cornerSize, height: edgeThickness }]}
-      />
-      <Image
-        source={parts.left}
-        resizeMode="stretch"
-        style={[styles.edge, { left: 0, top: cornerSize, bottom: cornerSize, width: edgeThickness }]}
-      />
-      <Image
-        source={parts.right}
-        resizeMode="stretch"
-        style={[styles.edge, { right: 0, top: cornerSize, bottom: cornerSize, width: edgeThickness }]}
-      />
+      <View style={[styles.edge, { top: 0, left: cornerSize, right: cornerSize, height: edgeThickness }]}>
+        <Image source={parts.top} resizeMode="stretch" style={styles.fill} />
+      </View>
+      <View style={[styles.edge, { bottom: 0, left: cornerSize, right: cornerSize, height: edgeThickness }]}>
+        <Image source={parts.bottom} resizeMode="stretch" style={styles.fill} />
+      </View>
+      <View style={[styles.edge, { left: 0, top: cornerSize, bottom: cornerSize, width: edgeThickness }]}>
+        <Image source={parts.left} resizeMode="stretch" style={styles.fill} />
+      </View>
+      <View style={[styles.edge, { right: 0, top: cornerSize, bottom: cornerSize, width: edgeThickness }]}>
+        <Image source={parts.right} resizeMode="stretch" style={styles.fill} />
+      </View>
       <Image source={parts.topLeft} style={[styles.corner, { top: 0, left: 0, width: cornerSize, height: cornerSize }]} />
       <Image source={parts.topRight} style={[styles.corner, { top: 0, right: 0, width: cornerSize, height: cornerSize }]} />
       <Image source={parts.bottomLeft} style={[styles.corner, { bottom: 0, left: 0, width: cornerSize, height: cornerSize }]} />
@@ -59,5 +56,9 @@ const styles = StyleSheet.create({
   },
   edge: {
     position: 'absolute',
+  },
+  fill: {
+    width: '100%',
+    height: '100%',
   },
 });
