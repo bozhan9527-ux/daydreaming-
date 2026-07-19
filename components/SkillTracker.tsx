@@ -81,13 +81,17 @@ function SkillTile({ tag, archetype, slot, label, level, tier, timerStartedAt, i
   const elapsedMs = Math.max(0, Math.min(intervalMs, now - timerStartedAt));
   const progress = intervalMs > 0 ? elapsedMs / intervalMs : 1;
   const secondsLeft = Math.max(0, Math.ceil((intervalMs - elapsedMs) / 1000));
+  // 呼應參考UI設計圖「SKILL BUTTONS (STATES)」的四態:NORMAL(預設)/PRESSED(剛發動,
+  // 用金色發光框強調)/COOLDOWN(倒數環本身就是這個狀態,不用額外樣式)/DISABLED(Lv.0
+  // 還沒點過這個技能,整顆圖示淡化,跟「正在倒數中」的技能區分開)。
+  const isDisabled = level <= 0 && !justTriggered;
 
   return (
     <View style={styles.tileGroup}>
       <View style={styles.tileWrapper}>
         <CircularCountdown progress={justTriggered ? 1 : progress} />
-        <View style={[styles.tile, justTriggered && styles.tileFlash]}>
-          <View style={styles.iconWrap}>
+        <View style={[styles.tile, justTriggered && styles.tileFlash, isDisabled && styles.tileDisabled]}>
+          <View style={[styles.iconWrap, isDisabled && styles.iconDisabled]}>
             <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={3} />
           </View>
           <View style={styles.countdownBadge}>
@@ -232,14 +236,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  // PRESSED 態:金色發光框,呼應參考圖裡按下態圖示比平常更亮/更搶眼的處理。
   tileFlash: {
     backgroundColor: '#4a4456',
+    shadowColor: '#d6a23a',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  // DISABLED 態:整顆淡化,區分「還沒點過這個技能」跟「技能倒數中」。
+  tileDisabled: {
+    opacity: 0.5,
   },
   iconWrap: {
     width: TILE_SIZE,
     height: TILE_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconDisabled: {
+    opacity: 0.6,
   },
   countdownBadge: {
     position: 'absolute',
