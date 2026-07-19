@@ -194,9 +194,6 @@ interface ActiveSkillTriggerResult {
   firedSlots: ActiveSkillSlotId[];
 }
 
-// 滿這個等級才解鎖 AUTO 開關(見 SkillTracker.tsx 的按鈕鎖定判斷)——之前開放的都是手動點擊。
-export const AUTO_SKILLS_UNLOCK_LEVEL = 60;
-
 // 技能書/強化石分階制(見 game/materials.ts):所有既有掉落/獎勵管道(擊殺掉落、商店購買、
 // 每日任務、週期挑戰、成就)一律只發初階(tier 0),呼應「維持現有掉落機制」的既有設計決定——
 // 更高階只能靠玩家自己合成(見 craftSkillBooks/craftEnhanceStones action)。這裡統一寫成小函式,
@@ -502,15 +499,17 @@ interface GameState {
   lastSkillTriggerAt: number | null;
   lastSecondarySkillTriggerAt: number | null;
   forceInstantNextFight: boolean;
-  // 滿 AUTO_SKILLS_UNLOCK_LEVEL(Lv60)前(或玩家自己把 AUTO 關掉)技能不會自動觸發,玩家要在
-  // 冷卻好之後自己點一下技能圖示才算「已預備」,armSkill action 把對應欄位記到這裡,下次擊殺
-  // 結算時 tickBattle 才會真的套用效果並清掉這個記錄。跟 activeSkillTimers 一樣不存檔——只是
-  // 「這輪冷卻好了有沒有被點過」的暫時狀態,不是需要跨 session 保留的進度。
+  // AUTO 關掉時(玩家自己選的手動模式)技能不會自動觸發,玩家要在冷卻好之後自己點一下技能
+  // 圖示才算「已預備」,armSkill action 把對應欄位記到這裡,下次擊殺結算時 tickBattle 才會
+  // 真的套用效果並清掉這個記錄。跟 activeSkillTimers 一樣不存檔——只是「這輪冷卻好了有沒有
+  // 被點過」的暫時狀態,不是需要跨 session 保留的進度。
   armedActiveSkills: Partial<Record<ActiveSkillSlotId, true>>;
   armedStudentActiveSkills: Partial<Record<ActiveSkillSlotId, true>>;
   armedSecondarySkill: boolean;
-  // AUTO 開關本身也不存檔,每次重開預設回到「有解鎖就自動」——避免額外碰存檔 schema
-  // (見 lib/storage.ts 的版本遷移機制),對玩家來說差別只是重開後要記得再關一次,不影響進度。
+  // AUTO 開關本身也不存檔,每次重開預設回到開啟——避免額外碰存檔 schema(見 lib/storage.ts
+  // 的版本遷移機制),對玩家來說差別只是重開後要記得再關一次,不影響進度。預設就是 AUTO,
+  // 手動點擊改成玩家自己選擇要不要關掉 AUTO 才會用到的節奏感選項,不再是 Lv60 前的強制門檻
+  // (呼應「AUTO預設開啟,手動點擊改為加速選項」的設計調整)。
   autoSkillsEnabled: boolean;
   // 設定(見 components/SettingsModal.tsx):soundMuted 是音效總開關,hasSeenWelcome 是
   // 新手歡迎彈窗是否已經看過/關閉——兩者都要存檔,不然每次重開 App 都要重新關一次音效/
@@ -1140,15 +1139,16 @@ export const useGameState = create<GameState>((set, get) => ({
 
     // 主動技能:4 個技能欄位(active1-4)各自獨立秒數倒數,固定不受戰鬥/關卡時長影響,
     // 全部同時運作、可以同一擊一起觸發,倒數滿了在下一次擊殺結算時套用效果。
-    // Lv60 且玩家開著 AUTO 才是全自動(冷卻好就發動);否則是手動模式,冷卻好只是「可以點了」,
-    // 要玩家自己點過(armedActiveSkills/armedStudentActiveSkills 記到)才會在這次結算生效。
+    // AUTO 開著(預設值)就是全自動(冷卻好就發動);玩家自己關掉才是手動模式,冷卻好只是
+    // 「可以點了」,要玩家自己點過(armedActiveSkills/armedStudentActiveSkills 記到)才會在
+    // 這次結算生效。
     const now = Date.now();
     let exp = reward.exp;
     let coins = reward.coins;
     let forceInstantNextFight = state.forceInstantNextFight;
     let lastSkillTriggerAt = state.lastSkillTriggerAt;
     let anySkillTriggered = false;
-    const autoMode = state.level.level >= AUTO_SKILLS_UNLOCK_LEVEL && state.autoSkillsEnabled;
+    const autoMode = state.autoSkillsEnabled;
 
     // 學生主動技能:畢業後不會失效,永遠跟職業主動技能並存,用自己獨立的一組計時器
     // (見 game/studentSkillTree.ts 的 getStudentActiveEffectKind,不吃 archetype)。

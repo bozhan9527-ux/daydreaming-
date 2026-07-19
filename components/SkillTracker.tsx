@@ -13,7 +13,7 @@ import {
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { getStudentSkillFlavor } from '../game/studentSkillTree';
-import { AUTO_SKILLS_UNLOCK_LEVEL, useGameState } from '../hooks/useGameState';
+import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
 
 const FLASH_WINDOW_MS = 900;
@@ -32,8 +32,8 @@ interface SkillTileProps {
   intervalSeconds: number;
   justTriggered: boolean;
   now: number;
-  // Lv60 且 AUTO 開啟時是全自動(冷卻好就發動,行為跟改版前一樣);否則冷卻好只代表「可以點了」,
-  // 要玩家自己點一下(armed 記到,等下次擊殺結算才真的生效)。
+  // AUTO 開啟(預設值)時是全自動(冷卻好就發動);玩家自己關掉才是手動模式,冷卻好只代表
+  // 「可以點了」,要玩家自己點一下(armed 記到,等下次擊殺結算才真的生效)。
   autoMode: boolean;
   armed: boolean;
   onPress?: () => void;
@@ -188,21 +188,16 @@ export function SkillTracker() {
   // 圖示現在直接吃真正的職業階級(JobTier),不是技能等級——跟下面 SkillTile 顯示的
   // 「Lv.X」技能等級數字是兩件事,那個數字繼續吃 slotLevel,不受這裡影響。
   const tier = getCurrentTier(level.level);
-  const autoUnlocked = level.level >= AUTO_SKILLS_UNLOCK_LEVEL;
-  const autoMode = autoUnlocked && autoSkillsEnabled;
+  const autoMode = autoSkillsEnabled;
 
   return (
     <View style={styles.wrapper}>
-      {/* AUTO 開關:Lv60 前技能不會自動觸發,冷卻好要玩家自己點技能圖示才算數(SkillTile 的
-          onPress 接 armSkill/armSecondarySkill)。滿 Lv60 才解鎖這顆開關,關掉的話即使 Lv60+
-          也會維持手動模式,方便玩家自己選要不要保留手動點擊的節奏感。 */}
-      {autoUnlocked ? (
-        <Pressable style={[styles.autoButton, autoSkillsEnabled && styles.autoButtonActive]} onPress={toggleAutoSkills}>
-          <Text style={styles.autoButtonLabel}>AUTO {autoSkillsEnabled ? '開' : '關'}</Text>
-        </Pressable>
-      ) : (
-        <Text style={styles.autoHint}>Lv{AUTO_SKILLS_UNLOCK_LEVEL} 解鎖自動戰鬥,之前技能冷卻好要自己點擊發動</Text>
-      )}
+      {/* AUTO 開關:預設開啟,技能冷卻好就自動發動,不用玩家盯著畫面點。想自己抓節奏、
+          手動決定何時觸發技能的玩家可以自己關掉(SkillTile 的 onPress 接 armSkill/
+          armSecondarySkill),從一開始就能用,不再是 Lv60 後才解鎖的功能。 */}
+      <Pressable style={[styles.autoButton, autoSkillsEnabled && styles.autoButtonActive]} onPress={toggleAutoSkills}>
+        <Text style={styles.autoButtonLabel}>AUTO {autoSkillsEnabled ? '開' : '關'}</Text>
+      </Pressable>
       <View style={styles.container}>
         {ACTIVE_SLOT_IDS.map((slot: ActiveSkillSlotId) => {
           // 學生期(!hasChosenJob)還沒有主職,job.archetype 只是佔位值不代表真的職業——
@@ -289,12 +284,6 @@ const styles = StyleSheet.create({
     color: '#f2f2f2',
     fontSize: 11,
     fontWeight: '700',
-  },
-  autoHint: {
-    color: '#8a8a95',
-    fontSize: 11,
-    textAlign: 'center',
-    maxWidth: 260,
   },
   container: {
     flexDirection: 'row',
