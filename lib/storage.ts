@@ -26,6 +26,7 @@ import {
 import { DailyTaskId } from '../game/daily';
 import { createInitialDungeonState, DungeonState } from '../game/dungeon';
 import { createInitialLevelState, LevelState } from '../game/leveling';
+import { createEmptyTieredMaterialCounts, migrateFlatMaterialToTiered, TieredMaterialCounts } from '../game/materials';
 import { SkillLevels, SKILL_IDS } from '../game/skills';
 import {
   ACTIVE_SLOT_IDS,
@@ -44,7 +45,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 34;
+export const SCHEMA_VERSION = 35;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -122,10 +123,13 @@ export interface SaveData {
   companions: CompanionState;
   secondaryJob: Archetype | null;
   itemInstances: ItemInstances;
-  enhanceStones: number;
+  // 強化石(見 game/equipment.ts 的裝備強化):v35 起改成分階制(見 game/materials.ts 的
+  // TieredMaterialCounts),初階+一階~五階共6階,呼應職業轉職階級。
+  enhanceStones: TieredMaterialCounts;
   gemCounts: GemCounts;
-  // 技能書(見 game/skillTree.ts):v25 起技能升級改吃的獨立資源,不再跟角色升等搶銀行經驗值。
-  skillBooks: number;
+  // 技能書(見 game/skillTree.ts):v25 起技能升級改吃的獨立資源,不再跟角色升等搶銀行經驗值;
+  // v35 起改成分階制,道理跟 enhanceStones 完全一樣。
+  skillBooks: TieredMaterialCounts;
   stageProgress: StageProgress;
   // 每日內容:上次重置的日期字串(''=從沒重置過,下次load()一定會觸發),今日已擊敗隻數,
   // 今日任務是否已領過獎勵——三個欄位一起在跨日時歸零(見 hooks/useGameState.ts 的 load())。
@@ -223,9 +227,9 @@ export function createInitialSaveData(): SaveData {
     companions: createEmptyCompanionState(),
     secondaryJob: null,
     itemInstances: createEmptyItemInstances(),
-    enhanceStones: 0,
+    enhanceStones: createEmptyTieredMaterialCounts(),
     gemCounts: createEmptyGemCounts(),
-    skillBooks: 0,
+    skillBooks: createEmptyTieredMaterialCounts(),
     stageProgress: createInitialStageProgress(),
     lastDailyResetAt: '',
     dailyKillCount: 0,
@@ -1909,15 +1913,50 @@ function isActiveSkillLoadout(value: unknown): value is ActiveSkillLoadout {
   });
 }
 
-// v34(主動技能欄自選上線):現在的 SaveData 完整形狀,比 v33 多了 activeSkillLoadout。這是
-// migrate() 的第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
-function isSaveDataV34(value: unknown): value is SaveData {
+// v34(主動技能欄自選上線,技能書/強化石分階經濟上線前的最後一版):比 v33 多了
+// activeSkillLoadout,skillBooks/enhanceStones 還是舊制單一數量。凍結成明確獨立的
+// interface+literal版本號檢查,形狀直接繼承 SaveDataV33(只換 version 字面量、疊加新欄位、
+// 覆寫 skillBooks/enhanceStones 型別)。
+interface SaveDataV34 extends Omit<SaveDataV33, 'version' | 'skillBooks' | 'enhanceStones'> {
+  version: 34;
+  skillBooks: number;
+  enhanceStones: number;
+  activeSkillLoadout: ActiveSkillLoadout;
+}
+
+function isSaveDataV34(value: unknown): value is SaveDataV34 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 34 &&
     isSaveDataV33({ ...record, version: 33 }) &&
-    isActiveSkillLoadout(record.activeSkillLoadout)
+    isActiveSkillLoadout(record.activeSkillLoadout) &&
+    typeof record.skillBooks === 'number' &&
+    typeof record.enhanceStones === 'number'
+  );
+}
+
+function isTieredMaterialCounts(value: unknown): value is TieredMaterialCounts {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return ([0, 1, 2, 3, 4, 5] as const).every((tier) => typeof record[tier] === 'number');
+}
+
+// v35(技能書/強化石分階經濟上線):現在的 SaveData 完整形狀,比 v34 多了分階的
+// skillBooks/enhanceStones(見 game/materials.ts 的 TieredMaterialCounts)。這是 migrate() 的
+// 第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
+function isSaveDataV35(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  // isSaveDataV34 要求 skillBooks/enhanceStones 是 number(v34 的舊形狀),但這裡驗證的是已經
+  // 分階的真正形狀——用 0(合法的 number)蓋掉這兩個欄位餵給 isSaveDataV34,只借用它對「其餘
+  // 欄位」的檢查,分階形狀本身另外用 isTieredMaterialCounts 獨立驗證,不能直接把 record 原樣
+  // 降版本傳進去(那樣兩個物件形狀的欄位一定會卡在 typeof !== 'number' 上,永遠驗證失敗)。
+  return (
+    record.version === SCHEMA_VERSION &&
+    isSaveDataV34({ ...record, version: 34, skillBooks: 0, enhanceStones: 0 }) &&
+    isTieredMaterialCounts(record.skillBooks) &&
+    isTieredMaterialCounts(record.enhanceStones)
   );
 }
 
@@ -2003,14 +2042,28 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // v33→v34 沒有 activeSkillLoadout(見 game/skillTree.ts 的主動技能欄自選機制):補「目前職業
 // 自己的active1-4」預設配置(createInitialActiveSkillLoadout(value.job.archetype)),行為
 // 跟這個機制上線前完全一致,玩家不特地去改配置的話畫面不會有任何變化。
+// v34→v35 的 skillBooks/enhanceStones 從單一數量改成分階制(見 game/materials.ts 的
+// TieredMaterialCounts):舊的數量全部併入「初階」,不折算、不重新分配——玩家已經囤的量
+// 不會平白消失,只是換了個容器裝,之後要升到更高階要透過新的合成機制(兩本前一階換一本
+// 下一階)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV34(value)) return value;
+  if (isSaveDataV35(value)) return value;
+  if (isSaveDataV34(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
+    };
+  }
   if (isSaveDataV33(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
     };
   }
   if (isSaveDataV32(value)) {
@@ -2019,6 +2072,8 @@ function migrate(value: unknown): SaveData {
       version: SCHEMA_VERSION,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
     };
   }
   if (isSaveDataV31(value)) {
@@ -2029,6 +2084,8 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
     };
   }
   if (isSaveDataV30(value)) {
@@ -2039,6 +2096,8 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       weeklyChallengeWeekIndex: weekIndex(),
       weeklyChallengeProgress: {},
       weeklyChallengeClaimedIds: [],
@@ -2052,6 +2111,8 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       ascensionPoints: 0,
       ascensionUpgrades: {},
       weeklyChallengeWeekIndex: weekIndex(),
@@ -2067,6 +2128,8 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
       ascensionPoints: 0,
@@ -2084,6 +2147,8 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -2102,6 +2167,8 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
       totalStagesCleared: 0,
@@ -2123,6 +2190,8 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
+      skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       claimedAchievementIds: [...value.unlockedAchievementIds],
       skillTree: withPassive3(value.skillTree),
       studentSkillTree: withStudentPassive3(value.studentSkillTree),
@@ -2145,9 +2214,10 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
       dailyTaskProgress: {},
@@ -2168,10 +2238,11 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
       dailyTaskProgress: {},
@@ -2192,11 +2263,12 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
       dailyTaskProgress: {},
@@ -2217,11 +2289,12 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
       dailyTaskProgress: {},
@@ -2242,13 +2315,14 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
       dailyTaskProgress: {},
@@ -2269,6 +2343,7 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
@@ -2276,7 +2351,7 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       claimedAchievementIds: [...value.unlockedAchievementIds],
       totalStagesCleared: 0,
       dailyTaskProgress: {},
@@ -2297,6 +2372,7 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       unlockedAchievementIds: [],
       claimedAchievementIds: [],
       hasEverAssembledTransferProof: false,
@@ -2308,7 +2384,7 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -2328,6 +2404,7 @@ function migrate(value: unknown): SaveData {
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       hasChosenJob: true,
       unlockedAchievementIds: [],
       claimedAchievementIds: [],
@@ -2340,7 +2417,7 @@ function migrate(value: unknown): SaveData {
       companionGear: createEmptyCompanionGearState(),
       dungeon: createInitialDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -2371,9 +2448,9 @@ function migrate(value: unknown): SaveData {
       companions: value.companions,
       secondaryJob: value.secondaryJob,
       itemInstances: value.itemInstances,
-      enhanceStones: value.enhanceStones,
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       gemCounts: value.gemCounts,
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: value.stageProgress,
       lastDailyResetAt: value.lastDailyResetAt,
       dailyKillCount: value.dailyKillCount,
@@ -2422,9 +2499,9 @@ function migrate(value: unknown): SaveData {
       companions: value.companions,
       secondaryJob: value.secondaryJob,
       itemInstances: value.itemInstances,
-      enhanceStones: value.enhanceStones,
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       gemCounts: value.gemCounts,
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: value.stageProgress,
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2473,9 +2550,9 @@ function migrate(value: unknown): SaveData {
       companions: value.companions,
       secondaryJob: value.secondaryJob,
       itemInstances: value.itemInstances,
-      enhanceStones: value.enhanceStones,
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       gemCounts: value.gemCounts,
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: value.stageProgress,
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2524,9 +2601,9 @@ function migrate(value: unknown): SaveData {
       companions: value.companions,
       secondaryJob: value.secondaryJob,
       itemInstances: value.itemInstances,
-      enhanceStones: value.enhanceStones,
+      enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       gemCounts: value.gemCounts,
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2575,9 +2652,9 @@ function migrate(value: unknown): SaveData {
       companions: value.companions,
       secondaryJob: value.secondaryJob,
       itemInstances: upgradeItemInstancesToV13(value.itemInstances),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2626,9 +2703,9 @@ function migrate(value: unknown): SaveData {
       companions: value.companions,
       secondaryJob: value.secondaryJob,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2677,9 +2754,9 @@ function migrate(value: unknown): SaveData {
       companions: value.companions,
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2728,9 +2805,9 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2779,9 +2856,9 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2830,9 +2907,9 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2881,9 +2958,9 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2932,9 +3009,9 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -2983,9 +3060,9 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -3034,9 +3111,9 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -3085,9 +3162,9 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,
@@ -3136,9 +3213,9 @@ function migrate(value: unknown): SaveData {
       companions: createEmptyCompanionState(),
       secondaryJob: null,
       itemInstances: createEmptyItemInstances(),
-      enhanceStones: 0,
+      enhanceStones: createEmptyTieredMaterialCounts(),
       gemCounts: createEmptyGemCounts(),
-      skillBooks: 0,
+      skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',
       dailyKillCount: 0,

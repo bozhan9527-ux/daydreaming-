@@ -2,6 +2,7 @@ import { Archetype, DUAL_CLASS_UNLOCK_LEVEL, JobTier, TIER_UNLOCK_LEVELS } from 
 import { canUpgradeCompanionGearSlot, CompanionGearState } from './companions';
 import { applyDungeonTicketRegen, DungeonState } from './dungeon';
 import { EquipmentLoadout, GemCounts, SLOT_Z_ORDER } from './equipment';
+import { currentMaterialTier, TieredMaterialCounts } from './materials';
 import { canUpgradeSkillSlot, SkillSlotId, SKILL_SLOT_IDS } from './skillTree';
 import { canUpgradeStudentSkillSlot } from './studentSkillTree';
 
@@ -15,14 +16,17 @@ export interface TabAttentionInput {
   coins: number;
   transferProofs: Partial<Record<Archetype, number>>;
   equipment: EquipmentLoadout;
-  enhanceStones: number;
+  // 分階制(見 game/materials.ts):badge只在意「目前職業階級對應那一階夠不夠用」,
+  // 不是總量夠不夠——內部會用 hasChosenJob/jobTier 自己解析要看哪一階。
+  enhanceStones: TieredMaterialCounts;
   gemCounts: GemCounts;
   jobTier: JobTier;
   // 呼叫端先決定好要吃 skillTree[job.archetype] 還是 studentSkillTree(取決於 hasChosenJob),
   // 這裡只認一份已經選好的槽位等級,不重複判斷一次。
   activeSkillLevels: Record<SkillSlotId, number>;
-  // 技能升級改吃技能書(見 game/skillTree.ts),不再吃 bankedExp。
-  skillBooks: number;
+  // 技能升級改吃技能書(見 game/skillTree.ts),不再吃 bankedExp;v35 起分階制,道理跟
+  // enhanceStones 一樣。
+  skillBooks: TieredMaterialCounts;
   companionGear: CompanionGearState;
   dungeon: DungeonState;
   // 成就系統改成手動領取制(見 hooks/useGameState.ts 的 claimAchievement/claimAllAchievements)後,
@@ -50,13 +54,14 @@ function hasAnySkillUpgrade(
   hasChosenJob: boolean,
   tier: JobTier,
   levels: Record<SkillSlotId, number>,
-  skillBooks: number
+  skillBooks: TieredMaterialCounts
 ): boolean {
+  const availableBooks = skillBooks[currentMaterialTier(hasChosenJob, tier)];
   return SKILL_SLOT_IDS.some((slot) => {
     const level = levels[slot];
     return hasChosenJob
-      ? canUpgradeSkillSlot(level, tier, skillBooks)
-      : canUpgradeStudentSkillSlot(level, skillBooks);
+      ? canUpgradeSkillSlot(level, tier, availableBooks)
+      : canUpgradeStudentSkillSlot(level, availableBooks);
   });
 }
 
@@ -74,9 +79,11 @@ export function computeTabAttentionFlags(input: TabAttentionInput): TabAttention
   const hasUsableTransferProof = Object.values(input.transferProofs).some((count) => (count ?? 0) >= 1);
   const canDualClass = input.hasChosenJob && input.level >= DUAL_CLASS_UNLOCK_LEVEL;
 
+  const availableEnhanceStones = input.enhanceStones[currentMaterialTier(input.hasChosenJob, input.jobTier)];
+
   return {
     job: canGraduate || (canDualClass && hasUsableTransferProof),
-    equipment: input.enhanceStones > 0 || Object.values(input.gemCounts).some((count) => count > 0),
+    equipment: availableEnhanceStones > 0 || Object.values(input.gemCounts).some((count) => count > 0),
     inventory: hasAnyEmptySlot(input.equipment),
     skill: hasAnySkillUpgrade(input.hasChosenJob, input.jobTier, input.activeSkillLevels, input.skillBooks),
     // 成就改成手動領取制(見 hooks/useGameState.ts 的 claimAchievement/claimAllAchievements):

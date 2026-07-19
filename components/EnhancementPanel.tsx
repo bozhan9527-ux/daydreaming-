@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { getCurrentTier } from '../game/combat';
 import {
   ENHANCE_MAX_LEVEL,
   ENHANCE_STONE_PRICE,
@@ -10,6 +11,7 @@ import {
   getEnhancedBonusValue,
   getItemById,
 } from '../game/equipment';
+import { currentMaterialTier, MATERIAL_TIER_LABELS } from '../game/materials';
 import { getItemIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
@@ -37,9 +39,17 @@ export function EnhancementPanel() {
   const itemInstances = useGameState((state) => state.itemInstances);
   const coins = useGameState((state) => state.coins);
   const enhanceStones = useGameState((state) => state.enhanceStones);
+  const hasChosenJob = useGameState((state) => state.hasChosenJob);
+  const level = useGameState((state) => state.level);
   const enhanceItem = useGameState((state) => state.enhanceItem);
   const purchaseEnhanceStone = useGameState((state) => state.purchaseEnhanceStone);
   const showToast = useToast((state) => state.show);
+
+  // 強化石分階制(見 game/materials.ts):強化裝備要用「目前職業階級」對應那一階的石頭,
+  // 這裡只看那一階夠不夠用,其餘階級的庫存要去背包的材料瀏覽頁看。
+  const materialTier = currentMaterialTier(hasChosenJob, getCurrentTier(level.level));
+  const availableStones = enhanceStones[materialTier];
+  const materialTierLabel = MATERIAL_TIER_LABELS[materialTier];
 
   function handleEnhance(itemId: string) {
     enhanceItem(itemId);
@@ -63,8 +73,10 @@ export function EnhancementPanel() {
       <Text style={styles.hint}>裝備 +1~+5 強化失敗只浪費資源,+6~+10 失敗有機會降級或損毀,抗性素質能降低失敗率</Text>
 
       <Pressable style={styles.stoneRow} onPress={handleBuyStone}>
-        <Text style={styles.stoneLabel}>強化石:{enhanceStones} 顆</Text>
-        <Text style={styles.stoneBuy}>購買 +1({ENHANCE_STONE_PRICE} 金幣)</Text>
+        <Text style={styles.stoneLabel}>
+          {materialTierLabel}強化石:{availableStones} 顆
+        </Text>
+        <Text style={styles.stoneBuy}>購買初階 +1({ENHANCE_STONE_PRICE} 金幣)</Text>
       </Pressable>
 
       {equippedSlots.length === 0 && <Text style={styles.emptyHint}>還沒有裝備任何東西,先到「背包」分頁穿上再回來強化</Text>}
@@ -79,7 +91,7 @@ export function EnhancementPanel() {
         const coinCost = getEnhanceCoinCost(item, instance.enhanceLevel);
         const stoneCost = getEnhanceStoneCost(instance.enhanceLevel);
         const failChance = getEnhanceFailChance(instance, instance.enhanceLevel);
-        const canAfford = coins >= coinCost && enhanceStones >= stoneCost;
+        const canAfford = coins >= coinCost && availableStones >= stoneCost;
         const icon = getItemIcon(item);
         const currentValue = getEnhancedBonusValue(item, instance);
 
@@ -102,7 +114,8 @@ export function EnhancementPanel() {
             ) : (
               <>
                 <Text style={styles.costText}>
-                  升到 +{instance.enhanceLevel + 1}:{coinCost} 金幣 / {stoneCost} 顆強化石,失敗率 {Math.round(failChance * 100)}%
+                  升到 +{instance.enhanceLevel + 1}:{coinCost} 金幣 / {stoneCost} 顆{materialTierLabel}強化石,失敗率{' '}
+                  {Math.round(failChance * 100)}%
                   {instance.enhanceLevel + 1 > 5 ? '(危險區,失敗可能降級或損毀)' : ''}
                 </Text>
                 <Pressable

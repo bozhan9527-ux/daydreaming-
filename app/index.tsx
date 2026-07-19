@@ -23,6 +23,7 @@ import { getCurrentTier } from '../game/combat';
 import { getCompanionById } from '../game/companions';
 import { getItemById } from '../game/equipment';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
+import { sumTieredMaterialCounts } from '../game/materials';
 import { newlyUnlockedTabs } from '../game/onboarding';
 import { computeTabAttentionFlags } from '../game/tabAttention';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF } from '../game/transfer';
@@ -179,7 +180,7 @@ export default function HomeScreen() {
       <TopResourceBar
         level={level.level}
         coins={coins}
-        skillBooks={skillBooks}
+        skillBooks={sumTieredMaterialCounts(skillBooks)}
         onPressLevel={() => setShowCareerOverview(true)}
       />
 

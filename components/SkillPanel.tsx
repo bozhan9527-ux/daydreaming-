@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getCurrentTier } from '../game/combat';
+import { currentMaterialTier, MATERIAL_TIER_LABELS } from '../game/materials';
 import {
   ACTIVE_SLOT_IDS,
   canUpgradeSkillSlot,
@@ -47,11 +48,16 @@ export function SkillPanel() {
   const slotLevels = showJobTree ? skillTree[archetype] : studentSkillTree;
   const cap = showJobTree ? skillSlotLevelCap(tier) : STUDENT_SKILL_LEVEL_CAP;
 
+  // 技能書分階制(見 game/materials.ts):要用哪一階的書,直接對應目前職業階級,學生技能
+  // 固定吃初階(currentMaterialTier 在 !hasChosenJob 時固定回傳0)。
+  const materialTier = currentMaterialTier(hasChosenJob && showJobTree, tier);
+  const availableBooks = skillBooks[materialTier];
+
   const selectedLevel = slotLevels[selectedSlot];
   const selectedBookCost = skillSlotUpgradeBookCost(selectedLevel);
   const canUpgradeSelected = showJobTree
-    ? canUpgradeSkillSlot(selectedLevel, tier, skillBooks)
-    : canUpgradeStudentSkillSlot(selectedLevel, skillBooks);
+    ? canUpgradeSkillSlot(selectedLevel, tier, availableBooks)
+    : canUpgradeStudentSkillSlot(selectedLevel, availableBooks);
   const selectedAtCap = selectedLevel >= cap;
 
   const selectedFlavor = getStudentSkillFlavor(level.level, selectedSlot);
@@ -135,7 +141,9 @@ export function SkillPanel() {
           disabled={!canUpgradeSelected}
         >
           <Text style={styles.upgradeLabel}>
-            {selectedAtCap ? '已達上限' : `升級 (${selectedBookCost} 技能書)`}
+            {selectedAtCap
+              ? '已達上限'
+              : `升級 (${selectedBookCost} 本${MATERIAL_TIER_LABELS[materialTier]}技能書,持有 ${availableBooks} 本)`}
           </Text>
         </Pressable>
       </View>

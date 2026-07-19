@@ -110,6 +110,12 @@ import {
 } from '../game/weeklyChallenge';
 import { accumulateExp, autoLevelUp, calcOfflineExp, createInitialLevelState, LevelState } from '../game/leveling';
 import {
+  createEmptyTieredMaterialCounts,
+  currentMaterialTier,
+  MaterialTier,
+  TieredMaterialCounts,
+} from '../game/materials';
+import {
   activeSkillTriggerIntervalSeconds,
   ACTIVE_SLOT_IDS,
   ActiveEffectKind,
@@ -188,6 +194,21 @@ interface ActiveSkillTriggerResult {
 
 // 滿這個等級才解鎖 AUTO 開關(見 SkillTracker.tsx 的按鈕鎖定判斷)——之前開放的都是手動點擊。
 export const AUTO_SKILLS_UNLOCK_LEVEL = 60;
+
+// 技能書/強化石分階制(見 game/materials.ts):所有既有掉落/獎勵管道(擊殺掉落、商店購買、
+// 每日任務、週期挑戰、成就)一律只發初階(tier 0),呼應「維持現有掉落機制」的既有設計決定——
+// 更高階只能靠玩家自己合成(見 craftSkillBooks/craftEnhanceStones action)。這裡統一寫成小函式,
+// 避免每個發放點各自手刻「初階+N、其餘階級原樣」的物件展開。
+function grantBasicMaterial(counts: TieredMaterialCounts, amount: number): TieredMaterialCounts {
+  if (amount === 0) return counts;
+  return { ...counts, 0: counts[0] + amount };
+}
+
+// 消耗指定階級的材料(升級技能/強化裝備用)——呼叫端自己先用 currentMaterialTier() 算出
+// 「目前職業階級對應哪一階」,這個函式只單純做扣除,不重複算階級判斷邏輯。
+function spendMaterialAtTier(counts: TieredMaterialCounts, tier: MaterialTier, amount: number): TieredMaterialCounts {
+  return { ...counts, [tier]: counts[tier] - amount };
+}
 
 // 拿掉這批剛觸發過的欄位,其餘已點過但還沒輪到觸發的欄位(理論上不會發生,冷卻好立刻觸發)
 // 維持原樣——單純寫成小函式避免三個呼叫點(學生/職業/副職)各自重複同一段物件過濾邏輯。
@@ -399,10 +420,13 @@ interface GameState {
   dungeon: DungeonState;
   secondaryJob: Archetype | null;
   itemInstances: ItemInstances;
-  enhanceStones: number;
+  // 強化石(見 game/materials.ts 的 TieredMaterialCounts):分階制,初階+一階~五階共6階,
+  // 呼應職業轉職階級——升級/強化「需要哪一階」直接對應目前職業階級,不對應技能等級本身。
+  enhanceStones: TieredMaterialCounts;
   gemCounts: GemCounts;
-  // 技能書(見 game/skillTree.ts):技能升級改吃的獨立資源,不再跟角色升等搶銀行經驗值。
-  skillBooks: number;
+  // 技能書(見 game/skillTree.ts):技能升級改吃的獨立資源,不再跟角色升等搶銀行經驗值;
+  // 分階規則跟 enhanceStones 完全一樣。
+  skillBooks: TieredMaterialCounts;
   stageProgress: StageProgress;
   // 這輩子總共清了幾個大關(每破一次魔王就 +1),永不隨 stageProgress 輪迴繞圈歸零——
   // 3000 關里程碑成就(見 game/achievements.ts 的 'stage' 分類)靠這個數字判定,不能直接看
@@ -740,9 +764,9 @@ export const useGameState = create<GameState>((set, get) => ({
   dungeon: createInitialDungeonState(),
   secondaryJob: null,
   itemInstances: createEmptyItemInstances(),
-  enhanceStones: 0,
+  enhanceStones: createEmptyTieredMaterialCounts(),
   gemCounts: createEmptyGemCounts(),
-  skillBooks: 0,
+  skillBooks: createEmptyTieredMaterialCounts(),
   stageProgress: createInitialStageProgress(),
   totalStagesCleared: 0,
   ascensionPoints: 0,
@@ -1247,11 +1271,12 @@ export const useGameState = create<GameState>((set, get) => ({
       lastCompanionDropId = companionDrop.id;
     }
 
-    // 強化石/寶石/技能書掉落:各自獨立判定,互不干擾、跟寵物掉落同一套邏輯。
-    const nextEnhanceStones = state.enhanceStones + (rollEnhanceStoneDrop() ? 1 : 0);
+    // 強化石/寶石/技能書掉落:各自獨立判定,互不干擾、跟寵物掉落同一套邏輯。掉落一律只給初階
+    // (見 grantBasicMaterial 的說明),更高階要靠玩家自己合成。
+    const nextEnhanceStones = grantBasicMaterial(state.enhanceStones, rollEnhanceStoneDrop() ? 1 : 0);
     const gemDrop = rollGemDrop();
     const nextGemCounts = gemDrop ? { ...state.gemCounts, [gemDrop]: state.gemCounts[gemDrop] + 1 } : state.gemCounts;
-    const nextSkillBooks = state.skillBooks + (rollSkillBookDrop() ? 1 : 0);
+    const nextSkillBooks = grantBasicMaterial(state.skillBooks, rollSkillBookDrop() ? 1 : 0);
 
     // 裝備掉落:免費直接解鎖一件當前職業/等級穿得下的付費款,豐富擊殺獎勵種類,
     // 跟上面幾種掉落一樣各自獨立判定、互不影響。
@@ -1578,15 +1603,28 @@ export const useGameState = create<GameState>((set, get) => ({
   // 花金幣+強化石嘗試 +1;Lv1~5 失敗只浪費資源,Lv6~10 失敗可能降級或直接損毀(從裝備欄跟
   // 已解鎖清單一併移除)。resistance 素質(裝備自己的,不是全身加總)拉低失敗率。
   enhanceItem: (itemId) => {
-    const { coins, enhanceStones, itemInstances, equipment, unlockedItemIds, dailyTaskProgress, weeklyChallengeProgress } = get();
+    const {
+      coins,
+      enhanceStones,
+      itemInstances,
+      equipment,
+      unlockedItemIds,
+      dailyTaskProgress,
+      weeklyChallengeProgress,
+      hasChosenJob,
+      level,
+    } = get();
     const item = getItemById(itemId);
     const instance = itemInstances[itemId];
     if (!item || !instance) return;
     if (instance.enhanceLevel >= ENHANCE_MAX_LEVEL) return;
 
+    // 強化石分階制(見 game/materials.ts):要用哪一階的石頭,直接對應目前職業階級,不對應
+    // 強化目標等級本身——跟技能書的分階規則完全一樣。
+    const materialTier = currentMaterialTier(hasChosenJob, getCurrentTier(level.level));
     const coinCost = getEnhanceCoinCost(item, instance.enhanceLevel);
     const stoneCost = getEnhanceStoneCost(instance.enhanceLevel);
-    if (coins < coinCost || enhanceStones < stoneCost) return;
+    if (coins < coinCost || enhanceStones[materialTier] < stoneCost) return;
 
     const outcome = rollEnhanceOutcome(instance, instance.enhanceLevel);
     let nextInstances = itemInstances;
@@ -1615,7 +1653,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     set({
       coins: coins - coinCost,
-      enhanceStones: enhanceStones - stoneCost,
+      enhanceStones: spendMaterialAtTier(enhanceStones, materialTier, stoneCost),
       itemInstances: nextInstances,
       equipment: nextEquipment,
       unlockedItemIds: nextUnlockedItemIds,
@@ -1630,7 +1668,7 @@ export const useGameState = create<GameState>((set, get) => ({
   purchaseEnhanceStone: () => {
     const { coins, enhanceStones } = get();
     if (coins < ENHANCE_STONE_PRICE) return;
-    set({ coins: coins - ENHANCE_STONE_PRICE, enhanceStones: enhanceStones + 1 });
+    set({ coins: coins - ENHANCE_STONE_PRICE, enhanceStones: grantBasicMaterial(enhanceStones, 1) });
     persist(get());
   },
 
@@ -1687,8 +1725,12 @@ export const useGameState = create<GameState>((set, get) => ({
   upgradeSkillSlot: (archetype, slot) => {
     const { level, skillTree, skillBooks } = get();
     const tier = getCurrentTier(level.level);
+    // 技能書分階制(見 game/materials.ts):要用哪一階的書,直接對應目前職業階級,不對應
+    // 這一格技能本身的等級——這個 action 只在畢業後(hasChosenJob)才會被呼叫到,所以這裡
+    // 直接傳 true。
+    const materialTier = currentMaterialTier(true, tier);
     const currentSlotLevel = skillTree[archetype][slot];
-    if (!canUpgradeSkillSlot(currentSlotLevel, tier, skillBooks)) return;
+    if (!canUpgradeSkillSlot(currentSlotLevel, tier, skillBooks[materialTier])) return;
 
     const bookCost = skillSlotUpgradeBookCost(currentSlotLevel);
     const nextSkillTree: SkillTreeLevels = {
@@ -1696,7 +1738,7 @@ export const useGameState = create<GameState>((set, get) => ({
       [archetype]: { ...skillTree[archetype], [slot]: nextSkillSlotLevel(currentSlotLevel, tier) },
     };
 
-    set({ skillTree: nextSkillTree, skillBooks: skillBooks - bookCost });
+    set({ skillTree: nextSkillTree, skillBooks: spendMaterialAtTier(skillBooks, materialTier, bookCost) });
     persist(get());
     playSkillUpgrade();
   },
@@ -1706,8 +1748,9 @@ export const useGameState = create<GameState>((set, get) => ({
   // STUDENT_SKILL_LEVEL_CAP,不吃 JobTier)。
   upgradeStudentSkillSlot: (slot) => {
     const { studentSkillTree, skillBooks } = get();
+    // 學生期一律用初階書(見 currentMaterialTier:!hasChosenJob 固定回傳0)。
     const currentSlotLevel = studentSkillTree[slot];
-    if (!canUpgradeStudentSkillSlot(currentSlotLevel, skillBooks)) return;
+    if (!canUpgradeStudentSkillSlot(currentSlotLevel, skillBooks[0])) return;
 
     const bookCost = skillSlotUpgradeBookCost(currentSlotLevel);
     const nextStudentSkillTree: Record<SkillSlotId, number> = {
@@ -1715,7 +1758,7 @@ export const useGameState = create<GameState>((set, get) => ({
       [slot]: nextStudentSkillSlotLevel(currentSlotLevel),
     };
 
-    set({ studentSkillTree: nextStudentSkillTree, skillBooks: skillBooks - bookCost });
+    set({ studentSkillTree: nextStudentSkillTree, skillBooks: spendMaterialAtTier(skillBooks, 0, bookCost) });
     persist(get());
     playSkillUpgrade();
   },
@@ -1787,8 +1830,8 @@ export const useGameState = create<GameState>((set, get) => ({
     if (!canClaimDailyQuest(dailyKillCount, dailyQuestClaimed)) return;
     set({
       coins: coins + DAILY_QUEST_COIN_REWARD,
-      enhanceStones: enhanceStones + DAILY_QUEST_ENHANCE_STONE_REWARD,
-      skillBooks: skillBooks + DAILY_QUEST_SKILL_BOOK_REWARD,
+      enhanceStones: grantBasicMaterial(enhanceStones, DAILY_QUEST_ENHANCE_STONE_REWARD),
+      skillBooks: grantBasicMaterial(skillBooks, DAILY_QUEST_SKILL_BOOK_REWARD),
       dailyQuestClaimed: true,
     });
     persist(get());
@@ -1802,8 +1845,8 @@ export const useGameState = create<GameState>((set, get) => ({
     const reward = getDailyTaskDef(id).reward;
     set({
       coins: coins + reward.coins,
-      enhanceStones: enhanceStones + (reward.enhanceStones ?? 0),
-      skillBooks: skillBooks + (reward.skillBooks ?? 0),
+      enhanceStones: grantBasicMaterial(enhanceStones, reward.enhanceStones ?? 0),
+      skillBooks: grantBasicMaterial(skillBooks, reward.skillBooks ?? 0),
       dailyTaskClaimedIds: [...dailyTaskClaimedIds, id],
     });
     persist(get());
@@ -1824,7 +1867,7 @@ export const useGameState = create<GameState>((set, get) => ({
     }
     set({
       coins: coins + reward.coins,
-      enhanceStones: enhanceStones + (reward.enhanceStones ?? 0),
+      enhanceStones: grantBasicMaterial(enhanceStones, reward.enhanceStones ?? 0),
       gemCounts: nextGemCounts,
       weeklyChallengeClaimedIds: [...weeklyChallengeClaimedIds, id],
     });
@@ -1865,7 +1908,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     set({
       coins: coins + reward.coins,
-      enhanceStones: enhanceStones + (reward.enhanceStones ?? 0),
+      enhanceStones: grantBasicMaterial(enhanceStones, reward.enhanceStones ?? 0),
       gemCounts: nextGemCounts,
       claimedAchievementIds: [...claimedAchievementIds, id],
     });
@@ -1886,7 +1929,7 @@ export const useGameState = create<GameState>((set, get) => ({
     for (const id of claimableIds) {
       const reward = ACHIEVEMENTS[id].reward;
       nextCoins += reward.coins;
-      nextEnhanceStones += reward.enhanceStones ?? 0;
+      nextEnhanceStones = grantBasicMaterial(nextEnhanceStones, reward.enhanceStones ?? 0);
       if (reward.gems) {
         for (const gemType of GEM_TYPES) {
           const amount = reward.gems[gemType];

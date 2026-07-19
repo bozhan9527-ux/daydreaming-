@@ -1,18 +1,20 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { GEM_SPECS, GEM_TYPES } from '../game/equipment';
+import { sumTieredMaterialCounts } from '../game/materials';
 import { useGameState } from '../hooks/useGameState';
 
 // 常駐材料列:強化石/寶石要點進「強化」「鑲嵌」子分頁才看得到,玩家沒辦法隨時掌握自己有多少
 // 「彈藥」。改成清楚分類的 2 欄網格(強化石+3種寶石,各自升級對應等級的裝備/技能素材),
 // 每格獨立卡片、字級跟其他背包內文一致,取代原本擠成一整行、5個數字塞在一起難以掃視的樣式。
 // 技能書不重複列在這裡——已經常駐在頂部資源列(TopResourceBar.tsx),同一個數字不需要出現兩次。
+// 強化石這裡顯示的是6階加總(一眼掃過去有沒有東西),各階細節要去背包的材料瀏覽頁看。
 export function ResourceBar() {
   const enhanceStones = useGameState((state) => state.enhanceStones);
   const gemCounts = useGameState((state) => state.gemCounts);
 
   const materials = [
-    { key: 'enhanceStones', label: '強化石', value: enhanceStones },
+    { key: 'enhanceStones', label: '強化石', value: sumTieredMaterialCounts(enhanceStones) },
     ...GEM_TYPES.map((gemType) => ({
       key: gemType,
       label: GEM_SPECS[gemType].name,
