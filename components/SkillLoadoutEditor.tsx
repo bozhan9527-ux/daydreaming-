@@ -2,7 +2,14 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype, JobTier } from '../game/combat';
-import { ACTIVE_SLOT_IDS, ActiveSkillSlotId, SKILL_SLOT_NAMES, SkillTreeLevels } from '../game/skillTree';
+import {
+  ACTIVE_SLOT_IDS,
+  ActiveSkillSlotId,
+  countBorrowedActiveSlots,
+  MAX_BORROWED_ACTIVE_SLOTS,
+  SKILL_SLOT_NAMES,
+  SkillTreeLevels,
+} from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { useGameState } from '../hooks/useGameState';
 import { ARCHETYPE_LABELS, ARCHETYPES } from './JobSelector';
@@ -13,6 +20,8 @@ const TILE_SIZE = 44;
 // 主動技能欄自選:轉職是這個遊戲的既有機制,skillTree 永久保留玩家投資過的每個職業的技能等級
 // (見 game/skillTree.ts 的 SkillTreeLevels),所以玩家不限於目前職業自己的4招,可以把「已經
 // 投資過等級的其他職業主動技能」也塞進這4個欄位——呼應「從已學習的職業技能中選擇」的需求。
+// 職業認同上限(見 game/skillTree.ts 的 MAX_BORROWED_ACTIVE_SLOTS):4格最多只能借2格別的
+// 職業技能,避免完全自由配置讓玩家的技能欄跟「目前是什麼職業」完全脫鉤。
 interface SkillLoadoutEditorProps {
   archetype: Archetype;
   tier: JobTier;
@@ -26,11 +35,16 @@ export function SkillLoadoutEditor({ archetype, tier }: SkillLoadoutEditorProps)
   const [editingPosition, setEditingPosition] = useState<ActiveSkillSlotId | null>(null);
 
   const learnedOptions = collectLearnedActiveSkills(skillTree);
+  const borrowedCount = countBorrowedActiveSlots(activeSkillLoadout, archetype);
+  const editingRef = editingPosition ? activeSkillLoadout[editingPosition] : null;
+  const editingIsAlreadyBorrowed = editingRef !== null && editingRef.archetype !== archetype;
+  const borrowCapReached = borrowedCount >= MAX_BORROWED_ACTIVE_SLOTS && !editingIsAlreadyBorrowed;
 
   return (
     <View style={styles.container}>
       <Text style={styles.hint}>
-        點一個欄位可以更換要放的技能——不限於目前職業自己的招式,任何你投資過等級的職業技能都能塞進來。
+        點一個欄位可以更換要放的技能——不限於目前職業自己的招式,任何你投資過等級的職業技能都能塞進來,
+        但最多只能借{MAX_BORROWED_ACTIVE_SLOTS}格別的職業技能(已借用 {borrowedCount}/{MAX_BORROWED_ACTIVE_SLOTS})。
       </Text>
       <View style={styles.positionRow}>
         {ACTIVE_SLOT_IDS.map((position) => {
@@ -79,21 +93,32 @@ export function SkillLoadoutEditor({ archetype, tier }: SkillLoadoutEditorProps)
           {learnedOptions.length === 0 ? (
             <Text style={styles.emptyHint}>還沒有已經投資過等級的主動技能,先花技能書升級任一招式再回來配置。</Text>
           ) : (
-            learnedOptions.map((option) => (
-              <Pressable
-                key={`${option.archetype}-${option.sourceSlot}`}
-                style={styles.pickerRow}
-                onPress={() => {
-                  setActiveSkillLoadout(editingPosition, { archetype: option.archetype, sourceSlot: option.sourceSlot });
-                  setEditingPosition(null);
-                }}
-              >
-                <Text style={styles.pickerRowText}>
-                  {SKILL_SLOT_NAMES[option.archetype][option.sourceSlot]} Lv.{option.level}
-                </Text>
-                <Text style={styles.pickerRowSub}>{ARCHETYPE_LABELS[option.archetype]}</Text>
-              </Pressable>
-            ))
+            learnedOptions.map((option) => {
+              // 已經借滿上限時,別的職業技能選項直接鎖住不能點——跟自己職業的技能不衝突,
+              // 那些永遠能選。避免玩家點了才被 store 的 setActiveSkillLoadout 靜默擋下、
+              // 只留一個 toast 說明,不知道剛剛點的那格為什麼沒反應。
+              const isForeign = option.archetype !== archetype;
+              const locked = isForeign && borrowCapReached;
+              return (
+                <Pressable
+                  key={`${option.archetype}-${option.sourceSlot}`}
+                  style={[styles.pickerRow, locked && styles.pickerRowLocked]}
+                  disabled={locked}
+                  onPress={() => {
+                    setActiveSkillLoadout(editingPosition, { archetype: option.archetype, sourceSlot: option.sourceSlot });
+                    setEditingPosition(null);
+                  }}
+                >
+                  <Text style={[styles.pickerRowText, locked && styles.pickerRowTextLocked]}>
+                    {SKILL_SLOT_NAMES[option.archetype][option.sourceSlot]} Lv.{option.level}
+                  </Text>
+                  <Text style={styles.pickerRowSub}>
+                    {ARCHETYPE_LABELS[option.archetype]}
+                    {locked ? `(已借滿${MAX_BORROWED_ACTIVE_SLOTS}格)` : ''}
+                  </Text>
+                </Pressable>
+              );
+            })
           )}
         </View>
       )}
@@ -200,9 +225,16 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#2a2a35',
   },
+  // 職業認同上限鎖住的選項:淡化+不可點,跟一般選項區分開,不用等玩家點了才靠 toast 說明。
+  pickerRowLocked: {
+    opacity: 0.4,
+  },
   pickerRowText: {
     color: '#f2f2f2',
     fontSize: 12,
+  },
+  pickerRowTextLocked: {
+    color: '#8a8a95',
   },
   pickerRowSub: {
     color: '#6ab0e0',

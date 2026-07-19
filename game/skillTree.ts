@@ -50,6 +50,50 @@ export function createInitialActiveSkillLoadout(archetype: Archetype): ActiveSki
   return loadout;
 }
 
+// 職業認同上限:4格自選欄位最多只能有2格塞別的職業技能,至少保留2格是目前職業自己的技能
+// (或空著)——完全自由配置會讓技能欄跟目前職業脫鉤(例如戰士4格全塞法師技能),稀釋掉
+// 「你現在是什麼職業」的認同感。空格(null)不算借用,不佔用這個上限。
+export const MAX_BORROWED_ACTIVE_SLOTS = 2;
+
+export function countBorrowedActiveSlots(loadout: ActiveSkillLoadout, archetype: Archetype): number {
+  return ACTIVE_SLOT_IDS.filter((slot) => {
+    const ref = loadout[slot];
+    return ref !== null && ref.archetype !== archetype;
+  }).length;
+}
+
+// setActiveSkillLoadout action 呼叫這個先檢查合不合法——清空或放自己職業的技能永遠合法,
+// 放別的職業技能才要看目前已經借了幾格。
+export function canSetLoadoutSlot(
+  loadout: ActiveSkillLoadout,
+  archetype: Archetype,
+  position: ActiveSkillSlotId,
+  ref: ActiveSkillRef | null
+): boolean {
+  if (ref === null || ref.archetype === archetype) return true;
+  const currentRef = loadout[position];
+  const alreadyBorrowedHere = currentRef !== null && currentRef.archetype !== archetype;
+  const borrowedCount = countBorrowedActiveSlots(loadout, archetype);
+  return (alreadyBorrowedHere ? borrowedCount : borrowedCount + 1) <= MAX_BORROWED_ACTIVE_SLOTS;
+}
+
+// 轉職後職業認同基準跟著換了,原本合法的配置可能瞬間超標(例如4格都是舊職業的技能)——
+// 從後面的欄位(active4)往前依序清空超標的借用格,直到符合上限,避免轉職後直接卡在一個
+// 「不合法」的狀態。load() 讀舊存檔、setJob 換職業時都要跑一次,兩邊都可能讓既有配置瞬間超標。
+export function enforceLoadoutIdentityCap(loadout: ActiveSkillLoadout, archetype: Archetype): ActiveSkillLoadout {
+  const next = { ...loadout };
+  let borrowedCount = countBorrowedActiveSlots(next, archetype);
+  for (let i = ACTIVE_SLOT_IDS.length - 1; i >= 0 && borrowedCount > MAX_BORROWED_ACTIVE_SLOTS; i--) {
+    const slot = ACTIVE_SLOT_IDS[i];
+    const ref = next[slot];
+    if (ref !== null && ref.archetype !== archetype) {
+      next[slot] = null;
+      borrowedCount--;
+    }
+  }
+  return next;
+}
+
 // 技能等級上限改成「累積技能書」制:轉職之後(不分職業樹階級)每一格都是直接封頂10級,
 // 不再依1-5階分段解鎖——呼應「10級的進度比300級好懂太多」的重新設計。tier 參數保留只是
 // 為了不用改動全部呼叫端的簽章,實際不影響回傳值。

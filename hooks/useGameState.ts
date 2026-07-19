@@ -124,10 +124,13 @@ import {
   ActiveSkillLoadout,
   ActiveSkillRef,
   ActiveSkillSlotId,
+  canSetLoadoutSlot,
   canUpgradeSkillSlot,
   createInitialActiveSkillLoadout,
   createInitialSkillTreeLevels,
+  enforceLoadoutIdentityCap,
   getActiveEffectKind,
+  MAX_BORROWED_ACTIVE_SLOTS,
   getBonusCoinsAmount,
   getExpBoostAmount,
   getPassiveBonusValue,
@@ -896,7 +899,10 @@ export const useGameState = create<GameState>((set, get) => ({
       equipment: save.equipment,
       bodyType: save.bodyType,
       skillTree: save.skillTree,
-      activeSkillLoadout: save.activeSkillLoadout,
+      // 職業認同上限(見 game/skillTree.ts 的 enforceLoadoutIdentityCap)是這次新加的規則,
+      // 舊存檔可能存著「4格全借別的職業」這種現在不合法的配置——讀檔時清一次,超標的借用格
+      // 直接清空,不需要為此多加一版存檔遷移(loadout 本身的資料結構沒有變)。
+      activeSkillLoadout: enforceLoadoutIdentityCap(save.activeSkillLoadout, save.job.archetype),
       studentSkillTree: save.studentSkillTree,
       gender: save.gender,
       coins,
@@ -1468,7 +1474,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // 主職換成跟目前副職一樣的話,副職自動清空(不能兩職都選同一個);
   // 身上原本裝的職業鎖裝如果不符新主職,直接卸下(不限職業的款式不受影響)。
   setJob: (archetype, branch) => {
-    const { job, secondaryJob, equipment, transferProofs, transferFragments, hasChosenJob, level } = get();
+    const { job, secondaryJob, equipment, transferProofs, transferFragments, hasChosenJob, level, activeSkillLoadout } = get();
 
     // 「學生」畢業:第一次真正選定主職,對齊 TIER_UNLOCK_LEVELS[1](Lv30)這個既有里程碑,
     // 免費、不受轉職證明限制——job 目前存的值只是畢業前的佔位預設,不是玩家真的選過的職業,
@@ -1482,6 +1488,9 @@ export const useGameState = create<GameState>((set, get) => ({
         job: { archetype, branch },
         hasChosenJob: true,
         equipment: filterLoadoutForArchetype(equipment, archetype),
+        // 職業認同上限(見 game/skillTree.ts):畢業前的佔位配置可能指到跟真正選定主職不同的
+        // archetype,超標的借用格清掉——反正這時候 skillTree 投資都還是 0,清掉不影響任何實質效果。
+        activeSkillLoadout: enforceLoadoutIdentityCap(activeSkillLoadout, archetype),
       });
       checkAndUnlockAchievements(get, set);
       persist(get());
@@ -1506,6 +1515,9 @@ export const useGameState = create<GameState>((set, get) => ({
       job: { archetype, branch },
       secondaryJob: nextSecondaryJob,
       equipment: filterLoadoutForArchetype(equipment, archetype),
+      // 職業認同上限(見 game/skillTree.ts):轉職後基準跟著換了,原本合法的配置可能瞬間
+      // 超標(例如4格都是舊職業的技能),超標的借用格清掉,不會卡在不合法狀態。
+      activeSkillLoadout: enforceLoadoutIdentityCap(activeSkillLoadout, archetype),
       // 只有這條「真的換成不同 archetype、消耗證明」的分支代表玩家「改頭換面」過一次,
       // 畢業選第一個主職(上面 !hasChosenJob 分支)不算——見 transfer_first_switch 成就。
       ...(isJobChange
@@ -2011,6 +2023,12 @@ export const useGameState = create<GameState>((set, get) => ({
     // 呼應「從已學習的職業技能中選擇」的需求,UI 本來就只會列出已學過的選項,這裡再擋一次
     // 純防呆(避免透過非正規管道塞進一個等級 0、還沒點過的技能)。
     if (ref !== null && state.skillTree[ref.archetype][ref.sourceSlot] <= 0) return;
+    // 職業認同上限(見 game/skillTree.ts 的 canSetLoadoutSlot):4格最多2格能借別的職業技能,
+    // 超過就擋下這次設定並跳提示,不會靜默失敗。
+    if (!canSetLoadoutSlot(state.activeSkillLoadout, state.job.archetype, position, ref)) {
+      useToast.getState().show(`最多只能有${MAX_BORROWED_ACTIVE_SLOTS}格塞別的職業技能,至少要留給目前職業自己的招式`);
+      return;
+    }
     set({ activeSkillLoadout: { ...state.activeSkillLoadout, [position]: ref } });
     persist(get());
   },
