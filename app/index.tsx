@@ -79,7 +79,7 @@ export default function HomeScreen() {
   // 下面的 useEffect 才能引用到——不能放在 `if (!isLoaded) return` 之後,那樣會違反 hooks 規則。
   const equipmentDropItem = lastEquipmentDropId ? getItemById(lastEquipmentDropId) : undefined;
   const dropBannerText = equipmentDropItem
-    ? `撿到裝備掉落:${equipmentDropItem.name}!已自動解鎖,可以到「裝備」分頁裝備`
+    ? `撿到裝備掉落:${equipmentDropItem.name}!已自動解鎖,可以到「背包」分頁裝備`
     : lastTransferFragmentArchetype
       ? `撿到${TRANSFER_FRAGMENT_NAMES[lastTransferFragmentArchetype]}!(${transferFragments[lastTransferFragmentArchetype] ?? 0}/${TRANSFER_FRAGMENTS_PER_PROOF})`
       : lastCompanionDropId
@@ -163,6 +163,14 @@ export default function HomeScreen() {
     unlockedAchievementIds,
     claimedAchievementIds,
   });
+  // 「技能」併進「職業」分頁、「裝備」併進「背包」分頁當子分頁後(見 panelTabs.tsx),
+  // TabBar 的角標只認頂層分頁 id(job/inventory),原本各自獨立的 skill/equipment 提醒條件
+  // 用 OR 併到對應的頂層分頁上,子分頁裡有事可做時外層分頁圖示照樣會亮紅點。
+  const topLevelTabAttention = {
+    ...tabAttention,
+    job: tabAttention.job || tabAttention.skill,
+    inventory: tabAttention.inventory || tabAttention.equipment,
+  };
 
   return (
     <View style={styles.root}>
@@ -249,7 +257,7 @@ export default function HomeScreen() {
           activeId={openTabId ?? ''}
           level={level.level}
           hasChosenJob={hasChosenJob}
-          attention={tabAttention}
+          attention={topLevelTabAttention}
           onSelect={setOpenTabId}
         />
       </MainVisual>
@@ -343,7 +351,7 @@ export default function HomeScreen() {
             activeId={openTabId ?? ''}
             level={level.level}
             hasChosenJob={hasChosenJob}
-            attention={tabAttention}
+            attention={topLevelTabAttention}
             onSelect={setOpenTabId}
           />
           {/* RN Web 的 Modal 是直接 portal 到 document.body 的獨立子樹,根層級那個 ToastHost

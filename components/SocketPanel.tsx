@@ -80,7 +80,7 @@ export function SocketPanel() {
         ))}
       </View>
 
-      {equippedSlots.length === 0 && <Text style={styles.emptyHint}>還沒有裝備任何東西,先到「裝備」分頁穿上再回來鑲嵌</Text>}
+      {equippedSlots.length === 0 && <Text style={styles.emptyHint}>還沒有裝備任何東西,先到「背包」分頁穿上再回來鑲嵌</Text>}
 
       {equippedSlots.map((slot) => {
         const itemId = equipment[slot]!;

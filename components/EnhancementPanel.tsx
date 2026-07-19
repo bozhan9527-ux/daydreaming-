@@ -67,7 +67,7 @@ export function EnhancementPanel() {
         <Text style={styles.stoneBuy}>購買 +1({ENHANCE_STONE_PRICE} 金幣)</Text>
       </Pressable>
 
-      {equippedSlots.length === 0 && <Text style={styles.emptyHint}>還沒有裝備任何東西,先到「裝備」分頁穿上再回來強化</Text>}
+      {equippedSlots.length === 0 && <Text style={styles.emptyHint}>還沒有裝備任何東西,先到「背包」分頁穿上再回來強化</Text>}
 
       {equippedSlots.map((slot) => {
         const itemId = equipment[slot]!;

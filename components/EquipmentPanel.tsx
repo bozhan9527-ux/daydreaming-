@@ -182,7 +182,15 @@ function formatItemStats(item: EquipmentItem, instance: ItemInstanceData | undef
   return lines.join('\n');
 }
 
-export function EquipmentPanel() {
+interface EquipmentPanelProps {
+  selectedSlot: EquipmentSlot;
+  onSelectSlot: (slot: EquipmentSlot) => void;
+}
+
+// selectedSlot 改由外層(InventoryTab.tsx)控制、透過 props 傳入——裝備分頁併進背包分頁
+// 底下當子分頁後,「背包」子分頁的部位篩選列要跟這裡的插槽選取共用同一份狀態,不然玩家在
+// 「背包」選了頭飾、切去「裝備」子分頁看到的還是上次的主手武器,兩邊各自為政。
+export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelProps) {
   const equipment = useGameState((state) => state.equipment);
   const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
   const itemInstances = useGameState((state) => state.itemInstances);
@@ -196,7 +204,6 @@ export function EquipmentPanel() {
   const rerollEquipmentSubstats = useGameState((state) => state.rerollEquipmentSubstats);
   const showToast = useToast((state) => state.show);
 
-  const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
   const [subView, setSubView] = useState<SubView>('worn');
   const [shopStatFilter, setShopStatFilter] = useState<StatFilter>('all');
   // 點商店清單裡的道具原本會直接買/裝上去,只靠事後跳出的 toast 通知——玩家點下去前完全
@@ -271,7 +278,7 @@ export function EquipmentPanel() {
       <Pressable
         key={slot}
         style={[styles.slotButton, slotItem && styles.slotButtonFilled, active && styles.slotButtonActive]}
-        onPress={() => setSelectedSlot(slot)}
+        onPress={() => onSelectSlot(slot)}
       >
         {slotItem && (
           <NineSliceFrame

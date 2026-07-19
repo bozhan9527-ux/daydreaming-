@@ -60,14 +60,20 @@ function formatBonus(stat: EquipmentBonusStat, value: number): string {
   return `${STAT_LABELS[stat]} +${Math.round(value * 100)}%`;
 }
 
-export function InventoryPanel() {
+interface InventoryPanelProps {
+  selectedSlot: EquipmentSlot;
+  onSelectSlot: (slot: EquipmentSlot) => void;
+}
+
+// selectedSlot 改由外層(InventoryTab.tsx)控制,跟「裝備」子分頁共用同一份選取狀態——
+// 理由見 EquipmentPanel.tsx 同樣的註解。
+export function InventoryPanel({ selectedSlot, onSelectSlot }: InventoryPanelProps) {
   const equipment = useGameState((state) => state.equipment);
   const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
   const job = useGameState((state) => state.job);
   const equip = useGameState((state) => state.equip);
   const showToast = useToast((state) => state.show);
 
-  const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
   const [statFilter, setStatFilter] = useState<StatFilter>('all');
   const [sortDesc, setSortDesc] = useState(false);
 
@@ -96,7 +102,7 @@ export function InventoryPanel() {
       <Pressable
         key={slot}
         style={[styles.slotButton, active && styles.slotButtonActive]}
-        onPress={() => setSelectedSlot(slot)}
+        onPress={() => onSelectSlot(slot)}
       >
         {slotItem ? (
           <ItemIcon item={slotItem} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
@@ -163,7 +169,7 @@ export function InventoryPanel() {
       <View style={styles.itemList}>
         {bagItems.length === 0 ? (
           <Text style={styles.emptyText}>
-            {statFilter === 'all' ? '背包裡沒有這個部位的其他款式,去「裝備」分頁的商店逛逛' : '這個篩選條件下沒有符合的款式'}
+            {statFilter === 'all' ? '背包裡沒有這個部位的其他款式,去上面的「裝備」子分頁逛商店' : '這個篩選條件下沒有符合的款式'}
           </Text>
         ) : (
           bagItems.map(renderBagItemRow)
