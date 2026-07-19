@@ -12,6 +12,7 @@ import { WelcomeModal } from '../components/WelcomeModal';
 import { EquippedItemsStrip } from '../components/EquippedItemsStrip';
 import { ExpBar } from '../components/ExpBar';
 import { HeroHealthBar } from '../components/HeroHealthBar';
+import { HeroWalkSprite } from '../components/HeroWalkSprite';
 import { MainVisual } from '../components/MainVisual';
 import { OrnateFrame } from '../components/OrnateFrame';
 import { PANEL_TABS } from '../components/panelTabs';
@@ -181,7 +182,10 @@ export default function HomeScreen() {
 
       {/* 彩蛋反應框改成整張插圖鋪滿(取代原本圖示+文字橫向排版)——每一則反應內容現在都有
           對應的整張插圖(見 components/eventArt.ts,依 id 對照),插圖用 cover 裁滿整個框,
-          文字疊在右上角(半透明底色墊底維持可讀性)。 */}
+          文字疊在右上角(半透明底色墊底維持可讀性)。平常沒有反應內容時(每次擊殺都有機率
+          觸發,不是每次都有)不再顯示空黑底+一行灰字——改播勇者待機小動畫(HeroWalkSprite
+          已經有現成的上下 bob 循環動畫+對應職業美術,直接借用,不用另外寫一套),讓這個
+          全遊戲裝飾最重的區塊平常也有東西在動,不會大部分時間都是空的。 */}
       <View style={styles.resultBoxWrap}>
         <View style={styles.resultBox}>
           {lastEvent !== null && EVENT_ART[lastEvent.id] && (
@@ -195,7 +199,10 @@ export default function HomeScreen() {
               </Text>
             </View>
           ) : (
-            <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
+            <View style={styles.resultIdleWrap}>
+              <HeroWalkSprite height={68} />
+              <Text style={styles.resultRarity}>勇者發呆中...</Text>
+            </View>
           )}
         </View>
 
@@ -436,6 +443,10 @@ const styles = StyleSheet.create({
     left: 0,
     width: '100%',
     height: '100%',
+  },
+  resultIdleWrap: {
+    alignItems: 'center',
+    gap: 6,
   },
   resultRarity: {
     color: '#8a8a95',

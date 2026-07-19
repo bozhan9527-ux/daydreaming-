@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 const GIFT_ICON = require('../assets/sprites/ui/icon_gift.png');
 
@@ -144,18 +144,26 @@ export function DailyQuestBadge() {
             </Text>
             <Text style={styles.panelHeaderClose}>✕</Text>
           </Pressable>
-          <Text style={styles.sectionLabel}>每日任務</Text>
-          {dailyRows.map(renderRow)}
-          <Text style={styles.sectionLabel}>本週挑戰</Text>
-          {weeklyRows.map(renderRow)}
-          {achievementClaimableCount > 0 && (
-            <>
-              <Text style={styles.sectionLabel}>成就</Text>
-              <Text style={styles.achievementHint}>
-                {achievementClaimableCount} 個成就可領取,前往「成就」分頁一鍵領取
-              </Text>
-            </>
-          )}
+          {/* 展開態預設全部攤開會蓋住彩蛋反應框裡的勇者待機動畫(見 app/index.tsx),用
+              ScrollView 限制高度——任務多的時候可以自己滑,不會把整個上半部畫面吃光。 */}
+          <ScrollView
+            style={styles.panelScroll}
+            contentContainerStyle={styles.panelScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.sectionLabel}>每日任務</Text>
+            {dailyRows.map(renderRow)}
+            <Text style={styles.sectionLabel}>本週挑戰</Text>
+            {weeklyRows.map(renderRow)}
+            {achievementClaimableCount > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>成就</Text>
+                <Text style={styles.achievementHint}>
+                  {achievementClaimableCount} 個成就可領取,前往「成就」分頁一鍵領取
+                </Text>
+              </>
+            )}
+          </ScrollView>
         </View>
       )}
     </View>
@@ -224,16 +232,24 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '700',
   },
+  // 寬度從200縮到165、高度用panelScroll的maxHeight夾住——展開態預設就會出現(見上面
+  // stage初始值),留一點空間給彩蛋反應框裡的勇者待機動畫,不要整個蓋住。
   panel: {
     marginTop: 4,
     marginRight: 8,
-    width: 200,
-    gap: 4,
+    width: 165,
+    gap: 6,
     padding: 8,
     borderRadius: 10,
     backgroundColor: 'rgba(23, 23, 31, 0.95)',
     borderWidth: 1,
     borderColor: '#59462b',
+  },
+  panelScroll: {
+    maxHeight: 160,
+  },
+  panelScrollContent: {
+    gap: 4,
   },
   panelHeaderRow: {
     flexDirection: 'row',
