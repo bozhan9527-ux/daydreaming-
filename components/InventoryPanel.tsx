@@ -101,11 +101,15 @@ export function InventoryPanel() {
         {slotItem ? (
           <ItemIcon item={slotItem} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
         ) : (
-          <PixelSprite frame={emptySlotIcon.frame} palette={{ [emptySlotIcon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+          <>
+            <PixelSprite frame={emptySlotIcon.frame} palette={{ [emptySlotIcon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+            {/* 文字標籤只在空插槽顯示,已裝備的插槽靠圖示本身就能辨識,跟裝備分頁的
+                slotButton 對齊同一套規則。 */}
+            <Text style={styles.slotButtonLabel} numberOfLines={1}>
+              {SLOT_LABELS[slot]}
+            </Text>
+          </>
         )}
-        <Text style={styles.slotButtonLabel} numberOfLines={1}>
-          {SLOT_LABELS[slot]}
-        </Text>
       </Pressable>
     );
   }

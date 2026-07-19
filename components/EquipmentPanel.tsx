@@ -283,11 +283,15 @@ export function EquipmentPanel() {
         {slotItem ? (
           <ItemIcon item={slotItem} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
         ) : (
-          <PixelSprite frame={emptySlotIcon.frame} palette={{ [emptySlotIcon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+          <>
+            <PixelSprite frame={emptySlotIcon.frame} palette={{ [emptySlotIcon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+            {/* 文字標籤只在空插槽顯示(告訴玩家這格是什麼部位)——已裝備的插槽靠圖示本身
+                +稀有度外框顏色就能辨識穿了什麼,不需要每格都塞一行重複的部位名稱。 */}
+            <Text style={styles.slotButtonLabel} numberOfLines={1}>
+              {SLOT_LABELS[slot]}
+            </Text>
+          </>
         )}
-        <Text style={styles.slotButtonLabel} numberOfLines={1}>
-          {SLOT_LABELS[slot]}
-        </Text>
       </Pressable>
     );
   }
