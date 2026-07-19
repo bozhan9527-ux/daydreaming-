@@ -9,7 +9,6 @@ import { EVENT_ART } from '../components/eventArt';
 import { LimitedEventBanner } from '../components/LimitedEventBanner';
 import { SettingsButton } from '../components/SettingsButton';
 import { WelcomeModal } from '../components/WelcomeModal';
-import { EquippedItemsStrip } from '../components/EquippedItemsStrip';
 import { ExpBar } from '../components/ExpBar';
 import { HeroHealthBar } from '../components/HeroHealthBar';
 import { HeroWalkSprite } from '../components/HeroWalkSprite';
@@ -230,10 +229,6 @@ export default function HomeScreen() {
 
         <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} />
 
-        {/* 已裝備道具縮圖列:9插槽一次看完裝了什麼/幾級/有沒有強化,不用切去「裝備」分頁。
-            強化石/寶石數量原本在這裡下面常駐一列,現在收進「背包」分頁(見 InventoryPanel.tsx)。 */}
-        <EquippedItemsStrip />
-
         <TabBar
           tabs={PANEL_TABS}
           activeId={openTabId ?? ''}
@@ -389,7 +384,7 @@ const styles = StyleSheet.create({
   // 不會在 TabBar 下方留一片空黑。內容本身還是置中,框變高只是上下留白變多。
   resultBoxWrap: {
     width: '100%',
-    maxWidth: 280,
+    maxWidth: 320,
     flex: 1,
   },
   // 邊框改用 EasterEggFrame 疊加的柱子+鑲邊美術圖(裁自參考UI設計圖「EASTER EGG BANNER

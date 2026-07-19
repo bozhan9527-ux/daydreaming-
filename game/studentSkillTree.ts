@@ -34,10 +34,9 @@ export function createInitialStudentSkillTreeLevels(): Record<SkillSlotId, numbe
   return { passive1: 0, passive2: 0, passive3: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
 }
 
-// 學生沒有 JobTier 概念,等級上限直接開一個新常數,對齊職業樹 tier1 的封頂(2級),
-// 呼應「學生期能練到的技能深度跟職業tier1差不多」的定位(新制沿用舊制「學生封頂60剛好等於
-// 舊制tier1封頂60」的對應關係)。
-export const STUDENT_SKILL_LEVEL_CAP = 2;
+// 學生沒有 JobTier 概念,等級上限直接開一個新常數。原本對齊職業樹 tier1 封頂(2級),
+// 現在拉高到5級,讓學生期(Lv1-29)本身就有更完整的技能投資深度,不用畢業轉職才練得動技能。
+export const STUDENT_SKILL_LEVEL_CAP = 5;
 
 export function canUpgradeStudentSkillSlot(level: number, skillBooks: number): boolean {
   return level < STUDENT_SKILL_LEVEL_CAP && skillBooks >= skillSlotUpgradeBookCost(level);

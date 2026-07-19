@@ -123,6 +123,7 @@ import {
   getTierTriggerBonus,
   rollSkillBookDrop,
   secondaryActiveSkillTriggerIntervalSeconds,
+  SKILL_SLOT_NAMES,
   skillSlotLevelCap,
   skillSlotUpgradeBookCost,
   SkillSlotId,
@@ -134,6 +135,7 @@ import {
   canUpgradeStudentSkillSlot,
   createInitialStudentSkillTreeLevels,
   getStudentActiveEffectKind,
+  getStudentSkillFlavor,
   upgradeStudentSkillSlot as nextStudentSkillSlotLevel,
 } from '../game/studentSkillTree';
 import {
@@ -216,6 +218,7 @@ function applyActiveSkillTriggers(
   const firedSlots: ActiveSkillSlotId[] = [];
   let triggered = false;
   for (const slot of ACTIVE_SLOT_IDS) {
+    if (slotLevels[slot] <= 0) continue;
     const intervalMs = activeSkillTriggerIntervalSeconds(slot, slotLevels[slot]) * 1000;
     if (now - timers[slot] < intervalMs) continue;
     if (!autoMode && !armedSlots[slot]) continue;
@@ -1093,6 +1096,7 @@ export const useGameState = create<GameState>((set, get) => ({
     // 職業主動技能:畢業前(!hasChosenJob)還沒有主職可以套用,跳過這組計時器。
     let nextActiveSkillTimers = state.activeSkillTimers;
     let nextArmedActiveSkills = state.armedActiveSkills;
+    let jobFiredSlots: ActiveSkillSlotId[] = [];
     if (state.hasChosenJob) {
       const jobTrigger = applyActiveSkillTriggers(
         state.skillTree[state.job.archetype],
@@ -1111,6 +1115,7 @@ export const useGameState = create<GameState>((set, get) => ({
       forceInstantNextFight = jobTrigger.forceInstantNextFight;
       anySkillTriggered = anySkillTriggered || jobTrigger.triggered;
       nextArmedActiveSkills = omitArmedSlots(state.armedActiveSkills, jobTrigger.firedSlots);
+      jobFiredSlots = jobTrigger.firedSlots;
     }
     if (anySkillTriggered) {
       lastSkillTriggerAt = now;
@@ -1127,11 +1132,12 @@ export const useGameState = create<GameState>((set, get) => ({
     let nextSecondarySkillTimerStartedAt = state.secondarySkillTimerStartedAt;
     let lastSecondarySkillTriggerAt = state.lastSecondarySkillTriggerAt;
     let nextArmedSecondarySkill = state.armedSecondarySkill;
+    let secondaryTriggered = false;
     if (state.secondaryJob) {
       const secondarySkillLevel = state.skillTree[state.secondaryJob].active1;
       const secondaryIntervalMs = secondaryActiveSkillTriggerIntervalSeconds(secondarySkillLevel) * 1000;
       const secondaryReady = now - state.secondarySkillTimerStartedAt >= secondaryIntervalMs;
-      const secondaryTriggered = secondaryReady && (autoMode || state.armedSecondarySkill);
+      secondaryTriggered = secondarySkillLevel > 0 && secondaryReady && (autoMode || state.armedSecondarySkill);
       nextSecondarySkillTimerStartedAt = secondaryTriggered ? now : state.secondarySkillTimerStartedAt;
       if (secondaryTriggered) {
         const secondaryEffect = getActiveEffectKind(state.secondaryJob, 'active1');
@@ -1147,6 +1153,27 @@ export const useGameState = create<GameState>((set, get) => ({
         }
         lastSecondarySkillTriggerAt = now;
         nextArmedSecondarySkill = false;
+      }
+    }
+
+    // 手動模式(未滿Lv60或玩家自己關掉AUTO)下,技能發動只有圖示閃一下、沒有文字提示,
+    // 玩家點了 active2-4 之後很容易搞不清楚「到底有沒有生效」——這裡補一則 toast 直接報
+    // 觸發了哪些技能,自動模式下省略(全自動運作時每次擊殺都可能觸發,跳出來只會洗版)。
+    if (!autoMode) {
+      const firedNames: string[] = [];
+      for (const slot of studentTrigger.firedSlots) {
+        firedNames.push(getStudentSkillFlavor(state.level.level, slot).name);
+      }
+      if (state.hasChosenJob) {
+        for (const slot of jobFiredSlots) {
+          firedNames.push(SKILL_SLOT_NAMES[state.job.archetype][slot]);
+        }
+      }
+      if (state.secondaryJob && secondaryTriggered) {
+        firedNames.push(SKILL_SLOT_NAMES[state.secondaryJob].active1);
+      }
+      if (firedNames.length > 0) {
+        useToast.getState().show(`技能發動:${firedNames.join('、')}`);
       }
     }
 
@@ -1833,6 +1860,9 @@ export const useGameState = create<GameState>((set, get) => ({
   armSkill: (kind, slot) => {
     const state = get();
     const level = kind === 'job' ? state.skillTree[state.job.archetype][slot] : state.studentSkillTree[slot];
+    // Lv.0(還沒點過這個技能)不能被點擊發動,純防呆(SkillTracker.tsx 正常不會讓 Lv.0
+    // 的圖示觸發這個 action,onPress 在那邊已經擋掉了)。
+    if (level <= 0) return;
     const timerStartedAt = kind === 'job' ? state.activeSkillTimers[slot] : state.studentActiveSkillTimers[slot];
     const intervalMs = activeSkillTriggerIntervalSeconds(slot, level) * 1000;
     // 還在倒數中點了不算數,純防呆(SkillTracker.tsx 正常不會讓還在倒數的圖示觸發這個 action)。
@@ -1848,6 +1878,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const state = get();
     if (!state.secondaryJob) return;
     const level = state.skillTree[state.secondaryJob].active1;
+    if (level <= 0) return;
     const intervalMs = secondaryActiveSkillTriggerIntervalSeconds(level) * 1000;
     if (Date.now() - state.secondarySkillTimerStartedAt < intervalMs) return;
     set({ armedSecondarySkill: true });

@@ -24,7 +24,7 @@ export function WelcomeModal() {
           <Text style={styles.step}>① 點擊勇者可以加快戰鬥,不點也會自動迎戰怪物</Text>
           <Text style={styles.step}>② 裝備、技能分頁投資數值,越打越輕鬆</Text>
           <Text style={styles.step}>③ Lv30 畢業,正式選定主職與分支</Text>
-          <Text style={styles.step}>④ 下面8個分頁對應不同系統,鎖住的會標示解鎖等級</Text>
+          <Text style={styles.step}>④ 下面6個分頁對應不同系統,鎖住的會標示解鎖等級</Text>
         </View>
         <Pressable style={styles.button} onPress={dismissWelcome}>
           <Text style={styles.buttonLabel}>開始遊戲</Text>

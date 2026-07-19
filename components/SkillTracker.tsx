@@ -96,22 +96,25 @@ function SkillTile({
 }: SkillTileProps) {
   'use no memo';
   const icon = getSkillIcon(archetype, slot, tier);
-  const intervalMs = intervalSeconds * 1000;
-  const elapsedMs = Math.max(0, Math.min(intervalMs, now - timerStartedAt));
-  const progress = intervalMs > 0 ? elapsedMs / intervalMs : 1;
-  const secondsLeft = Math.max(0, Math.ceil((intervalMs - elapsedMs) / 1000));
   // 呼應參考UI設計圖「SKILL BUTTONS (STATES)」的四態:NORMAL(預設)/PRESSED(剛發動,
   // 用金色發光框強調)/COOLDOWN(倒數環本身就是這個狀態,不用額外樣式)/DISABLED(Lv.0
   // 還沒點過這個技能,整顆圖示淡化,跟「正在倒數中」的技能區分開)。
-  const isDisabled = level <= 0 && !justTriggered;
-  const ready = secondsLeft <= 0;
+  // Lv.0 完全不參與倒數:不算 elapsed/progress,直接鎖在空環+固定文字,不會跟著時間跳動,
+  // 也不會被誤認成「快好了、點一下就有反應」。
+  const isDisabled = level <= 0;
+  const intervalMs = intervalSeconds * 1000;
+  const elapsedMs = isDisabled ? 0 : Math.max(0, Math.min(intervalMs, now - timerStartedAt));
+  const progress = isDisabled ? 0 : intervalMs > 0 ? elapsedMs / intervalMs : 1;
+  const secondsLeft = isDisabled ? 0 : Math.max(0, Math.ceil((intervalMs - elapsedMs) / 1000));
+  const ready = !isDisabled && secondsLeft <= 0;
   // 手動模式下冷卻好但還沒點過:用藍色發光提示「可以點了」——藍色是全站統一的「互動中/
   // 可操作」訊號色(跟裝備分頁選取插槽同一套語言,見 EquipmentPanel.tsx 的說明),金色專門
   // 留給 PRESSED 態那種「已經觸發」的慶祝感,兩者不共用同一個顏色才分得清楚差異。
   const readyToTap = !autoMode && ready && !armed && !isDisabled && !justTriggered;
 
   let countdownLabel: string;
-  if (justTriggered) countdownLabel = '發動!';
+  if (isDisabled) countdownLabel = '未學會';
+  else if (justTriggered) countdownLabel = '發動!';
   else if (!autoMode && ready && armed) countdownLabel = '待命中';
   else if (!autoMode && ready) countdownLabel = '點我!';
   else countdownLabel = `${secondsLeft}s`;
@@ -119,11 +122,11 @@ function SkillTile({
   return (
     <View style={styles.tileGroup}>
       <Pressable style={styles.tileWrapper} onPress={onPress} disabled={!onPress}>
-        <CircularCountdown progress={justTriggered ? 1 : progress} />
+        <CircularCountdown progress={isDisabled ? 0 : justTriggered ? 1 : progress} />
         <View
           style={[
             styles.tile,
-            justTriggered && styles.tileFlash,
+            justTriggered && !isDisabled && styles.tileFlash,
             isDisabled && styles.tileDisabled,
             readyToTap && styles.tileReadyToTap,
           ]}
@@ -220,7 +223,7 @@ export function SkillTracker() {
               now={now}
               autoMode={autoMode}
               armed={armed}
-              onPress={autoMode ? undefined : () => armSkill(hasChosenJob ? 'job' : 'student', slot)}
+              onPress={autoMode || slotLevel <= 0 ? undefined : () => armSkill(hasChosenJob ? 'job' : 'student', slot)}
             />
           );
         })}
@@ -243,7 +246,7 @@ export function SkillTracker() {
             now={now}
             autoMode={autoMode}
             armed={armedSecondarySkill}
-            onPress={autoMode ? undefined : armSecondarySkill}
+            onPress={autoMode || skillTree[secondaryJob].active1 <= 0 ? undefined : armSecondarySkill}
           />
         </View>
       )}
