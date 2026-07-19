@@ -1,4 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
+
+// 裁自使用者提供的UI設計參考圖(DAYDREAMING UI HOME SKIN V1.0,第3節「HP & EXP BAR」)。
+const EXP_ICON = require('../assets/sprites/ui/icon_exp.png');
 
 interface ExpBarProps {
   level: number;
@@ -19,6 +22,7 @@ export function ExpBar({ level, bankedExp, needed, isMaxLevel, levelsAvailable }
 
   return (
     <View style={styles.row}>
+      <Image source={EXP_ICON} style={styles.expIcon} resizeMode="contain" />
       <Text style={styles.levelLabel}>Lv.{level}</Text>
       <View style={styles.barTrack}>
         <View style={[styles.barFill, { width: `${ratio * 100}%` }]} />
@@ -36,16 +40,23 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 320,
   },
+  expIcon: {
+    width: 16,
+    height: 16,
+  },
   levelLabel: {
     color: '#f2f2f2',
     fontSize: 13,
     fontWeight: '600',
   },
+  // 經驗條外框改成金色鑲邊,呼應參考圖「HP & EXP BAR」的金屬滾邊血條樣式。
   barTrack: {
     flex: 1,
     height: 16,
     borderRadius: 8,
     backgroundColor: '#2a2a35',
+    borderWidth: 1,
+    borderColor: '#59462b',
     overflow: 'hidden',
     justifyContent: 'center',
   },

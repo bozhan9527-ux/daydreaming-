@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { heroMaxHp } from '../game/heroHealth';
 import { useGameState } from '../hooks/useGameState';
+
+// 裁自使用者提供的UI設計參考圖(DAYDREAMING UI HOME SKIN V1.0,第3節「HP & EXP BAR」)。
+const HEART_ICON = require('../assets/sprites/ui/icon_heart.png');
 
 const CLOCK_TICK_MS = 250;
 
@@ -45,7 +48,10 @@ export function HeroHealthBar() {
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
-        <Text style={styles.label}>HP</Text>
+        <View style={styles.labelRow}>
+          <Image source={HEART_ICON} style={styles.heartIcon} resizeMode="contain" />
+          <Text style={styles.label}>HP</Text>
+        </View>
         <Text style={styles.value}>
           {Math.max(0, Math.round(heroHp))} / {maxHp}
         </Text>
@@ -77,6 +83,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  heartIcon: {
+    width: 13,
+    height: 13,
+  },
   label: {
     color: '#c9a94f',
     fontSize: 11,
@@ -87,11 +102,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  // 血條外框改成金色鑲邊,呼應參考圖「HP & EXP BAR」的金屬滾邊血條樣式。
   track: {
     width: '100%',
     height: 8,
     borderRadius: 4,
     backgroundColor: '#2a2a35',
+    borderWidth: 1,
+    borderColor: '#59462b',
     overflow: 'hidden',
   },
   fill: {
