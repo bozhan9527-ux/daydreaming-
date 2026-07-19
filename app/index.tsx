@@ -202,7 +202,7 @@ export default function HomeScreen() {
           <EasterEggFrame />
           {lastEvent !== null && EVENT_ART[lastEvent.id] ? (
             <View style={styles.resultTextOverlay}>
-              <Text style={styles.resultText} numberOfLines={3} ellipsizeMode="tail">
+              <Text style={styles.resultText} numberOfLines={2} ellipsizeMode="tail">
                 {lastEvent.payload}
               </Text>
             </View>
@@ -460,14 +460,16 @@ const styles = StyleSheet.create({
     color: '#8a8a95',
     fontSize: 11,
   },
-  // 文字疊在右上角:插圖鋪滿整框後直接放文字會被蓋在圖片上看不清楚,墊一層半透明底色的
-  // 小卡片,靠右上角放才不會蓋到柱子(EasterEggFrame 柱寬34px,right留40px淨空)。
+  // 文字疊在上方置中:插圖鋪滿整框後直接放文字會被蓋在圖片上看不清楚,墊一層半透明底色的
+  // 小卡片。貼著最上緣放(不特地留白閃避 EasterEggFrame 的柱子/鑲邊裝飾),兩側留一點內距
+  // 避免卡到柱子最寬的部分,但視覺上仍會蓋到一點柱頭裝飾——沒關係,文字可讀性優先。
   resultTextOverlay: {
     position: 'absolute',
-    top: 8,
-    right: 40,
-    maxWidth: '55%',
-    paddingHorizontal: 8,
+    top: 4,
+    left: 30,
+    right: 30,
+    alignItems: 'center',
+    paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
     backgroundColor: 'rgba(10, 8, 6, 0.72)',
@@ -475,7 +477,7 @@ const styles = StyleSheet.create({
   resultText: {
     color: '#f2f2f2',
     fontSize: 11,
-    textAlign: 'left',
+    textAlign: 'center',
     lineHeight: 14,
   },
   levelUpRow: {
