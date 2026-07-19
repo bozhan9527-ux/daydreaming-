@@ -11,6 +11,9 @@ export const TAB_UNLOCK_LEVELS: Record<string, number> = {
   skill: 5,
   achievement: 6,
   companion: 8,
+  // 工坊(強化裝備+合成技能書/強化石):跟成就一樣屬於「基礎系統玩過一輪後才用得上」的
+  // 輔助系統,門檻對齊 achievement——太早開放的話材料還沒囤到,點進去只會看到空空如也。
+  workshop: 6,
   // 副本挑戰的是「指定職業」的轉職試煉(見 game/dungeon.ts),等級門檻給低一點也沒關係——
   // 下面 hasChosenJob 那道閘門已經確保實際解鎖時機一定落在畢業(TIER_UNLOCK_LEVELS[1]=Lv30)之後。
   dungeon: 8,

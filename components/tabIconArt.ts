@@ -12,6 +12,9 @@ export const TAB_ICON_ART: Partial<Record<string, ImageSourcePropType>> = {
   companion: require('../assets/sprites/ui/icon_tab_pet.png'),
   dungeon: require('../assets/sprites/ui/icon_tab_dungeon.png'),
   ascension: require('../assets/sprites/ui/icon_tab_ascension.png'),
+  // 工坊(強化+合成)沒有專屬素材,借用「裝備」那組盾牌圖示(強化裝備本來就是工坊主要功能
+  // 之一),是既有8張素材裡語意最接近的一張。
+  workshop: require('../assets/sprites/ui/icon_tab_equipment.png'),
 };
 
 // 分頁鎖住時疊在圖示上的鎖頭角標(取代原本純降低不透明度的做法,多一個明確的「鎖住」符號)。

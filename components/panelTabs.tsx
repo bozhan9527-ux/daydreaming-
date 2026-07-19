@@ -7,6 +7,7 @@ import { CompanionPanel } from './CompanionPanel';
 import { DungeonPanel } from './DungeonPanel';
 import { InventoryTab } from './InventoryTab';
 import { JobTab } from './JobTab';
+import { WorkshopTab } from './WorkshopTab';
 
 export interface PanelTab {
   id: string;
@@ -31,6 +32,7 @@ export interface PanelTab {
 export const PANEL_TABS: PanelTab[] = [
   { id: 'job', label: '職業', icon: 'job', Component: JobTab, accentColor: '#e0a95c' },
   { id: 'inventory', label: '背包', icon: 'inventory', Component: InventoryTab, accentColor: '#8fd992' },
+  { id: 'workshop', label: '工坊', icon: 'enhance', Component: WorkshopTab, accentColor: '#9b8ee0' },
   { id: 'achievement', label: '成就', icon: 'achievement', Component: AchievementPanel, accentColor: '#c9a94f' },
   { id: 'companion', label: '寵物坐騎', icon: 'companion', Component: CompanionPanel, accentColor: '#e08a9e' },
   { id: 'dungeon', label: '副本', icon: 'dungeon', Component: DungeonPanel, accentColor: '#e0705c' },

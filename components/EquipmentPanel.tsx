@@ -21,7 +21,6 @@ import {
 import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
-import { EnhancementPanel } from './EnhancementPanel';
 import { RARITY_FRAME_PARTS } from './equipmentFrames';
 import { useHeroArt } from './HeroWalkSprite';
 import { ItemIcon } from './ItemIcon';
@@ -121,13 +120,13 @@ const ICON_PIXEL_SIZE = 2 / 3;
 const SLOT_FRAME_CORNER = 14;
 const SLOT_FRAME_EDGE = 5;
 
-// 背包已經拆成獨立頂層分頁(見 components/InventoryPanel.tsx),這裡改收納強化跟鑲嵌
-// 兩個原本各自獨立的分頁——都是圍繞「身上穿的這件裝備」在操作,收在裝備分頁底下比較好找。
-type SubView = 'worn' | 'enhance' | 'socket' | 'shop';
+// 背包已經拆成獨立頂層分頁(見 components/InventoryPanel.tsx),這裡收納鑲嵌——
+// 圍繞「身上穿的這件裝備」在操作,收在裝備分頁底下比較好找。強化已經移到「工坊」分頁
+// (見 WorkshopTab.tsx),跟新增的合成分頁放在一起,不再收在這裡。
+type SubView = 'worn' | 'socket' | 'shop';
 
 const SUB_VIEWS: { id: SubView; label: string }[] = [
   { id: 'worn', label: '穿戴' },
-  { id: 'enhance', label: '強化' },
   { id: 'socket', label: '鑲嵌' },
   { id: 'shop', label: '商店' },
 ];
@@ -417,9 +416,7 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
         </View>
       )}
 
-      {/* 強化/鑲嵌本來就是各自獨立看「身上所有已裝備」的清單,不是照 selectedSlot 篩選,
-          搬進來當子分頁之後行為不變,直接沿用原本的元件。 */}
-      {subView === 'enhance' && <EnhancementPanel />}
+      {/* 鑲嵌是獨立看「身上所有已裝備」的清單,不是照 selectedSlot 篩選,直接沿用原本的元件。 */}
       {subView === 'socket' && <SocketPanel />}
 
       {subView === 'shop' && (
