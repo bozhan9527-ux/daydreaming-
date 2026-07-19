@@ -1,0 +1,41 @@
+import { ImageSourcePropType } from 'react-native';
+
+// 使用者依 docs 給的AI繪圖提示詞生成、上傳後裁切出來的彩蛋反應插圖(對應 game/events/*.ts
+// 裡每一則的 id)。跟 monsterArt.ts/backgroundArt.ts 同一套做法:id/key -> require() 對照表
+// 放在 components/ 這層,game/ 底下的內容庫維持純資料、不能出現任何 RN import。
+export const EVENT_ART: Record<string, ImageSourcePropType> = {
+  'common-01': require('../assets/sprites/events/common-01.png'),
+  'common-02': require('../assets/sprites/events/common-02.png'),
+  'common-03': require('../assets/sprites/events/common-03.png'),
+  'common-04': require('../assets/sprites/events/common-04.png'),
+  'common-05': require('../assets/sprites/events/common-05.png'),
+  'common-06': require('../assets/sprites/events/common-06.png'),
+  'common-07': require('../assets/sprites/events/common-07.png'),
+  'common-08': require('../assets/sprites/events/common-08.png'),
+  'common-09': require('../assets/sprites/events/common-09.png'),
+  'common-10': require('../assets/sprites/events/common-10.png'),
+  'common-11': require('../assets/sprites/events/common-11.png'),
+  'common-12': require('../assets/sprites/events/common-12.png'),
+  'common-13': require('../assets/sprites/events/common-13.png'),
+  'common-14': require('../assets/sprites/events/common-14.png'),
+  'common-15': require('../assets/sprites/events/common-15.png'),
+  'common-16': require('../assets/sprites/events/common-16.png'),
+  'common-17': require('../assets/sprites/events/common-17.png'),
+  'common-18': require('../assets/sprites/events/common-18.png'),
+  'common-19': require('../assets/sprites/events/common-19.png'),
+  'common-20': require('../assets/sprites/events/common-20.png'),
+  'rare-01': require('../assets/sprites/events/rare-01.png'),
+  'rare-02': require('../assets/sprites/events/rare-02.png'),
+  'rare-03': require('../assets/sprites/events/rare-03.png'),
+  'rare-04': require('../assets/sprites/events/rare-04.png'),
+  'rare-05': require('../assets/sprites/events/rare-05.png'),
+  'rare-06': require('../assets/sprites/events/rare-06.png'),
+  'rare-07': require('../assets/sprites/events/rare-07.png'),
+  'rare-08': require('../assets/sprites/events/rare-08.png'),
+  'epic-01': require('../assets/sprites/events/epic-01.png'),
+  'epic-02': require('../assets/sprites/events/epic-02.png'),
+  'epic-03': require('../assets/sprites/events/epic-03.png'),
+  'epic-04': require('../assets/sprites/events/epic-04.png'),
+  'legendary-01': require('../assets/sprites/events/legendary-01.png'),
+  'legendary-02': require('../assets/sprites/events/legendary-02.png'),
+};

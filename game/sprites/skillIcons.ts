@@ -1,7 +1,7 @@
 import { Archetype, JobTier } from '../combat';
 import { SkillSlotId } from '../skillTree';
 
-// 6 職業 x 6 技能格 = 36 個獨立圖示,12x12 跟 tabIcons/eventIcons 同一套畫布尺寸。
+// 6 職業 x 6 技能格 = 36 個獨立圖示,12x12 跟 tabIcons.ts 同一套畫布尺寸。
 // 用座標點列表建構(而不是手打字串),每個 cell 由陣列固定寬度保證、不會出現 monsters.ts
 // 那種「多字元 palette key 把整列拼歪」的問題。
 const CANVAS = 12;

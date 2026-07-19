@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BattleScene } from '../components/BattleScene';
 import { CareerOverviewPanel } from '../components/CareerOverviewPanel';
 import { DailyQuestBadge } from '../components/DailyQuestBadge';
 import { EasterEggFrame } from '../components/EasterEggFrame';
+import { EVENT_ART } from '../components/eventArt';
 import { LimitedEventBanner } from '../components/LimitedEventBanner';
 import { SettingsButton } from '../components/SettingsButton';
 import { WelcomeModal } from '../components/WelcomeModal';
 import { EquippedItemsStrip } from '../components/EquippedItemsStrip';
-import { EventIcon } from '../components/EventIcon';
 import { ExpBar } from '../components/ExpBar';
 import { HeroHealthBar } from '../components/HeroHealthBar';
 import { MainVisual } from '../components/MainVisual';
@@ -179,25 +179,21 @@ export default function HomeScreen() {
         onPressLevel={() => setShowCareerOverview(true)}
       />
 
-      {/* 彩蛋反應框縮小+加外框+改橫向排版——原本100px高、直向堆疊圖示+兩行文字,縮到46px高
-          時圖示本身(48px)就已經比整個框還高,彩蛋內容直接被裁掉看不見。改成「圖示在左、
-          文字在右」橫向排版,把省下來的高度預算換成寬度(這裡不缺寬度),圖示縮小一點但
-          完整露出來,文字維持看得到。不再額外顯示「一般反應/稀有畫面/...」這行分類標籤——
-          圖示本身(EventIcon 依 rarity 換色)已經傳達稀有度,拿掉這行讓彩蛋文字能多占一行。 */}
+      {/* 彩蛋反應框改成整張插圖鋪滿(取代原本圖示+文字橫向排版)——每一則反應內容現在都有
+          對應的整張插圖(見 components/eventArt.ts,依 id 對照),插圖用 cover 裁滿整個框,
+          文字疊在右上角(半透明底色墊底維持可讀性)。 */}
       <View style={styles.resultBoxWrap}>
         <View style={styles.resultBox}>
+          {lastEvent !== null && EVENT_ART[lastEvent.id] && (
+            <Image source={EVENT_ART[lastEvent.id]} style={styles.resultImage} resizeMode="cover" />
+          )}
           <EasterEggFrame />
-          {lastEvent !== null ? (
-            <>
-              <View style={styles.resultIconWrap}>
-                <EventIcon rarity={lastEvent.rarity} pixelSize={3} />
-              </View>
-              <View style={styles.resultTextCol}>
-                <Text style={styles.resultText} numberOfLines={3} ellipsizeMode="tail">
-                  {lastEvent.payload}
-                </Text>
-              </View>
-            </>
+          {lastEvent !== null && EVENT_ART[lastEvent.id] ? (
+            <View style={styles.resultTextOverlay}>
+              <Text style={styles.resultText} numberOfLines={3} ellipsizeMode="tail">
+                {lastEvent.payload}
+              </Text>
+            </View>
           ) : (
             <Text style={styles.resultRarity}>點擊勇者觸發反應</Text>
           )}
@@ -400,20 +396,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   // 邊框改用 EasterEggFrame 疊加的柱子+鑲邊美術圖(裁自參考UI設計圖「EASTER EGG BANNER
-  // FRAME」),不用 borderWidth 畫框;左右內距加大到蓋過柱子寬度(34px),避免圖示/文字被
-  // 疊在柱子後面看不清楚。
+  // FRAME」),不用 borderWidth 畫框。插圖用 resultImage 鋪滿整個框(overflow hidden 裁掉
+  // 溢出的 cover 部分),文字疊在右上角(見 resultTextOverlay),不需要再對內容做置中排版。
   resultBox: {
     width: '100%',
     flex: 1,
     minHeight: 56,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     borderRadius: 10,
     backgroundColor: 'rgba(28, 28, 36, 0.6)',
-    paddingHorizontal: 38,
-    paddingVertical: 12,
+    overflow: 'hidden',
   },
   // 掛在彩蛋框正下方的掉落通知,絕對定位不占版面高度,顯示1秒後由 stageDropBanner 變 null
   // 直接消失(卡片本身很短命,沒有另外做淡出動畫的必要)。
@@ -437,24 +430,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
   },
-  resultIconWrap: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  resultTextCol: {
-    flexShrink: 1,
-    gap: 1,
+  resultImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
   },
   resultRarity: {
     color: '#8a8a95',
     fontSize: 10,
   },
+  // 文字疊在右上角:插圖鋪滿整框後直接放文字會被蓋在圖片上看不清楚,墊一層半透明底色的
+  // 小卡片,靠右上角放才不會蓋到柱子(EasterEggFrame 柱寬34px,right留40px淨空)。
+  resultTextOverlay: {
+    position: 'absolute',
+    top: 8,
+    right: 40,
+    maxWidth: '55%',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(10, 8, 6, 0.72)',
+  },
   resultText: {
     color: '#f2f2f2',
-    fontSize: 11,
-    textAlign: 'center',
+    fontSize: 10,
+    textAlign: 'left',
+    lineHeight: 14,
   },
   levelUpRow: {
     flexDirection: 'row',
