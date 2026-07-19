@@ -305,7 +305,7 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* 生涯總覽:點頂部資源列的Lv.徽章開,不佔用底部8個分頁的名額(見TopResourceBar.tsx的
+      {/* 生涯總覽:點頂部資源列的Lv.徽章開,不佔用底部6個分頁的名額(見TopResourceBar.tsx的
           設計取捨)。彙整存檔既有的終生數據,不新增追蹤欄位。 */}
       <Modal visible={showCareerOverview} animationType="fade" transparent onRequestClose={() => setShowCareerOverview(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setShowCareerOverview(false)} />
@@ -329,7 +329,7 @@ export default function HomeScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setOpenTabId(null)} />
         <View style={styles.modalSheet}>
-          {/* 標題色+底線套該分頁的識別色(見 panelTabs.tsx 的 accentColor)——8個系統原本
+          {/* 標題色+底線套該分頁的識別色(見 panelTabs.tsx 的 accentColor)——6個系統原本
               視覺同質化,除了圖示外分不出「現在在哪個系統裡」,這裡是玩家開分頁第一眼看到
               的東西,加識別色成本最低、辨識度提升最直接。 */}
           <View style={[styles.modalHeader, openTab && { borderBottomColor: openTab.accentColor }]}>

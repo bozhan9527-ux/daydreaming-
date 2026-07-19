@@ -6,7 +6,7 @@ import { OrnateFrame } from './OrnateFrame';
 
 const GEAR_ICON = require('../assets/sprites/ui/icon_gear.png');
 
-// 設定入口刻意不放進底部8分頁(那邊已經滿了)、也不塞進頂部資源列(TopResourceBar.tsx刻意
+// 設定入口刻意不放進底部6分頁(那邊已經滿了)、也不塞進頂部資源列(TopResourceBar.tsx刻意
 // 只放3顆藥丸,見該檔案的設計取捨)——改成獨立的浮動齒輪按鈕,跟 DailyQuestBadge/
 // LimitedEventBanner 同一套「浮在畫面角落、不佔用主畫面高度」的既有慣例,放在比它們更高的
 // top:8(它們在 top:74),避免疊在一起。
