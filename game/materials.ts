@@ -16,6 +16,18 @@ export const MATERIAL_TIER_LABELS: Record<MaterialTier, string> = {
   5: '五階',
 };
 
+// 階級識別色:給背包材料瀏覽頁(見 components/MaterialBrowserPanel.tsx)畫每一階的色塊用,
+// 沒有專屬素材圖示時拿來當icon的替代——越後期越華麗(呼應 game/equipment.ts 武器分階配色
+// 同樣的設計語言),刻意不用 #6ab0e0(全站保留給「互動中/選取中」訊號色,不能跟裝飾色混用)。
+export const MATERIAL_TIER_COLORS: Record<MaterialTier, string> = {
+  0: '#6a6a75',
+  1: '#8b8698',
+  2: '#7a9e7e',
+  3: '#e0a05c',
+  4: '#b389e0',
+  5: '#c9a94f',
+};
+
 export type TieredMaterialCounts = Record<MaterialTier, number>;
 
 export function createEmptyTieredMaterialCounts(): TieredMaterialCounts {

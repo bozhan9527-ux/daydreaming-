@@ -4,12 +4,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { EquipmentSlot } from '../game/equipment';
 import { EquipmentPanel } from './EquipmentPanel';
 import { InventoryPanel } from './InventoryPanel';
+import { MaterialBrowserPanel } from './MaterialBrowserPanel';
 
-type HostView = 'bag' | 'equipment';
+type HostView = 'bag' | 'equipment' | 'materials';
 
 const HOST_VIEWS: { id: HostView; label: string }[] = [
   { id: 'bag', label: '背包' },
   { id: 'equipment', label: '裝備' },
+  { id: 'materials', label: '材料' },
 ];
 
 // 「裝備」原本是獨立頂層分頁,併進「背包」分頁當子分頁——兩邊原本各自維護一份「目前選擇
@@ -35,11 +37,9 @@ export function InventoryTab() {
           </Pressable>
         ))}
       </View>
-      {hostView === 'bag' ? (
-        <InventoryPanel selectedSlot={selectedSlot} onSelectSlot={setSelectedSlot} />
-      ) : (
-        <EquipmentPanel selectedSlot={selectedSlot} onSelectSlot={setSelectedSlot} />
-      )}
+      {hostView === 'bag' && <InventoryPanel selectedSlot={selectedSlot} onSelectSlot={setSelectedSlot} />}
+      {hostView === 'equipment' && <EquipmentPanel selectedSlot={selectedSlot} onSelectSlot={setSelectedSlot} />}
+      {hostView === 'materials' && <MaterialBrowserPanel />}
     </View>
   );
 }
