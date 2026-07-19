@@ -123,12 +123,16 @@ export function levelsAvailable(state: LevelState): number {
   return count;
 }
 
-export function levelUp(state: LevelState, times: 1 | 5 | 10): { state: LevelState; levelsGained: number } {
+// 銀行經驗值累積後自動兌換等級(取代原本要玩家按「升1/5/10級」按鈕手動兌換的設計)——
+// 累積/兌換的公式完全沒變(還是同一組 expToNext/expBankCap),差別只在「誰觸發兌換」:
+// 呼叫端(hooks/useGameState.ts 的 tickBattle/load)在每次 accumulateExp 之後立刻呼叫這個
+// 函式,有多少囤積經驗就兌換多少級,銀行不會再讓玩家自己選擇要不要先囤著。
+export function autoLevelUp(state: LevelState): { state: LevelState; levelsGained: number } {
   let level = state.level;
   let bankedExp = state.bankedExp;
   let levelsGained = 0;
 
-  while (levelsGained < times && level < MAX_LEVEL) {
+  while (level < MAX_LEVEL) {
     const cost = expToNext(level);
     if (bankedExp < cost) break;
     bankedExp -= cost;

@@ -23,7 +23,7 @@ import { TopResourceBar } from '../components/TopResourceBar';
 import { getCurrentTier } from '../game/combat';
 import { getCompanionById } from '../game/companions';
 import { getItemById } from '../game/equipment';
-import { canLevelUp, expToNext, levelsAvailable, MAX_LEVEL } from '../game/leveling';
+import { expToNext, MAX_LEVEL } from '../game/leveling';
 import { newlyUnlockedTabs } from '../game/onboarding';
 import { computeTabAttentionFlags } from '../game/tabAttention';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF } from '../game/transfer';
@@ -35,7 +35,6 @@ import { useToast } from '../hooks/useToast';
 export default function HomeScreen() {
   const isLoaded = useGameState((state) => state.isLoaded);
   const level = useGameState((state) => state.level);
-  const levelUp = useGameState((state) => state.levelUp);
   const lastOfflineGain = useGameState((state) => state.lastOfflineGain);
   const lastOfflineKills = useGameState((state) => state.lastOfflineKills);
   const lastOfflineCoins = useGameState((state) => state.lastOfflineCoins);
@@ -137,9 +136,6 @@ export default function HomeScreen() {
 
   const isMaxLevel = level.level >= MAX_LEVEL;
   const needed = isMaxLevel ? 0 : expToNext(level.level);
-  // 已存的經驗值不夠升1級時,三顆按鈕都該直接disable,不然點了沒反應,玩家會以為壞了。
-  const canLevel = !isMaxLevel && canLevelUp(level);
-  const availableLevels = isMaxLevel ? 0 : levelsAvailable(level);
   // 新手歡迎彈窗(見 WelcomeModal.tsx)優先權最高——沒看過之前不能讓離線收益/每日登入獎勵
   // 這兩個彈窗疊上去搶焦點(全新存檔常常兩個條件同時成立,疊出來的畫面會擋住歡迎彈窗的按鈕)。
   const showOfflineModal = hasSeenWelcome && lastOfflineKills > 0 && !offlineModalDismissed;
@@ -232,21 +228,7 @@ export default function HomeScreen() {
 
         <SkillTracker />
 
-        <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} levelsAvailable={availableLevels} />
-
-        {/* 升級按鈕緊跟在經驗條後面,看到「可升N級」可以馬上按,不用再滑到畫面最下面——
-            原本放在Tab列之後、跨過整個分頁按鈕區,操作路徑被拉斷。 */}
-        <View style={styles.levelUpRow}>
-          <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(1)} disabled={!canLevel}>
-            <Text style={styles.levelUpLabel}>升 1 級</Text>
-          </Pressable>
-          <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(5)} disabled={!canLevel}>
-            <Text style={styles.levelUpLabel}>升 5 級</Text>
-          </Pressable>
-          <Pressable style={[styles.levelUpButton, !canLevel && styles.levelUpButtonDisabled]} onPress={() => levelUp(10)} disabled={!canLevel}>
-            <Text style={styles.levelUpLabel}>升 10 級</Text>
-          </Pressable>
-        </View>
+        <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} />
 
         {/* 已裝備道具縮圖列:9插槽一次看完裝了什麼/幾級/有沒有強化,不用切去「裝備」分頁。
             強化石/寶石數量原本在這裡下面常駐一列,現在收進「背包」分頁(見 InventoryPanel.tsx)。 */}
@@ -479,23 +461,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     lineHeight: 14,
-  },
-  levelUpRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  levelUpButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#2a2a35',
-  },
-  // 銀行經驗值不夠升1級時視覺變暗,搭配 disabled 一起用,不然按鈕看起來能按、按了卻沒反應。
-  levelUpButtonDisabled: {
-    opacity: 0.4,
-  },
-  levelUpLabel: {
-    color: '#f2f2f2',
   },
   modalBackdrop: {
     flex: 1,

@@ -108,7 +108,7 @@ import {
   weekIndex,
   WeeklyStatKey,
 } from '../game/weeklyChallenge';
-import { accumulateExp, calcOfflineExp, createInitialLevelState, LevelState, levelUp as applyLevelUp } from '../game/leveling';
+import { accumulateExp, autoLevelUp, calcOfflineExp, createInitialLevelState, LevelState } from '../game/leveling';
 import {
   activeSkillTriggerIntervalSeconds,
   ACTIVE_SLOT_IDS,
@@ -456,7 +456,6 @@ interface GameState {
   toggleMusic: () => void;
   dismissWelcome: () => void;
   resetSave: () => Promise<void>;
-  levelUp: (times: 1 | 5 | 10) => void;
   tickBattle: () => void;
   boostCurrentFight: () => void;
   setJob: (archetype: Archetype, branch: JobBranch) => void;
@@ -780,7 +779,9 @@ export const useGameState = create<GameState>((set, get) => ({
     // 不隨等級縮放,是「歡迎回來」的心意,不會變成新的主要收入來源。
     const newDay = isNewDay(save.lastDailyResetAt);
     const dailyLoginBonus = newDay ? { coins: DAILY_LOGIN_COIN_BONUS, exp: DAILY_LOGIN_EXP_BONUS } : null;
-    const level = accumulateExp(save.level, gainedExp + (dailyLoginBonus?.exp ?? 0));
+    // 離線累積的經驗值也立刻自動兌換等級(跟 tickBattle 同一套 autoLevelUp),不會變成
+    // 玩家一開遊戲就要先手動點按鈕清空的一大包銀行經驗值。
+    const level = autoLevelUp(accumulateExp(save.level, gainedExp + (dailyLoginBonus?.exp ?? 0))).state;
 
     // 週期成就輪替(見 game/weeklyChallenge.ts):跨週才重置進度+已領取清單,同一套「跨日重置」
     // 的精神換成一週為單位——沒有登入獎勵這種一次性彈窗,純粹是進度池歸零+換一組新的3條挑戰。
@@ -907,16 +908,6 @@ export const useGameState = create<GameState>((set, get) => ({
   resetSave: async () => {
     await clearSave();
     await get().load();
-  },
-
-  levelUp: (times) => {
-    const { level } = get();
-    const result = applyLevelUp(level, times);
-
-    set({ level: result.state });
-    checkAndUnlockAchievements(get, set);
-    persist(get());
-    if (result.state.level > level.level) playLevelUp();
   },
 
   // 前景時每隔一小段時間呼叫一次(見 hooks/useBattleLoop.ts):沒有怪就生成一隻,
@@ -1221,7 +1212,10 @@ export const useGameState = create<GameState>((set, get) => ({
     const coinWindfall = rollCoinWindfall(coins);
     const lastCoinWindfall = coinWindfall > 0 ? coinWindfall : null;
 
-    const nextLevel = accumulateExp(state.level, exp);
+    // 銀行經驗值累積後立刻自動兌換等級(取代原本要玩家按按鈕手動兌換的設計,見
+    // game/leveling.ts 的 autoLevelUp 說明),兌換公式完全沒變,只是不再需要玩家自己觸發。
+    const { state: nextLevel, levelsGained } = autoLevelUp(accumulateExp(state.level, exp));
+    if (levelsGained > 0) playLevelUp();
     const nextCoins = state.coins + coins + coinWindfall;
 
     set({

@@ -8,17 +8,16 @@ interface ExpBarProps {
   bankedExp: number;
   needed: number;
   isMaxLevel: boolean;
-  levelsAvailable: number;
 }
 
 // 金幣已經在 TopResourceBar 常駐顯示,這裡不再重複——原本緊貼經驗條的「金幣 N」
 // 跟頂部資源列同時存在,同一個數字在畫面上出現兩次。Lv標籤留著,因為它跟進度條是同一組資訊
 // (在看「這一級」升到哪了),拿掉反而要多看一次頂部才知道現在是第幾級。
-export function ExpBar({ level, bankedExp, needed, isMaxLevel, levelsAvailable }: ExpBarProps) {
+// 等級改成累積滿了自動兌換(見 game/leveling.ts 的 autoLevelUp),銀行經驗值不會再囤積成
+// 好幾級份,不需要「可升 N 級」那種換算顯示,一律直接顯示「目前 / 下一級所需」。
+export function ExpBar({ level, bankedExp, needed, isMaxLevel }: ExpBarProps) {
   const ratio = isMaxLevel ? 1 : Math.min(1, needed > 0 ? bankedExp / needed : 0);
-  // 銀行經驗值可能一次囤好幾級份,直接顯示「97812 / 300」這種原始數字量級差太多,
-  // 看起來像壞掉,夠兌換至少1級時改顯示「可升 N 級」更直覺。
-  const barLabel = isMaxLevel ? '已封頂' : levelsAvailable > 0 ? `可升 ${levelsAvailable} 級` : `${bankedExp} / ${needed}`;
+  const barLabel = isMaxLevel ? '已封頂' : `${bankedExp} / ${needed}`;
 
   return (
     <View style={styles.row}>
