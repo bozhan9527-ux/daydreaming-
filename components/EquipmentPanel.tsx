@@ -26,7 +26,6 @@ import { ItemPreviewModal } from './ItemPreviewModal';
 import { NineSliceFrame } from './NineSliceFrame';
 import { OrnateFrame } from './OrnateFrame';
 import { PixelSprite } from './PixelSprite';
-import { SocketPanel } from './SocketPanel';
 
 // 裝備分頁的角色預覽:跟戰鬥畫面共用同一份 AI 美術(useHeroArt),平常顯示 open,點一下
 // 短暫換成 middle(來源三聯圖中間那張動作格)再彈回來——跟 HeroWalkSprite 點擊顯示 click
@@ -90,13 +89,12 @@ const SLOT_FRAME_CORNER = 14;
 const SLOT_FRAME_EDGE = 5;
 
 // 背包已經拆成獨立頂層分頁(見 components/InventoryPanel.tsx),這裡收納鑲嵌——
-// 圍繞「身上穿的這件裝備」在操作,收在裝備分頁底下比較好找。強化已經移到「工坊」分頁
-// (見 WorkshopTab.tsx),跟新增的合成分頁放在一起,不再收在這裡。
-type SubView = 'worn' | 'socket' | 'shop';
+// 圍繞「身上穿的這件裝備」在操作,收在裝備分頁底下比較好找。強化跟鑲嵌都已經移到
+// 「工坊」分頁(見 WorkshopTab.tsx),跟合成分頁放在一起,不再收在這裡。
+type SubView = 'worn' | 'shop';
 
 const SUB_VIEWS: { id: SubView; label: string }[] = [
   { id: 'worn', label: '穿戴' },
-  { id: 'socket', label: '鑲嵌' },
   { id: 'shop', label: '商店' },
 ];
 
@@ -355,9 +353,6 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
           )}
         </View>
       )}
-
-      {/* 鑲嵌是獨立看「身上所有已裝備」的清單,不是照 selectedSlot 篩選,直接沿用原本的元件。 */}
-      {subView === 'socket' && <SocketPanel />}
 
       {subView === 'shop' && (
         <>

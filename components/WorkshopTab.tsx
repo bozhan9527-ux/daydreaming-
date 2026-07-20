@@ -3,17 +3,19 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CraftingPanel } from './CraftingPanel';
 import { EnhancementPanel } from './EnhancementPanel';
+import { SocketPanel } from './SocketPanel';
 
-type HostView = 'enhance' | 'craft';
+type HostView = 'enhance' | 'craft' | 'socket';
 
 const HOST_VIEWS: { id: HostView; label: string }[] = [
   { id: 'enhance', label: '強化' },
   { id: 'craft', label: '合成' },
+  { id: 'socket', label: '鑲嵌' },
 ];
 
-// 工坊分頁:強化(原本收在「裝備」子分頁下,見 EquipmentPanel.tsx 的既有註解)+新的合成
-// (技能書/強化石分階系統,見 game/materials.ts)兩個子分頁,都是圍繞「花材料換更強」的
-// 系統,收在同一個分頁下比各自散落好找。
+// 工坊分頁:強化+鑲嵌(原本都收在「裝備」子分頁下,見 EquipmentPanel.tsx 的既有註解)
+// +合成(技能書/強化石分階系統,見 game/materials.ts)三個子分頁,都是圍繞「花材料換
+// 更強」的系統,收在同一個分頁下比各自散落好找。
 export function WorkshopTab() {
   const [hostView, setHostView] = useState<HostView>('enhance');
 
@@ -30,7 +32,9 @@ export function WorkshopTab() {
           </Pressable>
         ))}
       </View>
-      {hostView === 'enhance' ? <EnhancementPanel /> : <CraftingPanel />}
+      {hostView === 'enhance' && <EnhancementPanel />}
+      {hostView === 'craft' && <CraftingPanel />}
+      {hostView === 'socket' && <SocketPanel />}
     </View>
   );
 }
