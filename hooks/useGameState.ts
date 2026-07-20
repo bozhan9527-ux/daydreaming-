@@ -537,6 +537,10 @@ interface GameState {
   setBodyType: (bodyType: BodyType) => void;
   upgradeSkillSlot: (archetype: Archetype, slot: SkillSlotId) => void;
   upgradeStudentSkillSlot: (slot: SkillSlotId) => void;
+  // 批量升級:技能書存夠的話一次把這格衝到當前存量能到的最高等級(或封頂),不用一級一級
+  // 手動點——呼應「批量升級改善」的需求,單次點擊、單次persist,不是在UI層迴圈呼叫單級版本。
+  upgradeSkillSlotMax: (archetype: Archetype, slot: SkillSlotId) => void;
+  upgradeStudentSkillSlotMax: (slot: SkillSlotId) => void;
   setGender: (gender: Gender) => void;
   purchaseCompanion: (id: string) => void;
   unequipCompanionSlot: (kind: CompanionKind) => void;
@@ -1791,6 +1795,50 @@ export const useGameState = create<GameState>((set, get) => ({
     };
 
     set({ studentSkillTree: nextStudentSkillTree, skillBooks: spendMaterialAtTier(skillBooks, 0, bookCost) });
+    persist(get());
+    playSkillUpgrade();
+  },
+
+  upgradeSkillSlotMax: (archetype, slot) => {
+    const { level, skillTree, skillBooks } = get();
+    const tier = getCurrentTier(level.level);
+    const materialTier = currentMaterialTier(true, tier);
+    let slotLevel = skillTree[archetype][slot];
+    let remainingBooks = skillBooks[materialTier];
+    let upgradedAtLeastOnce = false;
+    // 迴圈在記憶體裡跑完,只在最後 set() 一次、persist() 一次——不是在 UI 層連續呼叫單級版本,
+    // 避免每級都各自觸發一次存檔 IO。
+    while (canUpgradeSkillSlot(slotLevel, tier, remainingBooks)) {
+      remainingBooks -= skillSlotUpgradeBookCost(slotLevel);
+      slotLevel = nextSkillSlotLevel(slotLevel, tier);
+      upgradedAtLeastOnce = true;
+    }
+    if (!upgradedAtLeastOnce) return;
+
+    set({
+      skillTree: { ...skillTree, [archetype]: { ...skillTree[archetype], [slot]: slotLevel } },
+      skillBooks: { ...skillBooks, [materialTier]: remainingBooks },
+    });
+    persist(get());
+    playSkillUpgrade();
+  },
+
+  upgradeStudentSkillSlotMax: (slot) => {
+    const { studentSkillTree, skillBooks } = get();
+    let slotLevel = studentSkillTree[slot];
+    let remainingBooks = skillBooks[0];
+    let upgradedAtLeastOnce = false;
+    while (canUpgradeStudentSkillSlot(slotLevel, remainingBooks)) {
+      remainingBooks -= skillSlotUpgradeBookCost(slotLevel);
+      slotLevel = nextStudentSkillSlotLevel(slotLevel);
+      upgradedAtLeastOnce = true;
+    }
+    if (!upgradedAtLeastOnce) return;
+
+    set({
+      studentSkillTree: { ...studentSkillTree, [slot]: slotLevel },
+      skillBooks: { ...skillBooks, 0: remainingBooks },
+    });
     persist(get());
     playSkillUpgrade();
   },

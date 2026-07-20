@@ -37,6 +37,8 @@ export function SkillPanel() {
   const skillBooks = useGameState((state) => state.skillBooks);
   const upgradeSkillSlot = useGameState((state) => state.upgradeSkillSlot);
   const upgradeStudentSkillSlot = useGameState((state) => state.upgradeStudentSkillSlot);
+  const upgradeSkillSlotMax = useGameState((state) => state.upgradeSkillSlotMax);
+  const upgradeStudentSkillSlotMax = useGameState((state) => state.upgradeStudentSkillSlotMax);
 
   // 畢業前(!hasChosenJob)還沒有主職技能樹可看,固定顯示學生技能;畢業後兩棵樹永久並存
   // (學生加成不會因為選定主職而失效),用這個分頁內部切換兩邊,預設看職業技能。
@@ -135,17 +137,33 @@ export function SkillPanel() {
         <Text style={styles.detailBonus}>{selectedBonusDesc}</Text>
         <Text style={styles.detailCap}>目前階級上限:{cap} 級{showJobTree ? '(升階可再提高)' : ''}</Text>
 
-        <Pressable
-          style={[styles.upgradeButton, !canUpgradeSelected && styles.upgradeButtonDisabled]}
-          onPress={() => (showJobTree ? upgradeSkillSlot(archetype, selectedSlot) : upgradeStudentSkillSlot(selectedSlot))}
-          disabled={!canUpgradeSelected}
-        >
-          <Text style={styles.upgradeLabel}>
-            {selectedAtCap
-              ? '已達上限'
-              : `升級 (${selectedBookCost} 本${MATERIAL_TIER_LABELS[materialTier]}技能書,持有 ${availableBooks} 本)`}
-          </Text>
-        </Pressable>
+        <View style={styles.upgradeButtonRow}>
+          <Pressable
+            style={[styles.upgradeButton, !canUpgradeSelected && styles.upgradeButtonDisabled]}
+            onPress={() => (showJobTree ? upgradeSkillSlot(archetype, selectedSlot) : upgradeStudentSkillSlot(selectedSlot))}
+            disabled={!canUpgradeSelected}
+          >
+            <Text style={styles.upgradeLabel}>
+              {selectedAtCap
+                ? '已達上限'
+                : `升級 (${selectedBookCost} 本${MATERIAL_TIER_LABELS[materialTier]}技能書,持有 ${availableBooks} 本)`}
+            </Text>
+          </Pressable>
+          {/* 批量升級:書夠的話一次衝到存量能到的最高等級,不用照書量一級一級手動點——
+              呼應「批量升級改善」的需求。跟上面單級版本共用同一個 canUpgradeSelected 判斷
+              (書不夠升1級,當然也不夠衝更多級)。 */}
+          {!selectedAtCap && (
+            <Pressable
+              style={[styles.upgradeButtonMax, !canUpgradeSelected && styles.upgradeButtonDisabled]}
+              onPress={() =>
+                showJobTree ? upgradeSkillSlotMax(archetype, selectedSlot) : upgradeStudentSkillSlotMax(selectedSlot)
+              }
+              disabled={!canUpgradeSelected}
+            >
+              <Text style={styles.upgradeLabel}>衝到底</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -277,12 +295,29 @@ const styles = StyleSheet.create({
     color: '#6a6a75',
     fontSize: 11,
   },
-  upgradeButton: {
+  upgradeButtonRow: {
     marginTop: 4,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  upgradeButton: {
+    flex: 1,
     paddingVertical: 8,
     borderRadius: 6,
     backgroundColor: '#2a2a35',
     alignItems: 'center',
+  },
+  // 「衝到底」跟單級升級按鈕並排,用藍色(互動中訊號色)區分開——不是危險/警示動作,
+  // 只是同一個升級操作的批量版本。
+  upgradeButtonMax: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    backgroundColor: '#274357',
+    borderWidth: 1,
+    borderColor: '#6ab0e0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   upgradeButtonDisabled: {
     opacity: 0.4,

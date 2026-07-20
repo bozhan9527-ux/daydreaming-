@@ -103,10 +103,13 @@ export function skillSlotLevelCap(tier: JobTier): number {
   return SKILL_LEVEL_CAP;
 }
 
-// 升級花費改成純粹技能書、倍增制:0→1級要1本、1→2級要2本...9→10級要512本,逼玩家在6格
-// 之間做真實取捨(不再跟角色升等搶銀行經驗值,也不再吃金幣)。
+// 升級花費純粹吃技能書:倍率從2^level(0→1級要1本...9→10級要512本,單一格封頂1023本)
+// 調降到1.6^level(0→1級要1本...9→10級要69本,單一格封頂185本)——原本的倍率換算下來,
+// 配合4%掉落率,單一職業全滿級要打將近18萬隻怪,遠超這款放置遊戲預期的養成節奏(呼應
+// 「技能書取得量」被吐槽的回饋)。改成1.6倍率仍然是指數成長、後期依然要在6格之間做真實
+// 取捨,只是不再是天文數字。
 export function skillSlotUpgradeBookCost(level: number): number {
-  return Math.pow(2, level);
+  return Math.ceil(Math.pow(1.6, level));
 }
 
 export function canUpgradeSkillSlot(level: number, tier: JobTier, skillBooks: number): boolean {
@@ -117,8 +120,10 @@ export function upgradeSkillSlot(level: number, tier: JobTier): number {
   return Math.min(skillSlotLevelCap(tier), level + 1);
 }
 
-// 技能書掉落:比照 game/equipment.ts 的強化石/寶石掉落,每次擊殺獨立判定一次,互不干擾。
-const SKILL_BOOK_DROP_CHANCE = 0.04;
+// 技能書掉落:原本比照 game/equipment.ts 的強化石/寶石掉落訂在4%,但技能書的花費曲線比
+// 強化石陡很多(見 skillSlotUpgradeBookCost 的指數成長),同樣4%換算下來後期進度慢到失衡,
+// 拉到8%單獨補償——強化石/寶石維持4%不變,兩者原本就服務不同的養成節奏。
+const SKILL_BOOK_DROP_CHANCE = 0.08;
 
 export function rollSkillBookDrop(rng: () => number = Math.random): boolean {
   return rng() < SKILL_BOOK_DROP_CHANCE;
