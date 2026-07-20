@@ -1,4 +1,4 @@
-import { Archetype } from './combat';
+import { Archetype, DamageType } from './combat';
 
 // 轉職試煉副本系統:6 個職業各自獨立的副本,打贏保證掉落該職業的轉職碎片(見 game/transfer.ts),
 // 把過去唯一取得碎片的方式(打大魔王 3% 隨機機率、不分職業亂抽)補上一條主動、有目標的路線。
@@ -67,3 +67,19 @@ export const DUNGEON_ARCHETYPES: Archetype[] = [
   'magicRanged',
   'magicSupport',
 ];
+
+// 強化石/技能書副本:跟6個職業轉職試煉共用同一組入場券池,打贏保證掉落對應材料——
+// 呼應「技能書/強化石取得量」再多開一條主動、不吃機率的路線(轉職試煉本身就是「打贏才有,
+// 不看機率」的設計,材料副本延續同一套精神)。掉落數固定抓「轉職碎片掉落量(每場1片)的
+// 2倍」,不是碰巧選的數字。
+export type MaterialDungeonKind = 'enhanceStone' | 'skillBook';
+export const MATERIAL_DUNGEON_KINDS: MaterialDungeonKind[] = ['enhanceStone', 'skillBook'];
+export const MATERIAL_DUNGEON_REWARD_AMOUNT = 2;
+
+// 材料副本沒有「目標職業」可以拿來反推怪物系別(不像上面的 archetype 試煉刻意選相反系別
+// 逼玩家不能只堆單一系抗性),兩個副本各自固定一種系別、一半一半,至少不會讓玩家單靠
+// 一套抗性配置就通吃全部副本。
+export const MATERIAL_DUNGEON_SCHOOL: Record<MaterialDungeonKind, DamageType> = {
+  enhanceStone: 'physical',
+  skillBook: 'magic',
+};

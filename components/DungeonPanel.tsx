@@ -2,10 +2,22 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype } from '../game/combat';
-import { DUNGEON_ARCHETYPES, DUNGEON_TICKET_CAP, msUntilNextDungeonTicket } from '../game/dungeon';
+import {
+  DUNGEON_ARCHETYPES,
+  DUNGEON_TICKET_CAP,
+  MATERIAL_DUNGEON_KINDS,
+  MATERIAL_DUNGEON_REWARD_AMOUNT,
+  MaterialDungeonKind,
+  msUntilNextDungeonTicket,
+} from '../game/dungeon';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
+
+const MATERIAL_DUNGEON_LABELS: Record<MaterialDungeonKind, string> = {
+  enhanceStone: '強化石',
+  skillBook: '技能書',
+};
 
 const ARCHETYPE_LABELS: Record<Archetype, string> = {
   physicalMelee: '物理近戰',
@@ -34,7 +46,15 @@ export function DungeonPanel() {
   const transferFragments = useGameState((state) => state.transferFragments);
   const transferProofs = useGameState((state) => state.transferProofs);
   const challengeDungeon = useGameState((state) => state.challengeDungeon);
+  const enhanceStones = useGameState((state) => state.enhanceStones);
+  const skillBooks = useGameState((state) => state.skillBooks);
+  const challengeMaterialDungeon = useGameState((state) => state.challengeMaterialDungeon);
   const showToast = useToast((state) => state.show);
+
+  const MATERIAL_DUNGEON_COUNTS: Record<MaterialDungeonKind, typeof enhanceStones> = {
+    enhanceStone: enhanceStones,
+    skillBook: skillBooks,
+  };
 
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -55,6 +75,21 @@ export function DungeonPanel() {
       (after.transferFragments[archetype] ?? 0) + (after.transferProofs[archetype] ?? 0) * TRANSFER_FRAGMENTS_PER_PROOF;
     if (afterTotal > beforeTotal) {
       showToast(`打贏${ARCHETYPE_LABELS[archetype]}試煉!獲得一片${TRANSFER_FRAGMENT_NAMES[archetype]}`);
+    } else {
+      showToast('試煉失敗,勇者暫時撤退');
+    }
+  };
+
+  const handleMaterialChallenge = (kind: MaterialDungeonKind) => {
+    // 材料副本固定只發初階(tier 0),用tier 0數量前後比較就能判斷輸贏,不用比對整個
+    // TieredMaterialCounts——跟 handleChallenge 用「碎片+證明*10」合計判定輸贏同一個道理,
+    // 只是這裡的「合計」單純就是tier 0這一格。
+    const before = MATERIAL_DUNGEON_COUNTS[kind][0];
+    challengeMaterialDungeon(kind);
+    const after = useGameState.getState();
+    const afterCount = kind === 'enhanceStone' ? after.enhanceStones[0] : after.skillBooks[0];
+    if (afterCount > before) {
+      showToast(`打贏${MATERIAL_DUNGEON_LABELS[kind]}副本!獲得 ${MATERIAL_DUNGEON_REWARD_AMOUNT} 個${MATERIAL_DUNGEON_LABELS[kind]}`);
     } else {
       showToast('試煉失敗,勇者暫時撤退');
     }
@@ -84,6 +119,27 @@ export function DungeonPanel() {
             <Pressable
               style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
               onPress={() => handleChallenge(archetype)}
+              disabled={!canChallenge}
+            >
+              <Text style={styles.challengeLabel}>挑戰</Text>
+            </Pressable>
+          </View>
+        );
+      })}
+
+      {/* 強化石/技能書副本:跟上面 6 個職業試煉共用同一組入場券池,不分職業、打贏保證掉落
+          固定數量的初階材料,呼應「技能書/強化石取得量」再多開一條主動路線。 */}
+      {MATERIAL_DUNGEON_KINDS.map((kind) => {
+        const canChallenge = dungeon.tickets > 0;
+        return (
+          <View key={kind} style={styles.card}>
+            <Text style={styles.cardTitle}>{MATERIAL_DUNGEON_LABELS[kind]}副本</Text>
+            <Text style={styles.cardProgress}>
+              打贏保證掉落 {MATERIAL_DUNGEON_REWARD_AMOUNT} 個初階{MATERIAL_DUNGEON_LABELS[kind]}(持有 {MATERIAL_DUNGEON_COUNTS[kind][0]} 個)
+            </Text>
+            <Pressable
+              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+              onPress={() => handleMaterialChallenge(kind)}
               disabled={!canChallenge}
             >
               <Text style={styles.challengeLabel}>挑戰</Text>

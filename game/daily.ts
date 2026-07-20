@@ -38,7 +38,7 @@ export interface DailyTaskDef {
 
 export const DAILY_TASKS: DailyTaskDef[] = [
   { id: 'identify', label: '鑑定1件裝備的隱藏素質', target: 1, reward: { coins: 100, enhanceStones: 1 } },
-  { id: 'dungeon', label: '挑戰1次轉職試煉副本', target: 1, reward: { coins: 100, skillBooks: 1 } },
+  { id: 'dungeon', label: '挑戰1次副本', target: 1, reward: { coins: 100, skillBooks: 1 } },
   { id: 'enhance', label: '強化1次裝備', target: 1, reward: { coins: 100, enhanceStones: 1 } },
   { id: 'companionGear', label: '升級1次寵物坐騎裝備', target: 1, reward: { coins: 100 } },
 ];

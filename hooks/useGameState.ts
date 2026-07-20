@@ -82,6 +82,9 @@ import {
   DungeonState,
   dungeonDifficultyMultiplier,
   dungeonWinCoinReward,
+  MATERIAL_DUNGEON_REWARD_AMOUNT,
+  MATERIAL_DUNGEON_SCHOOL,
+  MaterialDungeonKind,
   spendDungeonTicket,
 } from '../game/dungeon';
 import { applyTransferFragmentGain, rollTransferFragmentDrop, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
@@ -530,6 +533,7 @@ interface GameState {
   boostCurrentFight: () => void;
   setJob: (archetype: Archetype, branch: JobBranch) => void;
   challengeDungeon: (archetype: Archetype) => void;
+  challengeMaterialDungeon: (kind: MaterialDungeonKind) => void;
   setSecondaryJob: (archetype: Archetype | null) => void;
   equip: (itemId: string) => void;
   unequip: (slot: EquipmentSlot) => void;
@@ -1444,6 +1448,62 @@ export const useGameState = create<GameState>((set, get) => ({
       transferProofs: gained.proofs,
       hasEverAssembledTransferProof: nextHasEverAssembledTransferProof,
       lastTransferFragmentArchetype: archetype,
+      dailyTaskProgress: nextDailyTaskProgress,
+      weeklyChallengeProgress: nextWeeklyChallengeProgress,
+    });
+    checkAndUnlockAchievements(get, set);
+    persist(get());
+  },
+
+  // 強化石/技能書副本(見 game/dungeon.ts 的 MATERIAL_DUNGEON_KINDS):跟上面 6 個職業試煉
+  // 共用同一組入場券池,邏輯照抄 challengeDungeon,差別只在沒有「目標職業」可以反推怪物系別
+  // (固定用 MATERIAL_DUNGEON_SCHOOL),打贏發的是固定數量的初階材料,不是轉職碎片。
+  challengeMaterialDungeon: (kind) => {
+    const state = get();
+    const spent = spendDungeonTicket(state.dungeon);
+    if (spent === null) return;
+
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    const dungeonMonsterSchool = MATERIAL_DUNGEON_SCHOOL[kind];
+    const matchingResistance =
+      dungeonMonsterSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
+    const passive3Bonus =
+      getPassiveBonusValue(state.studentSkillTree.passive3) +
+      (state.hasChosenJob ? getPassiveBonusValue(state.skillTree[state.job.archetype].passive3) : 0);
+    const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
+    const healthResult = resolveFightHealth(
+      state.heroHp,
+      heroMaxHp(state.level.level),
+      state.level.level,
+      getCurrentTier(state.level.level),
+      matchingResistance,
+      'legendary',
+      dungeonDifficultyMultiplier(state.level.level),
+      lifestealBonus
+    );
+
+    const nextDailyTaskProgress = incrementDailyTaskProgress(state.dailyTaskProgress, 'dungeon');
+    const nextWeeklyChallengeProgress = incrementWeeklyChallengeProgress(state.weeklyChallengeProgress, 'dungeon');
+
+    if (healthResult.defeated) {
+      set({
+        heroHp: healthResult.nextHp,
+        dungeon: spent,
+        defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
+        dailyTaskProgress: nextDailyTaskProgress,
+        weeklyChallengeProgress: nextWeeklyChallengeProgress,
+      });
+      persist(get());
+      return;
+    }
+
+    set({
+      heroHp: healthResult.nextHp,
+      coins: state.coins + dungeonWinCoinReward(state.level.level),
+      dungeon: spent,
+      ...(kind === 'enhanceStone'
+        ? { enhanceStones: grantBasicMaterial(state.enhanceStones, MATERIAL_DUNGEON_REWARD_AMOUNT) }
+        : { skillBooks: grantBasicMaterial(state.skillBooks, MATERIAL_DUNGEON_REWARD_AMOUNT) }),
       dailyTaskProgress: nextDailyTaskProgress,
       weeklyChallengeProgress: nextWeeklyChallengeProgress,
     });
