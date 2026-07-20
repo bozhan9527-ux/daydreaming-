@@ -191,7 +191,20 @@ export function getTierTriggerBonus(tier: JobTier): TierTriggerBonus {
 
 // 4 種主動效果依 subtype 決定排列順序:跟該 subtype 呼應的「招牌效果」排在 active1(沿用舊版單一
 // 技能的效果分配),其餘 3 種依固定順序輪流填滿 active2-4,確保每個職業的 4 個主動技能各不相同。
-const ACTIVE_KIND_ORDER: ActiveEffectKind[] = ['instantFinish', 'doubleReward', 'bonusCoins', 'expBoost'];
+export const ACTIVE_KIND_ORDER: ActiveEffectKind[] = ['instantFinish', 'doubleReward', 'bonusCoins', 'expBoost'];
+
+// 效果簡短標籤,給技能欄自選選擇器(SkillLoadoutEditor.tsx)的效益排序輔助用——玩家在picker
+// 裡選要塞哪個技能時,同一種效果分組顯示、按觸發間隔(秒數,不看等級本身)由快到慢排——每種
+// 效果的「每次觸發拿多少」跟等級/來源欄位無關(bonusCoins/expBoost 是固定常數,instantFinish/
+// doubleReward 是二元觸發),等級唯一影響的是觸發間隔(見 activeSkillTriggerIntervalSeconds),
+// 所以同一種效果裡「間隔越短=單位時間觸發越多次=效益越高」是可以直接比較、不用另外發明一個
+// 綜合分數的排序依據。
+export const ACTIVE_EFFECT_KIND_LABELS: Record<ActiveEffectKind, string> = {
+  instantFinish: '瞬間結束',
+  doubleReward: '獎勵翻倍',
+  bonusCoins: '額外金幣',
+  expBoost: '額外經驗',
+};
 
 const SUBTYPE_SIGNATURE_KIND: Record<Subtype, ActiveEffectKind> = {
   melee: 'instantFinish',

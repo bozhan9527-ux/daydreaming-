@@ -3,9 +3,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype, JobTier } from '../game/combat';
 import {
+  ACTIVE_EFFECT_KIND_LABELS,
+  ACTIVE_KIND_ORDER,
   ACTIVE_SLOT_IDS,
+  activeSkillTriggerIntervalSeconds,
   ActiveSkillSlotId,
   countBorrowedActiveSlots,
+  getActiveEffectKind,
   MAX_BORROWED_ACTIVE_SLOTS,
   SKILL_SLOT_NAMES,
   SkillTreeLevels,
@@ -93,30 +97,38 @@ export function SkillLoadoutEditor({ archetype, tier }: SkillLoadoutEditorProps)
           {learnedOptions.length === 0 ? (
             <Text style={styles.emptyHint}>還沒有已經投資過等級的主動技能,先花技能書升級任一招式再回來配置。</Text>
           ) : (
-            learnedOptions.map((option) => {
+            learnedOptions.map((option, index) => {
               // 已經借滿上限時,別的職業技能選項直接鎖住不能點——跟自己職業的技能不衝突,
               // 那些永遠能選。避免玩家點了才被 store 的 setActiveSkillLoadout 靜默擋下、
               // 只留一個 toast 說明,不知道剛剛點的那格為什麼沒反應。
               const isForeign = option.archetype !== archetype;
               const locked = isForeign && borrowCapReached;
+              // 效益排序輔助:同一種效果的選項排在一起(見 collectLearnedActiveSkills 的排序),
+              // 換組時插一行效果標籤當分隔——玩家一眼就看得出「這幾個都是同一種效果,由快到慢
+              // 排」,不用自己去猜排序邏輯。
+              const showGroupHeader = index === 0 || learnedOptions[index - 1].effectKind !== option.effectKind;
               return (
-                <Pressable
-                  key={`${option.archetype}-${option.sourceSlot}`}
-                  style={[styles.pickerRow, locked && styles.pickerRowLocked]}
-                  disabled={locked}
-                  onPress={() => {
-                    setActiveSkillLoadout(editingPosition, { archetype: option.archetype, sourceSlot: option.sourceSlot });
-                    setEditingPosition(null);
-                  }}
-                >
-                  <Text style={[styles.pickerRowText, locked && styles.pickerRowTextLocked]}>
-                    {SKILL_SLOT_NAMES[option.archetype][option.sourceSlot]} Lv.{option.level}
-                  </Text>
-                  <Text style={styles.pickerRowSub}>
-                    {ARCHETYPE_LABELS[option.archetype]}
-                    {locked ? `(已借滿${MAX_BORROWED_ACTIVE_SLOTS}格)` : ''}
-                  </Text>
-                </Pressable>
+                <View key={`${option.archetype}-${option.sourceSlot}`}>
+                  {showGroupHeader && (
+                    <Text style={styles.pickerGroupHeader}>{ACTIVE_EFFECT_KIND_LABELS[option.effectKind]}(觸發間隔由快到慢)</Text>
+                  )}
+                  <Pressable
+                    style={[styles.pickerRow, locked && styles.pickerRowLocked]}
+                    disabled={locked}
+                    onPress={() => {
+                      setActiveSkillLoadout(editingPosition, { archetype: option.archetype, sourceSlot: option.sourceSlot });
+                      setEditingPosition(null);
+                    }}
+                  >
+                    <Text style={[styles.pickerRowText, locked && styles.pickerRowTextLocked]}>
+                      {SKILL_SLOT_NAMES[option.archetype][option.sourceSlot]} Lv.{option.level}({option.intervalSeconds}秒)
+                    </Text>
+                    <Text style={styles.pickerRowSub}>
+                      {ARCHETYPE_LABELS[option.archetype]}
+                      {locked ? `(已借滿${MAX_BORROWED_ACTIVE_SLOTS}格)` : ''}
+                    </Text>
+                  </Pressable>
+                </View>
               );
             })
           )}
@@ -130,17 +142,34 @@ interface LearnedActiveSkillOption {
   archetype: Archetype;
   sourceSlot: ActiveSkillSlotId;
   level: number;
+  effectKind: ReturnType<typeof getActiveEffectKind>;
+  intervalSeconds: number;
 }
 
+// 效益排序輔助:同一種效果分組(見 ACTIVE_KIND_ORDER 的固定順序),組內按觸發間隔由快到慢排——
+// 同一種效果「間隔越短=效益越高」是可以直接比較的客觀依據,不用另外發明一個跨效果種類的
+// 綜合分數(見 game/skillTree.ts 的 ACTIVE_EFFECT_KIND_LABELS 註解)。
 function collectLearnedActiveSkills(skillTree: SkillTreeLevels): LearnedActiveSkillOption[] {
   const options: LearnedActiveSkillOption[] = [];
   ARCHETYPES.forEach((archetype) => {
     ACTIVE_SLOT_IDS.forEach((slot) => {
       const level = skillTree[archetype][slot];
-      if (level > 0) options.push({ archetype, sourceSlot: slot, level });
+      if (level > 0) {
+        options.push({
+          archetype,
+          sourceSlot: slot,
+          level,
+          effectKind: getActiveEffectKind(archetype, slot),
+          intervalSeconds: activeSkillTriggerIntervalSeconds(slot, level),
+        });
+      }
     });
   });
-  return options;
+  return options.sort((a, b) => {
+    const kindOrderDiff = ACTIVE_KIND_ORDER.indexOf(a.effectKind) - ACTIVE_KIND_ORDER.indexOf(b.effectKind);
+    if (kindOrderDiff !== 0) return kindOrderDiff;
+    return a.intervalSeconds - b.intervalSeconds;
+  });
 }
 
 const styles = StyleSheet.create({
@@ -200,6 +229,13 @@ const styles = StyleSheet.create({
     color: '#8a8a95',
     fontSize: 9,
     textAlign: 'center',
+  },
+  pickerGroupHeader: {
+    color: '#c9a94f',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 6,
+    marginBottom: 2,
   },
   pickerCard: {
     width: '100%',
