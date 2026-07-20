@@ -1,6 +1,6 @@
 import { Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
-import { getCurrentTier, getJobTitle } from '../game/combat';
+import { getJobTitle } from '../game/combat';
 import { getCycleCount } from '../game/ascension';
 import { STAGE_COUNT } from '../game/stages';
 import { useGameState } from '../hooks/useGameState';
@@ -16,13 +16,14 @@ export function CareerOverviewPanel() {
   const killCount = useGameState((state) => state.killCount);
   const level = useGameState((state) => state.level);
   const job = useGameState((state) => state.job);
+  const jobTier = useGameState((state) => state.jobTier);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const totalStagesCleared = useGameState((state) => state.totalStagesCleared);
   const unlockedAchievementIds = useGameState((state) => state.unlockedAchievementIds);
   const showToast = useToast((state) => state.show);
 
   const cycleCount = getCycleCount(totalStagesCleared);
-  const title = hasChosenJob ? getJobTitle(job.archetype, job.branch, getCurrentTier(level.level)) : '學生';
+  const title = hasChosenJob ? getJobTitle(job.archetype, job.branch, jobTier) : '學生';
 
   const stats: { label: string; value: string }[] = [
     { label: '目前身分', value: title },

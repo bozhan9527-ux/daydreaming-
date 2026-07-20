@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { AscensionUpgradeId } from '../game/ascension';
-import { Archetype, JobBranch } from '../game/combat';
+import { Archetype, getCurrentTier, JobBranch, JobTier } from '../game/combat';
 import {
   CompanionGearState,
   CompanionState,
@@ -45,7 +45,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 35;
+export const SCHEMA_VERSION = 36;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -210,6 +210,12 @@ export interface SaveData {
   // 主動技能欄自選配置(見 game/skillTree.ts 的 ActiveSkillLoadout):v34 起,首頁4個主動技能欄
   // 位不再固定綁死「目前職業自己的active1-4」,玩家可以把任何已經投資過等級的職業技能塞進來。
   activeSkillLoadout: ActiveSkillLoadout;
+  // 職業階級(見 game/combat.ts 的 JobTier):v36 起不再是「等級到門檻就自動晉升」的純粹
+  // 等級推算值,改成玩家自己觸發晉升(見 hooks/useGameState.ts 的 promoteJobTier)才會真的
+  // 提升——等級到門檻只代表「有資格挑戰晉升試煉」,不代表已經晉升。舊存檔遷移時用
+  // getCurrentTier(level.level)回填(見 migrate() 的 v35→v36 分支),不倒退老玩家已經
+  // 練到的等級對應階級,只有這次更新之後的晉升才需要走新的試煉+材料流程。
+  jobTier: JobTier;
 }
 
 export function createInitialSaveData(): SaveData {
@@ -261,6 +267,9 @@ export function createInitialSaveData(): SaveData {
     hasSeenWelcome: false,
     musicMuted: false,
     activeSkillLoadout: createInitialActiveSkillLoadout(DEFAULT_ARCHETYPE),
+    // 全新存檔一律從階級1開始——TIER_UNLOCK_LEVELS[1]=30剛好對齊畢業門檻,階級1不用晉升
+    // 試煉,自動視為「畢業就有」的起點,只有2階以後才需要玩家主動晉升。
+    jobTier: 1,
   };
 }
 
@@ -1942,10 +1951,17 @@ function isTieredMaterialCounts(value: unknown): value is TieredMaterialCounts {
   return ([0, 1, 2, 3, 4, 5] as const).every((tier) => typeof record[tier] === 'number');
 }
 
-// v35(技能書/強化石分階經濟上線):現在的 SaveData 完整形狀,比 v34 多了分階的
-// skillBooks/enhanceStones(見 game/materials.ts 的 TieredMaterialCounts)。這是 migrate() 的
-// 第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
-function isSaveDataV35(value: unknown): value is SaveData {
+// v35(技能書/強化石分階經濟上線,職業階級晉升機制上線前的最後一版):比 v34 多了分階的
+// skillBooks/enhanceStones(見 game/materials.ts 的 TieredMaterialCounts)。凍結成明確獨立的
+// interface+literal版本號檢查,形狀直接繼承 SaveDataV34(只換 version 字面量、覆寫
+// skillBooks/enhanceStones 型別)。
+interface SaveDataV35 extends Omit<SaveDataV34, 'version' | 'skillBooks' | 'enhanceStones'> {
+  version: 35;
+  skillBooks: TieredMaterialCounts;
+  enhanceStones: TieredMaterialCounts;
+}
+
+function isSaveDataV35(value: unknown): value is SaveDataV35 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   // isSaveDataV34 要求 skillBooks/enhanceStones 是 number(v34 的舊形狀),但這裡驗證的是已經
@@ -1953,10 +1969,25 @@ function isSaveDataV35(value: unknown): value is SaveData {
   // 欄位」的檢查,分階形狀本身另外用 isTieredMaterialCounts 獨立驗證,不能直接把 record 原樣
   // 降版本傳進去(那樣兩個物件形狀的欄位一定會卡在 typeof !== 'number' 上,永遠驗證失敗)。
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 35 &&
     isSaveDataV34({ ...record, version: 34, skillBooks: 0, enhanceStones: 0 }) &&
     isTieredMaterialCounts(record.skillBooks) &&
     isTieredMaterialCounts(record.enhanceStones)
+  );
+}
+
+// v36(職業階級晉升機制上線):現在的 SaveData 完整形狀,比 v35 多了 jobTier(見
+// game/combat.ts 的 JobTier)。這是 migrate() 的第一道 passthrough 檢查——已經是最新形狀的
+// 存檔直接原樣回傳,不用跑任何遷移邏輯。
+function isSaveDataV36(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  // isSaveDataV35 要求 version===35,這裡驗證的是已經是 v36 的真正形狀——用 35 蓋掉 version
+  // 欄位餵給 isSaveDataV35,只借用它對「其餘欄位」的檢查,jobTier 本身另外獨立驗證。
+  return (
+    record.version === SCHEMA_VERSION &&
+    isSaveDataV35({ ...record, version: 35 }) &&
+    (record.jobTier === 1 || record.jobTier === 2 || record.jobTier === 3 || record.jobTier === 4 || record.jobTier === 5)
   );
 }
 
@@ -2048,11 +2079,22 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // 下一階)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV35(value)) return value;
+  if (isSaveDataV36(value)) return value;
+  // 舊存檔遷移到新的職業階級晉升機制:用 getCurrentTier(level.level) 回填 jobTier,
+  // grandfather 老玩家在目前等級「原本就會有」的階級,不會平白倒退——只有這次更新之後
+  // 的晉升才需要走新的晉升試煉+材料流程(見 SaveData.jobTier 的欄位註解)。
+  if (isSaveDataV35(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
+    };
+  }
   if (isSaveDataV34(value)) {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
     };
@@ -2061,6 +2103,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
@@ -2070,6 +2113,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
@@ -2080,6 +2124,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2092,6 +2137,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2107,6 +2153,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2124,6 +2171,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2143,6 +2191,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2163,6 +2212,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2186,6 +2236,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2210,6 +2261,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2234,6 +2286,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2259,6 +2312,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2285,6 +2339,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2311,6 +2366,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2339,6 +2395,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2368,6 +2425,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2400,6 +2458,7 @@ function migrate(value: unknown): SaveData {
     return {
       ...value,
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2432,6 +2491,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV16(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2483,6 +2543,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV15(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2534,6 +2595,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV14(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2585,6 +2647,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV13(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2636,6 +2699,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV12(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2687,6 +2751,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV11(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2738,6 +2803,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV10(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2789,6 +2855,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV9(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2840,6 +2907,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV8(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2891,6 +2959,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV7(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2942,6 +3011,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV6(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2993,6 +3063,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV5(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -3044,6 +3115,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV4(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -3095,6 +3167,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV3(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -3146,6 +3219,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV2(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -3197,6 +3271,7 @@ function migrate(value: unknown): SaveData {
   if (isSaveDataV1(value)) {
     return {
       version: SCHEMA_VERSION,
+      jobTier: getCurrentTier(value.level.level),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,

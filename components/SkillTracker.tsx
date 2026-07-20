@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
-import { Archetype, getCurrentTier, JobTier } from '../game/combat';
+import { Archetype, JobTier } from '../game/combat';
 import {
   ACTIVE_SLOT_IDS,
   ActiveSkillSlotId,
@@ -163,6 +163,7 @@ export function SkillTracker() {
   const activeSkillLoadout = useGameState((state) => state.activeSkillLoadout);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const level = useGameState((state) => state.level);
+  const jobTier = useGameState((state) => state.jobTier);
   const activeSkillTimers = useGameState((state) => state.activeSkillTimers);
   const studentActiveSkillTimers = useGameState((state) => state.studentActiveSkillTimers);
   const secondarySkillTimerStartedAt = useGameState((state) => state.secondarySkillTimerStartedAt);
@@ -187,7 +188,7 @@ export function SkillTracker() {
   const secondaryJustTriggered = lastSecondarySkillTriggerAt !== null && now - lastSecondarySkillTriggerAt < FLASH_WINDOW_MS;
   // 圖示現在直接吃真正的職業階級(JobTier),不是技能等級——跟下面 SkillTile 顯示的
   // 「Lv.X」技能等級數字是兩件事,那個數字繼續吃 slotLevel,不受這裡影響。
-  const tier = getCurrentTier(level.level);
+  const tier = jobTier;
   const autoMode = autoSkillsEnabled;
 
   return (

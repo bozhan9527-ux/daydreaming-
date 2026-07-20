@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getArchetypeComposition, getCurrentTier, getJobTitle } from '../game/combat';
+import { getArchetypeComposition, getJobTitle } from '../game/combat';
 import {
   EquipmentSlot,
   getEquipmentBonusTotalsFull,
@@ -49,12 +49,12 @@ export function CharacterStatusPanel() {
   const level = useGameState((state) => state.level);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const job = useGameState((state) => state.job);
+  const tier = useGameState((state) => state.jobTier);
   const equipment = useGameState((state) => state.equipment);
   const itemInstances = useGameState((state) => state.itemInstances);
   const heroHp = useGameState((state) => state.heroHp);
   const showToast = useToast((state) => state.show);
 
-  const tier = getCurrentTier(level.level);
   const title = hasChosenJob ? getJobTitle(job.archetype, job.branch, tier) : '學生';
   const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const substatTotals = getSubstatTotals(equipment, itemInstances);

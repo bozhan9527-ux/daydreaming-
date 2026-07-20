@@ -20,7 +20,6 @@ import { SkillTracker } from '../components/SkillTracker';
 import { TabBar } from '../components/TabBar';
 import { ToastHost } from '../components/Toast';
 import { TopResourceBar } from '../components/TopResourceBar';
-import { getCurrentTier } from '../game/combat';
 import { getCompanionById } from '../game/companions';
 import { getItemById } from '../game/equipment';
 import { expToNext, MAX_LEVEL } from '../game/leveling';
@@ -36,6 +35,7 @@ import { useToast } from '../hooks/useToast';
 export default function HomeScreen() {
   const isLoaded = useGameState((state) => state.isLoaded);
   const level = useGameState((state) => state.level);
+  const jobTier = useGameState((state) => state.jobTier);
   const lastOfflineGain = useGameState((state) => state.lastOfflineGain);
   const lastOfflineKills = useGameState((state) => state.lastOfflineKills);
   const lastOfflineCoins = useGameState((state) => state.lastOfflineCoins);
@@ -150,7 +150,7 @@ export default function HomeScreen() {
     equipment,
     enhanceStones,
     gemCounts,
-    jobTier: getCurrentTier(level.level),
+    jobTier,
     activeSkillLevels: hasChosenJob ? skillTree[job.archetype] : studentSkillTree,
     skillBooks,
     companionGear,

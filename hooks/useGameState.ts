@@ -34,7 +34,7 @@ import {
   unequipCompanion,
   unlockCompanion,
 } from '../game/companions';
-import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDualClass, getArchetypeComposition, getCurrentTier, JobBranch, oppositeDamageType, TIER_UNLOCK_LEVELS } from '../game/combat';
+import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDualClass, getArchetypeComposition, JobBranch, JobTier, oppositeDamageType, TIER_UNLOCK_LEVELS } from '../game/combat';
 import {
   applyGenderDefault,
   canEquipItem,
@@ -182,10 +182,11 @@ function unlockedItemsForGender(gender: Gender): UnlockedItemIds {
 
 // 副職(雙職兼修)只吃自己那份倍率超出 1.0 的一半,主職才是數值主力。
 // 「學生」期(!hasChosenJob)固定 1.0 倍,不套用 job 目前存的預設職業(那只是畢業前的佔位值,
-// 不代表玩家真的選了它)的任何加成。
-function currentJobMultiplier(job: JobSelection, level: number, secondaryJob: Archetype | null, hasChosenJob: boolean): number {
+// 不代表玩家真的選了它)的任何加成。吃 jobTier(玩家實際晉升到的階級)而不是從等級推算,
+// 呼應「晉升改成玩家主動觸發」的設計——等級到門檻只是有資格,沒有真的晉升就不會拿到
+// 該階級的戰鬥加成。
+function currentJobMultiplier(job: JobSelection, tier: JobTier, secondaryJob: Archetype | null, hasChosenJob: boolean): number {
   if (!hasChosenJob) return 1.0;
-  const tier = getCurrentTier(level);
   const primary = calcCombatMultiplier(job.archetype, tier);
   const secondaryBonus = secondaryJob ? calcSecondaryCombatBonus(secondaryJob, tier) : 0;
   return primary + secondaryBonus;
@@ -331,7 +332,7 @@ function computePassiveSkillBonus(
 
 function computeRewardMultipliers(
   job: JobSelection,
-  level: number,
+  tier: JobTier,
   equipment: EquipmentLoadout,
   companions: CompanionState,
   companionGear: CompanionGearState,
@@ -343,7 +344,7 @@ function computeRewardMultipliers(
   ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>,
   claimedAchievementIds: string[]
 ): RewardMultipliers {
-  const jobMultiplier = currentJobMultiplier(job, level, secondaryJob, hasChosenJob);
+  const jobMultiplier = currentJobMultiplier(job, tier, secondaryJob, hasChosenJob);
   const equipmentBonus = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const companionBonus = getCompanionBonusTotals(companions);
   const companionGearBonus = getCompanionGearBonusTotals(companionGear);
@@ -406,6 +407,10 @@ interface GameState {
   level: LevelState;
   trigger: TriggerState;
   job: JobSelection;
+  // 職業階級(見 game/combat.ts 的 JobTier):不再是 getCurrentTier(level.level) 純推算值,
+  // 玩家自己觸發晉升(見 promoteJobTier action)才會提升——等級到 TIER_UNLOCK_LEVELS[tier]
+  // 只代表「有資格挑戰晉升試煉」,不代表已經晉升。
+  jobTier: JobTier;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
   skillTree: SkillTreeLevels;
@@ -584,6 +589,7 @@ type PersistableState = Pick<
   | 'level'
   | 'trigger'
   | 'job'
+  | 'jobTier'
   | 'equipment'
   | 'bodyType'
   | 'skillTree'
@@ -634,6 +640,7 @@ function persist(state: PersistableState): void {
     level: state.level,
     trigger: state.trigger,
     job: state.job,
+    jobTier: state.jobTier,
     equipment: state.equipment,
     bodyType: state.bodyType,
     skillTree: state.skillTree,
@@ -767,6 +774,7 @@ export const useGameState = create<GameState>((set, get) => ({
   level: createInitialLevelState(),
   trigger: createInitialTriggerState(),
   job: DEFAULT_JOB,
+  jobTier: 1,
   equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
   bodyType: DEFAULT_BODY_TYPE,
   skillTree: createInitialSkillTreeLevels(),
@@ -850,7 +858,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     const { expMultiplier, coinMultiplier, speedMultiplier } = computeRewardMultipliers(
       save.job,
-      save.level.level,
+      save.jobTier,
       save.equipment,
       save.companions,
       save.companionGear,
@@ -884,7 +892,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const heroSchool = getArchetypeComposition(save.job.archetype).damageType;
     const offlineAttackPower = heroAttackPower(
       save.level.level,
-      getCurrentTier(save.level.level),
+      save.jobTier,
       heroSchool === 'physical' ? substatTotals.physicalAttack : substatTotals.magicAttack
     );
     const cappedOfflineMs = Math.min(elapsedMs, offlineCapHours * 60 * 60 * 1000);
@@ -904,6 +912,7 @@ export const useGameState = create<GameState>((set, get) => ({
       level,
       trigger: save.trigger,
       job: save.job,
+      jobTier: save.jobTier,
       equipment: save.equipment,
       bodyType: save.bodyType,
       skillTree: save.skillTree,
@@ -1041,7 +1050,7 @@ export const useGameState = create<GameState>((set, get) => ({
       }
       const { speedMultiplier } = computeRewardMultipliers(
         state.job,
-        state.level.level,
+        state.jobTier,
         state.equipment,
         state.companions,
         state.companionGear,
@@ -1056,11 +1065,11 @@ export const useGameState = create<GameState>((set, get) => ({
       const isBoss = isBossSubStage(state.stageProgress.subStage);
       const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
       const difficultyMultiplier = getStageDifficultyMultiplier(state.stageProgress, getCycleCount(state.totalStagesCleared));
-      const bossTier = getCurrentTier(state.level.level);
+      const bossTier = state.jobTier;
       const heroSchool = getArchetypeComposition(state.job.archetype).damageType;
       const attackPower = heroAttackPower(
         state.level.level,
-        getCurrentTier(state.level.level),
+        state.jobTier,
         heroSchool === 'physical' ? substatTotals.physicalAttack : substatTotals.magicAttack
       );
       const encounter = generateEncounter(
@@ -1097,7 +1106,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     const { expMultiplier, coinMultiplier } = computeRewardMultipliers(
       state.job,
-      state.level.level,
+      state.jobTier,
       state.equipment,
       state.companions,
       state.companionGear,
@@ -1126,7 +1135,7 @@ export const useGameState = create<GameState>((set, get) => ({
       hpRegenResult.heroHp,
       heroMaxHp(state.level.level),
       state.level.level,
-      getCurrentTier(state.level.level),
+      state.jobTier,
       matchingResistance,
       state.currentEncounter.rarity,
       difficultyMultiplier,
@@ -1212,7 +1221,7 @@ export const useGameState = create<GameState>((set, get) => ({
       lastSkillTriggerAt = now;
       // 職業樹分階疊加效果:tier2起才有,且是一次觸發批次只套用一次(不會因為剛好4格
       // 同時觸發就疊加4次)——見 game/skillTree.ts 的 getTierTriggerBonus 設計說明。
-      const tierBonus = getTierTriggerBonus(getCurrentTier(state.level.level));
+      const tierBonus = getTierTriggerBonus(state.jobTier);
       coins += Math.round(coins * tierBonus.bonusCoinMult) + tierBonus.bonusFlatCoins;
       exp += Math.round(exp * tierBonus.bonusExpMult);
       if (Math.random() < tierBonus.extraInstantChance) forceInstantNextFight = true;
@@ -1411,7 +1420,7 @@ export const useGameState = create<GameState>((set, get) => ({
       state.heroHp,
       heroMaxHp(state.level.level),
       state.level.level,
-      getCurrentTier(state.level.level),
+      state.jobTier,
       matchingResistance,
       'legendary',
       dungeonDifficultyMultiplier(state.level.level),
@@ -1475,7 +1484,7 @@ export const useGameState = create<GameState>((set, get) => ({
       state.heroHp,
       heroMaxHp(state.level.level),
       state.level.level,
-      getCurrentTier(state.level.level),
+      state.jobTier,
       matchingResistance,
       'legendary',
       dungeonDifficultyMultiplier(state.level.level),
@@ -1694,7 +1703,7 @@ export const useGameState = create<GameState>((set, get) => ({
       dailyTaskProgress,
       weeklyChallengeProgress,
       hasChosenJob,
-      level,
+      jobTier,
     } = get();
     const item = getItemById(itemId);
     const instance = itemInstances[itemId];
@@ -1703,7 +1712,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     // 強化石分階制(見 game/materials.ts):要用哪一階的石頭,直接對應目前職業階級,不對應
     // 強化目標等級本身——跟技能書的分階規則完全一樣。
-    const materialTier = currentMaterialTier(hasChosenJob, getCurrentTier(level.level));
+    const materialTier = currentMaterialTier(hasChosenJob, jobTier);
     const coinCost = getEnhanceCoinCost(item, instance.enhanceLevel);
     const stoneCost = getEnhanceStoneCost(instance.enhanceLevel);
     if (coins < coinCost || enhanceStones[materialTier] < stoneCost) return;
@@ -1819,8 +1828,7 @@ export const useGameState = create<GameState>((set, get) => ({
   },
 
   upgradeSkillSlot: (archetype, slot) => {
-    const { level, skillTree, skillBooks } = get();
-    const tier = getCurrentTier(level.level);
+    const { jobTier: tier, skillTree, skillBooks } = get();
     // 技能書分階制(見 game/materials.ts):要用哪一階的書,直接對應目前職業階級,不對應
     // 這一格技能本身的等級——這個 action 只在畢業後(hasChosenJob)才會被呼叫到,所以這裡
     // 直接傳 true。
@@ -1860,8 +1868,7 @@ export const useGameState = create<GameState>((set, get) => ({
   },
 
   upgradeSkillSlotMax: (archetype, slot) => {
-    const { level, skillTree, skillBooks } = get();
-    const tier = getCurrentTier(level.level);
+    const { jobTier: tier, skillTree, skillBooks } = get();
     const materialTier = currentMaterialTier(true, tier);
     let slotLevel = skillTree[archetype][slot];
     let remainingBooks = skillBooks[materialTier];

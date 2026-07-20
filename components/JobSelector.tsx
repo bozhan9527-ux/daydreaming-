@@ -7,7 +7,6 @@ import {
   canUnlockDualClass,
   DUAL_CLASS_UNLOCK_LEVEL,
   getArchetypeComposition,
-  getCurrentTier,
   getJobTitle,
   JobBranch,
   JobTier,
@@ -94,8 +93,8 @@ function HeroStatusPanel() {
   const skillTree = useGameState((state) => state.skillTree);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
+  const currentTier = useGameState((state) => state.jobTier);
 
-  const currentTier = getCurrentTier(level.level);
   const substatTotals = getSubstatTotals(equipment, itemInstances);
   const bonusTotals = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const heroSchool = getArchetypeComposition(job.archetype).damageType;
@@ -453,6 +452,7 @@ type DrillView = 'archetypes' | 'tiers' | 'skills';
 export function JobSelector() {
   const job = useGameState((state) => state.job);
   const level = useGameState((state) => state.level);
+  const currentTier = useGameState((state) => state.jobTier);
   const secondaryJob = useGameState((state) => state.secondaryJob);
   const skillTree = useGameState((state) => state.skillTree);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
@@ -469,7 +469,6 @@ export function JobSelector() {
   // 不用等畢業後才能選,呼應「Lv30 轉職就能選分支A/B」。
   const [selectedBranch, setSelectedBranch] = useState<JobBranch>('A');
 
-  const currentTier = getCurrentTier(level.level);
   // 學生期(!hasChosenJob)稱號固定顯示「學生」,job.archetype 目前存的只是畢業前的佔位值,
   // 不是玩家真的選過的職業,不能拿去查真正的職業稱號。
   const title = hasChosenJob ? getJobTitle(job.archetype, job.branch, currentTier) : '學生';

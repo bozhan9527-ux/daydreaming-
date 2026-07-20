@@ -2,7 +2,6 @@ import { ReactNode } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { getCycleCount } from '../game/ascension';
-import { getCurrentTier } from '../game/combat';
 import { getJobBackdropColor, getJobBackground } from '../game/sprites/backgrounds';
 import { useGameState } from '../hooks/useGameState';
 import { getBackgroundArt } from './backgroundArt';
@@ -28,11 +27,10 @@ interface MainVisualProps {
 
 export function MainVisual({ children }: MainVisualProps) {
   const job = useGameState((state) => state.job);
-  const level = useGameState((state) => state.level);
+  const tier = useGameState((state) => state.jobTier);
   const stageProgress = useGameState((state) => state.stageProgress);
   const totalStagesCleared = useGameState((state) => state.totalStagesCleared);
 
-  const tier = getCurrentTier(level.level);
   const backdropColor = getJobBackdropColor(job.archetype, job.branch, tier, stageProgress.stage);
   const cycleCount = getCycleCount(totalStagesCleared);
   const art = getBackgroundArt(job.archetype, job.branch, tier);

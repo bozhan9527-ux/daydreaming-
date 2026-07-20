@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getCurrentTier } from '../game/combat';
 import {
   ENHANCE_MAX_LEVEL,
   ENHANCE_STONE_PRICE,
@@ -40,14 +39,14 @@ export function EnhancementPanel() {
   const coins = useGameState((state) => state.coins);
   const enhanceStones = useGameState((state) => state.enhanceStones);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
-  const level = useGameState((state) => state.level);
+  const jobTier = useGameState((state) => state.jobTier);
   const enhanceItem = useGameState((state) => state.enhanceItem);
   const purchaseEnhanceStone = useGameState((state) => state.purchaseEnhanceStone);
   const showToast = useToast((state) => state.show);
 
   // 強化石分階制(見 game/materials.ts):強化裝備要用「目前職業階級」對應那一階的石頭,
   // 這裡只看那一階夠不夠用,其餘階級的庫存要去背包的材料瀏覽頁看。
-  const materialTier = currentMaterialTier(hasChosenJob, getCurrentTier(level.level));
+  const materialTier = currentMaterialTier(hasChosenJob, jobTier);
   const availableStones = enhanceStones[materialTier];
   const materialTierLabel = MATERIAL_TIER_LABELS[materialTier];
 

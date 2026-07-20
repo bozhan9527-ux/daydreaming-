@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Archetype, getCurrentTier, JobBranch } from '../game/combat';
+import { Archetype, JobBranch } from '../game/combat';
 import { useGameState } from '../hooks/useGameState';
 import { playClick } from '../lib/sounds';
 
@@ -438,9 +438,8 @@ export function useHeroArt(): HeroArt {
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const archetype = useGameState((state) => state.job.archetype);
   const branch = useGameState((state) => state.job.branch);
-  const level = useGameState((state) => state.level.level);
+  const currentTier = useGameState((state) => state.jobTier);
 
-  const currentTier = getCurrentTier(level);
   return !hasChosenJob
     ? STUDENT_ART
     : currentTier >= 4

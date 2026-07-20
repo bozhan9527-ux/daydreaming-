@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getCurrentTier } from '../game/combat';
 import { currentMaterialTier, MATERIAL_TIER_LABELS } from '../game/materials';
 import {
   ACTIVE_SLOT_IDS,
@@ -34,6 +33,7 @@ export function SkillPanel() {
   const skillTree = useGameState((state) => state.skillTree);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const level = useGameState((state) => state.level);
+  const tier = useGameState((state) => state.jobTier);
   const skillBooks = useGameState((state) => state.skillBooks);
   const upgradeSkillSlot = useGameState((state) => state.upgradeSkillSlot);
   const upgradeStudentSkillSlot = useGameState((state) => state.upgradeStudentSkillSlot);
@@ -46,7 +46,6 @@ export function SkillPanel() {
   const showJobTree = hasChosenJob && viewingJobTree;
   const [selectedSlot, setSelectedSlot] = useState<SkillSlotId>('active1');
 
-  const tier = getCurrentTier(level.level);
   const slotLevels = showJobTree ? skillTree[archetype] : studentSkillTree;
   const cap = showJobTree ? skillSlotLevelCap(tier) : STUDENT_SKILL_LEVEL_CAP;
 
