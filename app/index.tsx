@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AchievementBadge } from '../components/AchievementBadge';
 import { BattleScene } from '../components/BattleScene';
 import { CareerOverviewPanel } from '../components/CareerOverviewPanel';
 import { DailyQuestBadge } from '../components/DailyQuestBadge';
@@ -244,6 +245,7 @@ export default function HomeScreen() {
       <LimitedEventBanner />
 
       <SettingsButton />
+      <AchievementBadge />
       <WelcomeModal />
 
       <Modal visible={showOfflineModal} animationType="fade" transparent onRequestClose={() => setOfflineModalDismissed(true)}>

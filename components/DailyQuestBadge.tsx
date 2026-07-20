@@ -10,10 +10,8 @@ import {
   DAILY_TASKS,
   DailyTaskId,
 } from '../game/daily';
-import { isTabUnlocked } from '../game/onboarding';
 import { canClaimWeeklyChallenge, getActiveWeeklyChallenges } from '../game/weeklyChallenge';
 import { useGameState } from '../hooks/useGameState';
-import { AchievementPanel } from './AchievementPanel';
 
 interface TaskRow {
   key: string;
@@ -31,8 +29,6 @@ interface TaskRow {
 // 兩個徽章疊在畫面上比一個徽章裡分兩段更吵)。徽章本身還是浮在畫面右側的小按鈕(不佔主畫面
 // 高度),點一下展開/收合底下的清單,兩邊全部領完才會整個消失。
 export function DailyQuestBadge() {
-  const level = useGameState((state) => state.level);
-  const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const dailyKillCount = useGameState((state) => state.dailyKillCount);
   const dailyQuestClaimed = useGameState((state) => state.dailyQuestClaimed);
   const claimDailyQuest = useGameState((state) => state.claimDailyQuest);
@@ -42,8 +38,6 @@ export function DailyQuestBadge() {
   const weeklyChallengeProgress = useGameState((state) => state.weeklyChallengeProgress);
   const weeklyChallengeClaimedIds = useGameState((state) => state.weeklyChallengeClaimedIds);
   const claimWeeklyChallenge = useGameState((state) => state.claimWeeklyChallenge);
-  const unlockedAchievementIds = useGameState((state) => state.unlockedAchievementIds);
-  const claimedAchievementIds = useGameState((state) => state.claimedAchievementIds);
 
   const dailyRows: TaskRow[] = [
     {
@@ -76,19 +70,9 @@ export function DailyQuestBadge() {
     onClaim: () => claimWeeklyChallenge(def.id),
   }));
 
-  // 成就待領取數(見 game/achievements.ts 的手動領取制):併進徽章總待領取數當提醒角標,
-  // 但完整的102個成就清單只在玩家自己點開「成就」區塊(見下面 achievementExpanded)時才
-  // 渲染,預設收合——跟每日/每週任務(跨天/跨週會歸零)不同,成就是終生累積清單,預設展開
-  // 的話會直接撐爆這個原本設計給短期任務用的小面板。allClaimed(徽章整個消失的條件)刻意
-  // 不算進成就數——不然已經有大量歷史成就待領的老玩家會發現徽章永遠不會消失,失去「今天
-  // 做完了嗎」這個完成感判斷基準。
-  const achievementClaimableCount = unlockedAchievementIds.filter((id) => !claimedAchievementIds.includes(id)).length;
-  const achievementUnlocked = isTabUnlocked('achievement', level.level, hasChosenJob);
-  const [achievementExpanded, setAchievementExpanded] = useState(false);
-
   const allRows = [...dailyRows, ...weeklyRows];
   const claimedCount = allRows.filter((row) => row.claimed).length;
-  const claimableCount = allRows.filter((row) => row.canClaim).length + achievementClaimableCount;
+  const claimableCount = allRows.filter((row) => row.canClaim).length;
   const allClaimed = claimedCount === allRows.length;
 
   // 三段式收合:遊戲一開始預設完整展開(玩家第一眼就看到今天有哪些任務,不用自己去發現
@@ -144,7 +128,7 @@ export function DailyQuestBadge() {
       )}
 
       {stage === 2 && (
-        <View style={[styles.panel, achievementExpanded && styles.panelExpanded]}>
+        <View style={styles.panel}>
           <Pressable style={styles.panelHeaderRow} onPress={() => setStage(0)}>
             <Text style={styles.panelHeaderTitle}>
               任務 {claimedCount}/{allRows.length}
@@ -152,11 +136,9 @@ export function DailyQuestBadge() {
             <Text style={styles.panelHeaderClose}>✕</Text>
           </Pressable>
           {/* 展開態預設全部攤開會蓋住彩蛋反應框裡的勇者待機動畫(見 app/index.tsx),用
-              ScrollView 限制高度——任務多的時候可以自己滑,不會把整個上半部畫面吃光。點開
-              成就清單時放寬高度上限(見 panelScrollExpanded),102筆成就卡片塞在160px高的
-              視窗裡會滑到腿軟。 */}
+              ScrollView 限制高度——任務多的時候可以自己滑,不會把整個上半部畫面吃光。 */}
           <ScrollView
-            style={[styles.panelScroll, achievementExpanded && styles.panelScrollExpanded]}
+            style={styles.panelScroll}
             contentContainerStyle={styles.panelScrollContent}
             showsVerticalScrollIndicator={false}
           >
@@ -164,19 +146,6 @@ export function DailyQuestBadge() {
             {dailyRows.map(renderRow)}
             <Text style={styles.sectionLabel}>本週挑戰</Text>
             {weeklyRows.map(renderRow)}
-            {achievementUnlocked && (
-              <>
-                <Pressable style={styles.achievementHeaderRow} onPress={() => setAchievementExpanded((prev) => !prev)}>
-                  <Text style={styles.sectionLabel}>
-                    成就{achievementClaimableCount > 0 ? `(${achievementClaimableCount} 可領)` : ''}
-                  </Text>
-                  <Text style={styles.achievementToggle}>{achievementExpanded ? '收合 ▲' : '展開 ▼'}</Text>
-                </Pressable>
-                {/* 成就清單完整移植過來(見 AchievementPanel.tsx),不再另外開一個頂層分頁——
-                    點開才渲染,收合時不用付出102筆卡片的排版成本。 */}
-                {achievementExpanded && <AchievementPanel />}
-              </>
-            )}
           </ScrollView>
         </View>
       )}
@@ -259,19 +228,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#59462b',
   },
-  // 成就清單點開時(見 achievementExpanded)整個面板放寬——AchievementPanel 的卡片有
-  // 標題+說明+獎勵三行文字,擠在165px寬裡會逼出過多換行,205px是留在畫面內(手機寬度
-  // 一般至少320px,面板貼右邊緣、marginRight 8)又不至於太窄的折衷值。
-  panelExpanded: {
-    width: 205,
-  },
   panelScroll: {
     maxHeight: 160,
-  },
-  // 成就展開時放寬捲動視窗高度上限——102筆卡片塞在160px高的視窗裡要一直滑,320px大約
-  // 能同時看到3~4張卡片,體驗好一些,但還是保留裁切(不整個攤開蓋住畫面)。
-  panelScrollExpanded: {
-    maxHeight: 320,
   },
   panelScrollContent: {
     gap: 4,
@@ -296,16 +254,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
-  },
-  achievementHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  achievementToggle: {
-    color: '#c9a94f',
-    fontSize: 11,
-    fontWeight: '700',
   },
   row: {
     flexDirection: 'row',
