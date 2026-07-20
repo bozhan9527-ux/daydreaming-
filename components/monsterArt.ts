@@ -1,11 +1,11 @@
 import { ImageSourcePropType } from 'react-native';
 
-// AI 畫的怪物美術:12 種怪物原型(對照 game/monsters.ts 的 ARCHETYPE_CATALOG)裡目前只有
-// 11 種有圖(serpent/巨蟒還沒生成),外加 5 大關魔王 + 大魔王共 6 款。每款都是同一張三聯圖裁出
-// 的三個姿勢(idle/windup/strike),跟角色/武器同一套「去背裁切、原生比例」做法。缺圖的原型
-// (目前只有 serpent)呼叫端會拿到 undefined,自行 fallback 回 game/sprites/monsters.ts 的
-// 程式產生圖示——所有稀有度共用同一張圖(不像程式版本會依稀有度換色),這是暫時的簡化,
-// 之後如果要讓稀有度也有視覺差異,再另外生成變體圖。
+// AI 畫的怪物美術:12 種怪物原型(對照 game/monsters.ts 的 ARCHETYPE_CATALOG)全部都有圖,
+// 外加 5 大關魔王 + 大魔王共 6 款。每款都是同一張三聯圖裁出的三個姿勢(idle/windup/strike),
+// 跟角色/武器同一套「去背裁切、原生比例」做法。萬一之後又有缺圖的原型,呼叫端會拿到
+// undefined,自行 fallback 回 game/sprites/monsters.ts 的程式產生圖示——所有稀有度共用
+// 同一張圖(不像程式版本會依稀有度換色),這是暫時的簡化,之後如果要讓稀有度也有視覺差異,
+// 再另外生成變體圖。
 export interface MonsterArt {
   idle: ImageSourcePropType;
   windup: ImageSourcePropType;
@@ -114,6 +114,15 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 364 / 603,
     windupAspectRatio: 462 / 628,
     strikeAspectRatio: 494 / 596,
+  },
+  serpent: {
+    idle: require('../assets/sprites/monsters/ai/serpent_open.png'),
+    windup: require('../assets/sprites/monsters/ai/serpent_middle.png'),
+    strike: require('../assets/sprites/monsters/ai/serpent_click.png'),
+    idleAspectRatio: 450 / 327,
+    windupAspectRatio: 432 / 449,
+    strikeAspectRatio: 533 / 289,
+    scale: 0.5,
   },
   boss_tier1: {
     idle: require('../assets/sprites/monsters/ai/boss_tier1_open.png'),

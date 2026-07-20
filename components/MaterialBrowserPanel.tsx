@@ -1,28 +1,43 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, ImageSourcePropType, StyleSheet, Text, View } from 'react-native';
 
-import { MATERIAL_TIER_COLORS, MATERIAL_TIER_LABELS, MATERIAL_TIERS, TieredMaterialCounts } from '../game/materials';
+import { MATERIAL_TIER_LABELS, MATERIAL_TIERS, MaterialTier, TieredMaterialCounts } from '../game/materials';
 import { useGameState } from '../hooks/useGameState';
 
-const SKILLBOOK_ICON = require('../assets/sprites/ui/icon_skillbook.png');
+// 技能書/強化石都各自有專屬的6階套色圖示(同一個造型依 MATERIAL_TIER_COLORS 套色,
+// 保留原本明暗細節,只是色調不同)——不用再靠純色塊示意。
+const SKILLBOOK_TIER_ICONS: Record<MaterialTier, ImageSourcePropType> = {
+  0: require('../assets/sprites/materials/skillbook_tier0.png'),
+  1: require('../assets/sprites/materials/skillbook_tier1.png'),
+  2: require('../assets/sprites/materials/skillbook_tier2.png'),
+  3: require('../assets/sprites/materials/skillbook_tier3.png'),
+  4: require('../assets/sprites/materials/skillbook_tier4.png'),
+  5: require('../assets/sprites/materials/skillbook_tier5.png'),
+};
 
-// 技能書/強化石的分階庫存總覽——沒有專屬素材圖示區分6個階級,用色塊當底(見
-// game/materials.ts 的 MATERIAL_TIER_COLORS)疊技能書圖示(技能書有現成素材可以直接套用,
-// 強化石沒有,一樣用色塊代表,兩者用同一套視覺語言,不用另外畫兩套icon系統)。
+const ENHANCE_STONE_TIER_ICONS: Record<MaterialTier, ImageSourcePropType> = {
+  0: require('../assets/sprites/materials/enhance_stone_tier0.png'),
+  1: require('../assets/sprites/materials/enhance_stone_tier1.png'),
+  2: require('../assets/sprites/materials/enhance_stone_tier2.png'),
+  3: require('../assets/sprites/materials/enhance_stone_tier3.png'),
+  4: require('../assets/sprites/materials/enhance_stone_tier4.png'),
+  5: require('../assets/sprites/materials/enhance_stone_tier5.png'),
+};
+
 interface MaterialRowProps {
   title: string;
   counts: TieredMaterialCounts;
-  showBookIcon: boolean;
+  icons: Record<MaterialTier, ImageSourcePropType>;
 }
 
-function MaterialRow({ title, counts, showBookIcon }: MaterialRowProps) {
+function MaterialRow({ title, counts, icons }: MaterialRowProps) {
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <View style={styles.grid}>
         {MATERIAL_TIERS.map((tier) => (
           <View key={tier} style={styles.tile}>
-            <View style={[styles.swatch, { backgroundColor: MATERIAL_TIER_COLORS[tier] }]}>
-              {showBookIcon && <Image source={SKILLBOOK_ICON} style={styles.icon} resizeMode="contain" />}
+            <View style={styles.swatch}>
+              <Image source={icons[tier]} style={styles.icon} resizeMode="contain" />
             </View>
             <Text style={styles.tierLabel}>{MATERIAL_TIER_LABELS[tier]}</Text>
             <Text style={styles.countLabel}>{counts[tier]}</Text>
@@ -42,8 +57,8 @@ export function MaterialBrowserPanel() {
       <Text style={styles.hint}>
         初階只能靠擊敗怪物掉落或商店購買,更高階要去「工坊」分頁的合成子分頁用兩本前一階換一本。
       </Text>
-      <MaterialRow title="技能書" counts={skillBooks} showBookIcon />
-      <MaterialRow title="強化石" counts={enhanceStones} showBookIcon={false} />
+      <MaterialRow title="技能書" counts={skillBooks} icons={SKILLBOOK_TIER_ICONS} />
+      <MaterialRow title="強化石" counts={enhanceStones} icons={ENHANCE_STONE_TIER_ICONS} />
     </View>
   );
 }
@@ -83,10 +98,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    // 兩種材料圖示都已經套好階級色,這裡的深色底框只是維持格子邊界的視覺一致性。
+    backgroundColor: '#1c1c24',
   },
   icon: {
-    width: 26,
-    height: 26,
+    width: 36,
+    height: 36,
   },
   tierLabel: {
     color: '#f2f2f2',
