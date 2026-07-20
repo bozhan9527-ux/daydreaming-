@@ -22,8 +22,10 @@ import {
   STUDENT_SKILL_LEVEL_CAP,
 } from '../game/studentSkillTree';
 import { useGameState } from '../hooks/useGameState';
+import { JobPromotionCard } from './JobPromotionCard';
 import { PixelSprite } from './PixelSprite';
 import { SkillLoadoutEditor } from './SkillLoadoutEditor';
+import { TierBrowsePanel } from './TierBrowsePanel';
 
 const TILE_SIZE = 56;
 
@@ -98,6 +100,11 @@ export function SkillPanel() {
       {/* 首頁4個主動技能欄的配置——只跟「職業技能」這棵樹有關(學生技能沒有欄位可選,
           固定4招),所以只在 showJobTree 時顯示,切去學生技能檢視時收起來。 */}
       {showJobTree && <SkillLoadoutEditor archetype={archetype} tier={tier} />}
+
+      {/* 職業階級晉升(見 game/jobPromotion.ts):晉升按鈕+依階級瀏覽技能圖示變化,
+          同樣只跟「職業技能」這棵樹有關,學生期沒有階級概念。 */}
+      {showJobTree && <JobPromotionCard />}
+      {showJobTree && <TierBrowsePanel archetype={archetype} slot={selectedSlot} />}
 
       <View style={styles.grid}>
         {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
