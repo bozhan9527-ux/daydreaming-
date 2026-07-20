@@ -34,7 +34,8 @@ import {
   unequipCompanion,
   unlockCompanion,
 } from '../game/companions';
-import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canUnlockDualClass, getArchetypeComposition, JobBranch, JobTier, oppositeDamageType, TIER_UNLOCK_LEVELS } from '../game/combat';
+import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canPromoteToTier, canUnlockDualClass, getArchetypeComposition, JobBranch, JobTier, oppositeDamageType, TIER_UNLOCK_LEVELS } from '../game/combat';
+import { nextJobTier, promotionMaterialCost } from '../game/jobPromotion';
 import {
   applyGenderDefault,
   canEquipItem,
@@ -539,6 +540,7 @@ interface GameState {
   setJob: (archetype: Archetype, branch: JobBranch) => void;
   challengeDungeon: (archetype: Archetype) => void;
   challengeMaterialDungeon: (kind: MaterialDungeonKind) => void;
+  promoteJobTier: () => void;
   setSecondaryJob: (archetype: Archetype | null) => void;
   equip: (itemId: string) => void;
   unequip: (slot: EquipmentSlot) => void;
@@ -1513,6 +1515,73 @@ export const useGameState = create<GameState>((set, get) => ({
       ...(kind === 'enhanceStone'
         ? { enhanceStones: grantBasicMaterial(state.enhanceStones, MATERIAL_DUNGEON_REWARD_AMOUNT) }
         : { skillBooks: grantBasicMaterial(state.skillBooks, MATERIAL_DUNGEON_REWARD_AMOUNT) }),
+      dailyTaskProgress: nextDailyTaskProgress,
+      weeklyChallengeProgress: nextWeeklyChallengeProgress,
+    });
+    checkAndUnlockAchievements(get, set);
+    persist(get());
+  },
+
+  // 職業階級晉升(見 game/jobPromotion.ts):試煉沿用轉職副本同一組入場券池+難度公式,
+  // 材料門檻對應晉升目標階級——有票、材料也當下夠,才會真的出手挑戰;打贏才會真的升階,
+  // 材料不夠或已經滿階(5)UI 按鈕本來就該 disabled,這裡是防呆。試煉輸了照樣扣一張票
+  // (呼應 challengeDungeon 既有的「有挑戰就算數,不看輸贏」票務邏輯),但輸了不會消耗
+  // 材料、也不會升階。
+  promoteJobTier: () => {
+    const state = get();
+    const nextTier = nextJobTier(state.jobTier);
+    if (!nextTier) return;
+    if (!canPromoteToTier(nextTier, state.level.level)) return;
+
+    const cost = promotionMaterialCost(nextTier);
+    const materialTier = nextTier as MaterialTier;
+    if (state.skillBooks[materialTier] < cost.skillBooks || state.enhanceStones[materialTier] < cost.enhanceStones) return;
+
+    const spent = spendDungeonTicket(state.dungeon);
+    if (spent === null) return;
+
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    // 跟其他轉職試煉副本同一個道理:用玩家自己職業系別的相反系別當試煉怪物系別,逼玩家
+    // 不能只堆單一系抗性就通吃(見 challengeDungeon 的同款設計說明)。
+    const trialMonsterSchool = oppositeDamageType(getArchetypeComposition(state.job.archetype).damageType);
+    const matchingResistance =
+      trialMonsterSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
+    const passive3Bonus =
+      getPassiveBonusValue(state.studentSkillTree.passive3) +
+      (state.hasChosenJob ? getPassiveBonusValue(state.skillTree[state.job.archetype].passive3) : 0);
+    const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
+    const healthResult = resolveFightHealth(
+      state.heroHp,
+      heroMaxHp(state.level.level),
+      state.level.level,
+      state.jobTier,
+      matchingResistance,
+      'legendary',
+      dungeonDifficultyMultiplier(state.level.level),
+      lifestealBonus
+    );
+
+    const nextDailyTaskProgress = incrementDailyTaskProgress(state.dailyTaskProgress, 'dungeon');
+    const nextWeeklyChallengeProgress = incrementWeeklyChallengeProgress(state.weeklyChallengeProgress, 'dungeon');
+
+    if (healthResult.defeated) {
+      set({
+        heroHp: healthResult.nextHp,
+        dungeon: spent,
+        defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
+        dailyTaskProgress: nextDailyTaskProgress,
+        weeklyChallengeProgress: nextWeeklyChallengeProgress,
+      });
+      persist(get());
+      return;
+    }
+
+    set({
+      heroHp: healthResult.nextHp,
+      dungeon: spent,
+      jobTier: nextTier,
+      skillBooks: spendMaterialAtTier(state.skillBooks, materialTier, cost.skillBooks),
+      enhanceStones: spendMaterialAtTier(state.enhanceStones, materialTier, cost.enhanceStones),
       dailyTaskProgress: nextDailyTaskProgress,
       weeklyChallengeProgress: nextWeeklyChallengeProgress,
     });
