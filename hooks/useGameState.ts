@@ -199,7 +199,6 @@ interface ActiveSkillTriggerResult {
   coins: number;
   forceInstantNextFight: boolean;
   triggered: boolean;
-  firedSlots: ActiveSkillSlotId[];
 }
 
 // 技能書/強化石分階制(見 game/materials.ts):所有既有掉落/獎勵管道(擊殺掉落、商店購買、
@@ -215,31 +214,6 @@ function grantBasicMaterial(counts: TieredMaterialCounts, amount: number): Tiere
 // 「目前職業階級對應哪一階」,這個函式只單純做扣除,不重複算階級判斷邏輯。
 function spendMaterialAtTier(counts: TieredMaterialCounts, tier: MaterialTier, amount: number): TieredMaterialCounts {
   return { ...counts, [tier]: counts[tier] - amount };
-}
-
-// 拿掉這批剛觸發過的欄位,其餘已點過但還沒輪到觸發的欄位(理論上不會發生,冷卻好立刻觸發)
-// 維持原樣——單純寫成小函式避免三個呼叫點(學生/職業/副職)各自重複同一段物件過濾邏輯。
-function omitArmedSlots(
-  armed: Partial<Record<ActiveSkillSlotId, true>>,
-  firedSlots: ActiveSkillSlotId[]
-): Partial<Record<ActiveSkillSlotId, true>> {
-  if (firedSlots.length === 0) return armed;
-  const next = { ...armed };
-  for (const slot of firedSlots) delete next[slot];
-  return next;
-}
-
-// 手動點擊技能(armSkill/armSecondarySkill)時,如果當下正好有一場戰鬥在進行中,把它的
-// 「開始時間」直接往前搬到剛好等於 fightDurationMs——下一次 tickBattle(最多300ms後,近乎
-// 即時)就會判定這場戰鬥已經打完,用剛武裝好的技能效果結算這次擊殺。呼應「只要點擊技能就會
-// 觸發」的需求:不用再乾等這場戰鬥自然跑完計時器才看得到反應。沒有進行中的戰鬥(例如倒地
-// 恢復中)就不強制,武裝狀態會留著,等下一場戰鬥自然結算。
-function forceResolveCurrentFightUpdate(state: {
-  currentEncounter: Encounter | null;
-  fightStartedAt: number | null;
-}): { fightStartedAt?: number } {
-  if (!state.currentEncounter || state.fightStartedAt === null) return {};
-  return { fightStartedAt: Date.now() - state.currentEncounter.fightDurationMs };
 }
 
 // 主動技能觸發判定共用邏輯:職業技能樹跟學生技能樹畢業後永久並存(各自獨立計時器),
@@ -263,9 +237,7 @@ function resolveLoadoutEffectKind(loadout: ActiveSkillLoadout, slot: ActiveSkill
   return ref ? getActiveEffectKind(ref.archetype, ref.sourceSlot) : null;
 }
 
-// Lv60 前(或玩家自己關掉 AUTO)是手動模式:冷卻好了不會自動在下次擊殺生效,要等玩家
-// 點過那顆技能(armedSlots 記到)才算數,呼應「新增AUTO自動釋放按鈕,滿60等前需自行點擊」
-// 的設計——冷卻判定本身不變,差別只在「冷卻好了」跟「真的觸發」中間多一道玩家操作。
+// 全自動:冷卻好了就在下次擊殺結算直接生效,不需要玩家手動點擊觸發。
 function applyActiveSkillTriggers(
   slotLevels: Record<ActiveSkillSlotId, number>,
   timers: Record<ActiveSkillSlotId, number>,
@@ -273,22 +245,17 @@ function applyActiveSkillTriggers(
   now: number,
   exp: number,
   coins: number,
-  forceInstantNextFight: boolean,
-  autoMode: boolean,
-  armedSlots: Partial<Record<ActiveSkillSlotId, true>>
+  forceInstantNextFight: boolean
 ): ActiveSkillTriggerResult {
   const nextTimers = { ...timers };
-  const firedSlots: ActiveSkillSlotId[] = [];
   let triggered = false;
   for (const slot of ACTIVE_SLOT_IDS) {
     if (slotLevels[slot] <= 0) continue;
     const intervalMs = activeSkillTriggerIntervalSeconds(slot, slotLevels[slot]) * 1000;
     if (now - timers[slot] < intervalMs) continue;
-    if (!autoMode && !armedSlots[slot]) continue;
     const effect = getEffect(slot);
     if (effect === null) continue;
     nextTimers[slot] = now;
-    firedSlots.push(slot);
     triggered = true;
     if (effect === 'doubleReward') {
       exp *= 2;
@@ -301,7 +268,7 @@ function applyActiveSkillTriggers(
       forceInstantNextFight = true;
     }
   }
-  return { timers: nextTimers, exp, coins, forceInstantNextFight, triggered, firedSlots };
+  return { timers: nextTimers, exp, coins, forceInstantNextFight, triggered };
 }
 
 interface RewardMultipliers {
@@ -511,18 +478,6 @@ interface GameState {
   lastSkillTriggerAt: number | null;
   lastSecondarySkillTriggerAt: number | null;
   forceInstantNextFight: boolean;
-  // AUTO 關掉時(玩家自己選的手動模式)技能不會自動觸發,玩家要在冷卻好之後自己點一下技能
-  // 圖示才算「已預備」,armSkill action 把對應欄位記到這裡,下次擊殺結算時 tickBattle 才會
-  // 真的套用效果並清掉這個記錄。跟 activeSkillTimers 一樣不存檔——只是「這輪冷卻好了有沒有
-  // 被點過」的暫時狀態,不是需要跨 session 保留的進度。
-  armedActiveSkills: Partial<Record<ActiveSkillSlotId, true>>;
-  armedStudentActiveSkills: Partial<Record<ActiveSkillSlotId, true>>;
-  armedSecondarySkill: boolean;
-  // AUTO 開關本身也不存檔,每次重開預設回到開啟——避免額外碰存檔 schema(見 lib/storage.ts
-  // 的版本遷移機制),對玩家來說差別只是重開後要記得再關一次,不影響進度。預設就是 AUTO,
-  // 手動點擊改成玩家自己選擇要不要關掉 AUTO 才會用到的節奏感選項,不再是 Lv60 前的強制門檻
-  // (呼應「AUTO預設開啟,手動點擊改為加速選項」的設計調整)。
-  autoSkillsEnabled: boolean;
   // 設定(見 components/SettingsModal.tsx):soundMuted 是音效總開關,hasSeenWelcome 是
   // 新手歡迎彈窗是否已經看過/關閉——兩者都要存檔,不然每次重開 App 都要重新關一次音效/
   // 重新看一次歡迎畫面。
@@ -573,13 +528,6 @@ interface GameState {
   upgradeAscension: (id: AscensionUpgradeId) => void;
   claimAchievement: (id: string) => void;
   claimAllAchievements: () => void;
-  // Lv60 前(或 AUTO 關掉時)手動點技能圖示用——只有冷卻好的欄位點了才算數,點還在倒數中的
-  // 欄位不會有任何效果(SkillTracker.tsx 呼叫前會先自己判斷 secondsLeft<=0,這裡再擋一次
-  // 純防呆)。kind 區分要記到職業/學生/副職哪一組 armed 狀態,job/student 兩組要帶 slot,
-  // secondary 固定只有 active1 一格所以不用帶。
-  armSkill: (kind: 'job' | 'student', slot: ActiveSkillSlotId) => void;
-  armSecondarySkill: () => void;
-  toggleAutoSkills: () => void;
   // 主動技能欄自選(見 game/skillTree.ts 的 ActiveSkillLoadout):position 是首頁4個固定位置
   // 之一,ref=null 代表把這格清空。只能指到「已經投資過等級(>0)」的職業主動技能,防呆檢查
   // 在 action 內部做,UI 端(SkillLoadoutEditor.tsx)本來就只會列出已學過的選項可選。
@@ -836,10 +784,6 @@ export const useGameState = create<GameState>((set, get) => ({
   lastSkillTriggerAt: null,
   lastSecondarySkillTriggerAt: null,
   forceInstantNextFight: false,
-  armedActiveSkills: {},
-  armedStudentActiveSkills: {},
-  armedSecondarySkill: false,
-  autoSkillsEnabled: true,
   soundMuted: false,
   hasSeenWelcome: false,
   musicMuted: false,
@@ -973,9 +917,6 @@ export const useGameState = create<GameState>((set, get) => ({
       activeSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
       studentActiveSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
       secondarySkillTimerStartedAt: Date.now(),
-      armedActiveSkills: {},
-      armedStudentActiveSkills: {},
-      armedSecondarySkill: false,
     });
     // 音效/BGM模組是獨立於 store 之外的命令式播放(見 lib/sounds.ts),load() 時同步一次目前的
     // 靜音設定,之後 toggleSound()/toggleMusic() 每次切換也要同步呼叫,兩邊狀態才不會不一致。
@@ -1163,17 +1104,13 @@ export const useGameState = create<GameState>((set, get) => ({
     const nextStageProgress = advanceStageProgress(state.stageProgress);
 
     // 主動技能:4 個技能欄位(active1-4)各自獨立秒數倒數,固定不受戰鬥/關卡時長影響,
-    // 全部同時運作、可以同一擊一起觸發,倒數滿了在下一次擊殺結算時套用效果。
-    // AUTO 開著(預設值)就是全自動(冷卻好就發動);玩家自己關掉才是手動模式,冷卻好只是
-    // 「可以點了」,要玩家自己點過(armedActiveSkills/armedStudentActiveSkills 記到)才會在
-    // 這次結算生效。
+    // 全部同時運作、可以同一擊一起觸發,全自動——冷卻好就在這次結算生效,不用玩家點擊。
     const now = Date.now();
     let exp = reward.exp;
     let coins = reward.coins;
     let forceInstantNextFight = state.forceInstantNextFight;
     let lastSkillTriggerAt = state.lastSkillTriggerAt;
     let anySkillTriggered = false;
-    const autoMode = state.autoSkillsEnabled;
 
     // 學生主動技能:畢業後不會失效,永遠跟職業主動技能並存,用自己獨立的一組計時器
     // (見 game/studentSkillTree.ts 的 getStudentActiveEffectKind,不吃 archetype)。
@@ -1184,21 +1121,16 @@ export const useGameState = create<GameState>((set, get) => ({
       now,
       exp,
       coins,
-      forceInstantNextFight,
-      autoMode,
-      state.armedStudentActiveSkills
+      forceInstantNextFight
     );
     const nextStudentActiveSkillTimers = studentTrigger.timers;
     exp = studentTrigger.exp;
     coins = studentTrigger.coins;
     forceInstantNextFight = studentTrigger.forceInstantNextFight;
     anySkillTriggered = anySkillTriggered || studentTrigger.triggered;
-    const nextArmedStudentActiveSkills = omitArmedSlots(state.armedStudentActiveSkills, studentTrigger.firedSlots);
 
     // 職業主動技能:畢業前(!hasChosenJob)還沒有主職可以套用,跳過這組計時器。
     let nextActiveSkillTimers = state.activeSkillTimers;
-    let nextArmedActiveSkills = state.armedActiveSkills;
-    let jobFiredSlots: ActiveSkillSlotId[] = [];
     if (state.hasChosenJob) {
       const jobTrigger = applyActiveSkillTriggers(
         resolveLoadoutLevels(state.activeSkillLoadout, state.skillTree),
@@ -1207,17 +1139,13 @@ export const useGameState = create<GameState>((set, get) => ({
         now,
         exp,
         coins,
-        forceInstantNextFight,
-        autoMode,
-        state.armedActiveSkills
+        forceInstantNextFight
       );
       nextActiveSkillTimers = jobTrigger.timers;
       exp = jobTrigger.exp;
       coins = jobTrigger.coins;
       forceInstantNextFight = jobTrigger.forceInstantNextFight;
       anySkillTriggered = anySkillTriggered || jobTrigger.triggered;
-      nextArmedActiveSkills = omitArmedSlots(state.armedActiveSkills, jobTrigger.firedSlots);
-      jobFiredSlots = jobTrigger.firedSlots;
     }
     if (anySkillTriggered) {
       lastSkillTriggerAt = now;
@@ -1230,16 +1158,14 @@ export const useGameState = create<GameState>((set, get) => ({
     }
 
     // 副職只借用它的主動技能第1格(該職業招牌效果),間隔是本職的兩倍,跟主職各自獨立計時、
-    // 可以同一擊同時觸發,呼應副職只拿「部分加成」的定位。跟上面兩組一樣吃 autoMode/armed 判斷。
+    // 可以同一擊同時觸發,呼應副職只拿「部分加成」的定位,同樣全自動。
     let nextSecondarySkillTimerStartedAt = state.secondarySkillTimerStartedAt;
     let lastSecondarySkillTriggerAt = state.lastSecondarySkillTriggerAt;
-    let nextArmedSecondarySkill = state.armedSecondarySkill;
-    let secondaryTriggered = false;
     if (state.secondaryJob) {
       const secondarySkillLevel = state.skillTree[state.secondaryJob].active1;
       const secondaryIntervalMs = secondaryActiveSkillTriggerIntervalSeconds(secondarySkillLevel) * 1000;
       const secondaryReady = now - state.secondarySkillTimerStartedAt >= secondaryIntervalMs;
-      secondaryTriggered = secondarySkillLevel > 0 && secondaryReady && (autoMode || state.armedSecondarySkill);
+      const secondaryTriggered = secondarySkillLevel > 0 && secondaryReady;
       nextSecondarySkillTimerStartedAt = secondaryTriggered ? now : state.secondarySkillTimerStartedAt;
       if (secondaryTriggered) {
         const secondaryEffect = getActiveEffectKind(state.secondaryJob, 'active1');
@@ -1254,29 +1180,6 @@ export const useGameState = create<GameState>((set, get) => ({
           forceInstantNextFight = true;
         }
         lastSecondarySkillTriggerAt = now;
-        nextArmedSecondarySkill = false;
-      }
-    }
-
-    // 手動模式(未滿Lv60或玩家自己關掉AUTO)下,技能發動只有圖示閃一下、沒有文字提示,
-    // 玩家點了 active2-4 之後很容易搞不清楚「到底有沒有生效」——這裡補一則 toast 直接報
-    // 觸發了哪些技能,自動模式下省略(全自動運作時每次擊殺都可能觸發,跳出來只會洗版)。
-    if (!autoMode) {
-      const firedNames: string[] = [];
-      for (const slot of studentTrigger.firedSlots) {
-        firedNames.push(getStudentSkillFlavor(state.level.level, slot).name);
-      }
-      if (state.hasChosenJob) {
-        for (const slot of jobFiredSlots) {
-          const ref = state.activeSkillLoadout[slot];
-          if (ref) firedNames.push(SKILL_SLOT_NAMES[ref.archetype][ref.sourceSlot]);
-        }
-      }
-      if (state.secondaryJob && secondaryTriggered) {
-        firedNames.push(SKILL_SLOT_NAMES[state.secondaryJob].active1);
-      }
-      if (firedNames.length > 0) {
-        useToast.getState().show(`技能發動:${firedNames.join('、')}`);
       }
     }
 
@@ -1385,9 +1288,6 @@ export const useGameState = create<GameState>((set, get) => ({
       secondarySkillTimerStartedAt: nextSecondarySkillTimerStartedAt,
       lastSkillTriggerAt,
       lastSecondarySkillTriggerAt,
-      armedActiveSkills: nextArmedActiveSkills,
-      armedStudentActiveSkills: nextArmedStudentActiveSkills,
-      armedSecondarySkill: nextArmedSecondarySkill,
       forceInstantNextFight,
     });
     // 這一擊可能同時動到擊殺數/等級/裝備解鎖(掉落)/寵物坐騎解鎖(掉落)/轉職證明,
@@ -2162,43 +2062,6 @@ export const useGameState = create<GameState>((set, get) => ({
     });
     persist(get());
     useToast.getState().show(`一次領取了 ${claimableIds.length} 個成就獎勵`);
-  },
-
-  armSkill: (kind, slot) => {
-    const state = get();
-    const jobRef = state.activeSkillLoadout[slot];
-    const level =
-      kind === 'job'
-        ? jobRef
-          ? state.skillTree[jobRef.archetype][jobRef.sourceSlot]
-          : 0
-        : state.studentSkillTree[slot];
-    // Lv.0(還沒點過這個技能)不能被點擊發動,純防呆(SkillTracker.tsx 正常不會讓 Lv.0
-    // 的圖示觸發這個 action,onPress 在那邊已經擋掉了)。
-    if (level <= 0) return;
-    const timerStartedAt = kind === 'job' ? state.activeSkillTimers[slot] : state.studentActiveSkillTimers[slot];
-    const intervalMs = activeSkillTriggerIntervalSeconds(slot, level) * 1000;
-    // 還在倒數中點了不算數,純防呆(SkillTracker.tsx 正常不會讓還在倒數的圖示觸發這個 action)。
-    if (Date.now() - timerStartedAt < intervalMs) return;
-    const armedUpdate =
-      kind === 'job'
-        ? { armedActiveSkills: { ...state.armedActiveSkills, [slot]: true } }
-        : { armedStudentActiveSkills: { ...state.armedStudentActiveSkills, [slot]: true } };
-    set({ ...armedUpdate, ...forceResolveCurrentFightUpdate(state) });
-  },
-
-  armSecondarySkill: () => {
-    const state = get();
-    if (!state.secondaryJob) return;
-    const level = state.skillTree[state.secondaryJob].active1;
-    if (level <= 0) return;
-    const intervalMs = secondaryActiveSkillTriggerIntervalSeconds(level) * 1000;
-    if (Date.now() - state.secondarySkillTimerStartedAt < intervalMs) return;
-    set({ armedSecondarySkill: true, ...forceResolveCurrentFightUpdate(state) });
-  },
-
-  toggleAutoSkills: () => {
-    set((state) => ({ autoSkillsEnabled: !state.autoSkillsEnabled }));
   },
 
   setActiveSkillLoadout: (position, ref) => {

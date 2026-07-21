@@ -27,8 +27,9 @@ import { getWeaponIconForItem } from './weaponIcons';
 // 內容增減而跳動。背景圖(含關卡/小關文字)改由外層 MainVisual 統一繪製並往下延伸到按鈕區,
 // 這裡維持透明,只負責角色/怪物/特效的定位。
 // 原本130,經驗值改成累積滿自動兌換(見 game/leveling.ts 的 autoLevelUp)後拿掉了手動升級
-// 按鈕列,省下來的版面高度全部分給戰鬥畫面,不是縮小整個主視覺區塊。
-const SCENE_HEIGHT = 180;
+// 按鈕列,省下來的版面高度分給戰鬥畫面,調到180;技能改成全自動(移除AUTO開關)後
+// SkillTracker.tsx 又省下一整排按鈕的高度,同樣的精神再分一次給戰鬥畫面,調到220。
+const SCENE_HEIGHT = 220;
 const SCENE_MAX_WIDTH = 320;
 // 怪物原生畫布高度不像勇者本體固定(勇者56列),120種一般怪物/5階段魔王/大魔王的列數
 // 從60列到72列都有——原本用固定 pixelSize(4/3)是配合最高列數(72)算出來的保守值,
@@ -36,9 +37,9 @@ const SCENE_MAX_WIDTH = 320;
 // 反推」:MONSTER_TARGET_HEIGHT 是怪物在畫面上實際的像素高度上限,列數少的一般怪物會分到
 // 比較大的 pixelSize(視覺跟勇者持平甚至更搶眼),列數最多的大魔王會自動分到比較小的
 // pixelSize,兩種都不會超出 SCENE_HEIGHT 固定畫布、被 overflow:hidden 切掉。
-// 跟 SCENE_HEIGHT 同步放大(130→180,+50),扣掉 monsterSlot 的 bottom 偏移(20)跟
-// progressTrack 高度(約10)之後,能安全放進去的量同步從95調整到145。
-const MONSTER_TARGET_HEIGHT = 145;
+// 跟 SCENE_HEIGHT 同步放大(130→180→220),扣掉 monsterSlot 的 bottom 偏移(20)跟
+// progressTrack 高度(約10)之後,能安全放進去的量同步調整到185。
+const MONSTER_TARGET_HEIGHT = 185;
 const COMPANION_PIXEL_SIZE = 1;
 const GROUND_PATTERN_WIDTH = 40;
 const GROUND_SCROLL_DURATION = 1400;

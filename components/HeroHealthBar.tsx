@@ -71,7 +71,7 @@ export function HeroHealthBar() {
 const styles = StyleSheet.create({
   wrap: {
     width: '100%',
-    maxWidth: 280,
+    maxWidth: 320,
     backgroundColor: '#1c1c24',
     borderRadius: 8,
     paddingVertical: 6,

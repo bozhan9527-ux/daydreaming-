@@ -218,14 +218,17 @@ export default function HomeScreen() {
         )}
       </View>
 
+      {/* HP/經驗條移到彩蛋反應框正下方、戰鬥畫面正上方——原本夾在戰鬥畫面跟技能列/分頁列
+          之間,現在讓戰鬥畫面(MainVisual 裡的 BattleScene)拿到連續完整的高度,不用被這兩條
+          資訊列從中間切開。兩者寬度統一成 320(見 HeroHealthBar.tsx),跟上面反應框/下面
+          MainVisual 同一套版面寬度,不會忽寬忽窄。 */}
+      <HeroHealthBar />
+      <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} />
+
       <MainVisual>
         <BattleScene />
 
-        <HeroHealthBar />
-
         <SkillTracker />
-
-        <ExpBar level={level.level} bankedExp={level.bankedExp} needed={needed} isMaxLevel={isMaxLevel} />
 
         <TabBar
           tabs={PANEL_TABS}
