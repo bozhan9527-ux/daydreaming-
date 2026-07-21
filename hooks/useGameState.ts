@@ -38,7 +38,9 @@ import { Archetype, calcCombatMultiplier, calcSecondaryCombatBonus, canPromoteTo
 import { nextJobTier, promotionMaterialCost } from '../game/jobPromotion';
 import {
   applyGenderDefault,
+  canCraftGemTier,
   canEquipItem,
+  craftGemTier,
   createEmptyGemCounts,
   createEmptyItemInstances,
   createEmptyLoadout,
@@ -63,6 +65,7 @@ import {
   getItemById,
   getRerollCost,
   getSubstatTotals,
+  grantGemDrop,
   isItemUnlocked,
   ItemInstances,
   rerollItemSubstats,
@@ -71,6 +74,7 @@ import {
   rollEquipmentDrop,
   rollGemDrop,
   rollItemInstance,
+  SocketedGem,
   unequipSlot,
   unlockItem,
   EquipmentSlot,
@@ -520,7 +524,8 @@ interface GameState {
   craftSkillBookTier: (tier: MaterialTier) => void;
   craftEnhanceStoneTier: (tier: MaterialTier) => void;
   purchaseGem: (gemType: GemType) => void;
-  socketGem: (itemId: string, socketIndex: number, gemType: GemType) => void;
+  craftGemTier: (gemType: GemType, tier: MaterialTier) => void;
+  socketGem: (itemId: string, socketIndex: number, gemType: GemType, tier: MaterialTier) => void;
   unsocketGem: (itemId: string, socketIndex: number) => void;
   claimDailyQuest: () => void;
   claimDailyTask: (id: DailyTaskId) => void;
@@ -1209,7 +1214,7 @@ export const useGameState = create<GameState>((set, get) => ({
     // (見 grantBasicMaterial 的說明),更高階要靠玩家自己合成。
     const nextEnhanceStones = grantBasicMaterial(state.enhanceStones, rollEnhanceStoneDrop() ? 1 : 0);
     const gemDrop = rollGemDrop();
-    const nextGemCounts = gemDrop ? { ...state.gemCounts, [gemDrop]: state.gemCounts[gemDrop] + 1 } : state.gemCounts;
+    const nextGemCounts = gemDrop ? grantGemDrop(state.gemCounts, gemDrop) : state.gemCounts;
     const nextSkillBooks = grantBasicMaterial(state.skillBooks, rollSkillBookDrop() ? 1 : 0);
 
     // 裝備掉落:免費直接解鎖一件當前職業/等級穿得下的付費款,豐富擊殺獎勵種類,
@@ -1746,28 +1751,37 @@ export const useGameState = create<GameState>((set, get) => ({
     persist(get());
   },
 
+  // 商店買寶石固定拿初階(tier 0),跟強化石購買同一套規則,更高階只能自己合成(見 craftGemTier)。
   purchaseGem: (gemType) => {
     const { coins, gemCounts } = get();
     const price = GEM_SPECS[gemType].price;
     if (coins < price) return;
-    set({ coins: coins - price, gemCounts: { ...gemCounts, [gemType]: gemCounts[gemType] + 1 } });
+    set({ coins: coins - price, gemCounts: grantGemDrop(gemCounts, gemType) });
     persist(get());
   },
 
-  // 鑲嵌:插槽必須是空的才能鑲(要換款先 unsocketGem)。拔除寶石原樣退回背包,不會損毀。
-  socketGem: (itemId, socketIndex, gemType) => {
+  // 合成:兩本前一階寶石換一顆下一階,跟技能書/強化石共用同一套 2:1 規則(見 game/materials.ts)。
+  craftGemTier: (gemType, tier) => {
+    const { gemCounts } = get();
+    if (!canCraftGemTier(gemType, tier, gemCounts)) return;
+    set({ gemCounts: craftGemTier(gemType, tier, gemCounts) });
+    persist(get());
+  },
+
+  // 鑲嵌:插槽必須是空的才能鑲(要換款先 unsocketGem)。拔除寶石原樣退回對應階級的庫存,不會損毀。
+  socketGem: (itemId, socketIndex, gemType, tier) => {
     const { gemCounts, itemInstances } = get();
     const instance = itemInstances[itemId];
     if (!instance) return;
     if (socketIndex < 0 || socketIndex >= instance.socketedGems.length) return;
     if (instance.socketedGems[socketIndex] !== null) return;
-    if (gemCounts[gemType] <= 0) return;
+    if (gemCounts[gemType][tier] <= 0) return;
 
     const nextSockets = [...instance.socketedGems];
-    nextSockets[socketIndex] = gemType;
+    nextSockets[socketIndex] = { type: gemType, tier };
 
     set({
-      gemCounts: { ...gemCounts, [gemType]: gemCounts[gemType] - 1 },
+      gemCounts: { ...gemCounts, [gemType]: { ...gemCounts[gemType], [tier]: gemCounts[gemType][tier] - 1 } },
       itemInstances: { ...itemInstances, [itemId]: { ...instance, socketedGems: nextSockets } },
     });
     checkAndUnlockAchievements(get, set);
@@ -1778,14 +1792,17 @@ export const useGameState = create<GameState>((set, get) => ({
     const { gemCounts, itemInstances } = get();
     const instance = itemInstances[itemId];
     if (!instance) return;
-    const gemType = instance.socketedGems[socketIndex];
-    if (!gemType) return;
+    const socketed = instance.socketedGems[socketIndex];
+    if (!socketed) return;
 
     const nextSockets = [...instance.socketedGems];
     nextSockets[socketIndex] = null;
 
     set({
-      gemCounts: { ...gemCounts, [gemType]: gemCounts[gemType] + 1 },
+      gemCounts: {
+        ...gemCounts,
+        [socketed.type]: { ...gemCounts[socketed.type], [socketed.tier]: gemCounts[socketed.type][socketed.tier] + 1 },
+      },
       itemInstances: { ...itemInstances, [itemId]: { ...instance, socketedGems: nextSockets } },
     });
     persist(get());
@@ -1978,7 +1995,7 @@ export const useGameState = create<GameState>((set, get) => ({
     if (reward.gems) {
       for (const gemType of GEM_TYPES) {
         const amount = reward.gems[gemType];
-        if (amount) nextGemCounts[gemType] += amount;
+        if (amount) nextGemCounts[gemType] = { ...nextGemCounts[gemType], 0: nextGemCounts[gemType][0] + amount };
       }
     }
     set({
@@ -2018,7 +2035,7 @@ export const useGameState = create<GameState>((set, get) => ({
     if (reward.gems) {
       for (const gemType of GEM_TYPES) {
         const amount = reward.gems[gemType];
-        if (amount) nextGemCounts[gemType] += amount;
+        if (amount) nextGemCounts[gemType] = { ...nextGemCounts[gemType], 0: nextGemCounts[gemType][0] + amount };
       }
     }
 
@@ -2049,7 +2066,7 @@ export const useGameState = create<GameState>((set, get) => ({
       if (reward.gems) {
         for (const gemType of GEM_TYPES) {
           const amount = reward.gems[gemType];
-          if (amount) nextGemCounts[gemType] += amount;
+          if (amount) nextGemCounts[gemType] = { ...nextGemCounts[gemType], 0: nextGemCounts[gemType][0] + amount };
         }
       }
     }

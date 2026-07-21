@@ -1,6 +1,14 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { EquipmentSlot, GEM_SPECS, GEM_TYPES, GemType, getItemById } from '../game/equipment';
+import {
+  EquipmentSlot,
+  GEM_SPECS,
+  GEM_TYPES,
+  GemType,
+  getItemById,
+} from '../game/equipment';
+import { MATERIAL_TIER_LABELS, MATERIAL_TIERS, MaterialTier } from '../game/materials';
 import { getItemIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
@@ -21,13 +29,21 @@ const SLOT_LABELS: Record<EquipmentSlot, string> = {
   mainhand: '主手武器',
 };
 
-const GEM_SHORT_LABELS: Record<GemType, string> = {
-  expGem: '經驗',
-  coinGem: '金幣',
-  speedGem: '速度',
-};
-
 const SLOTS: EquipmentSlot[] = ['back', 'bottom', 'top', 'belt', 'headwear', 'face', 'gloves', 'offhand', 'mainhand'];
+
+// 加成類(exp/coins/speed)跟素質類(物理/魔法抗性、爆擊率、爆擊傷害、攻擊力、吸血、回血)
+// 分兩區塊瀏覽——13種寶石一次全攤開會太亂,先選大類再選種類比較好找。
+const BONUS_GEM_TYPES = GEM_TYPES.filter((t) => GEM_SPECS[t].kind === 'bonus');
+const SUBSTAT_GEM_TYPES = GEM_TYPES.filter((t) => GEM_SPECS[t].kind === 'substat');
+
+// 找目前選定種類裡「持有量最高的那一階」,鑲嵌時自動挑這一階——玩家幾乎總是想鑲自己最好的
+// 那顆,不用另外多一層「選第幾階鑲」的介面。
+function highestHeldTier(counts: Record<MaterialTier, number>): MaterialTier | null {
+  for (let tier = 5; tier >= 0; tier--) {
+    if (counts[tier as MaterialTier] > 0) return tier as MaterialTier;
+  }
+  return null;
+}
 
 export function SocketPanel() {
   const equipment = useGameState((state) => state.equipment);
@@ -35,49 +51,100 @@ export function SocketPanel() {
   const coins = useGameState((state) => state.coins);
   const gemCounts = useGameState((state) => state.gemCounts);
   const purchaseGem = useGameState((state) => state.purchaseGem);
+  const craftGemTier = useGameState((state) => state.craftGemTier);
   const socketGem = useGameState((state) => state.socketGem);
   const unsocketGem = useGameState((state) => state.unsocketGem);
   const showToast = useToast((state) => state.show);
 
-  function handleBuyGem(gemType: GemType) {
-    const price = GEM_SPECS[gemType].price;
+  const [selectedGemType, setSelectedGemType] = useState<GemType>('expGem');
+  const selectedCounts = gemCounts[selectedGemType];
+  const selectedSpec = GEM_SPECS[selectedGemType];
+
+  function handleBuyGem() {
+    const price = selectedSpec.price;
     if (coins < price) {
-      showToast(`金幣不夠買${GEM_SPECS[gemType].name}(需要 ${price} 金幣)`);
+      showToast(`金幣不夠買${selectedSpec.name}(需要 ${price} 金幣)`);
       return;
     }
-    purchaseGem(gemType);
-    showToast(`購買${GEM_SPECS[gemType].name} x1`);
+    purchaseGem(selectedGemType);
+    showToast(`購買初階${selectedSpec.name} x1`);
   }
 
-  function handleSocket(itemId: string, socketIndex: number, gemType: GemType) {
-    if (gemCounts[gemType] <= 0) {
-      showToast(`${GEM_SPECS[gemType].name}不夠,先去購買或戰鬥掉落`);
+  function handleCraft(tier: MaterialTier) {
+    if (tier === 0) return;
+    craftGemTier(selectedGemType, tier);
+    showToast(`合成${MATERIAL_TIER_LABELS[tier]}${selectedSpec.name}`);
+  }
+
+  function handleSocket(itemId: string, socketIndex: number) {
+    const tier = highestHeldTier(selectedCounts);
+    if (tier === null) {
+      showToast(`${selectedSpec.name}不夠,先去購買、合成或戰鬥掉落`);
       return;
     }
-    socketGem(itemId, socketIndex, gemType);
-    showToast(`鑲入${GEM_SPECS[gemType].name}`);
+    socketGem(itemId, socketIndex, selectedGemType, tier);
+    showToast(`鑲入${MATERIAL_TIER_LABELS[tier]}${selectedSpec.name}`);
   }
 
   function handleUnsocket(itemId: string, socketIndex: number) {
     unsocketGem(itemId, socketIndex);
-    showToast('已拔出寶石,退回背包');
+    showToast('已拔出寶石,退回庫存');
   }
 
   const equippedSlots = SLOTS.filter((slot) => equipment[slot] !== undefined);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.hint}>寶石直接加成 exp/coins/speed,插槽數依裝備階級而定;拔除寶石會原樣退回背包,不會損毀</Text>
+      <Text style={styles.hint}>
+        寶石分加成類(exp/coins/speed)跟素質類(抗性/爆擊/攻擊/吸血/回血),各自初階~五階,2顆前一階
+        合成1顆下一階;拔除寶石會原樣退回對應階級的庫存,不會損毀
+      </Text>
 
-      <View style={styles.gemInventoryRow}>
-        {GEM_TYPES.map((gemType) => (
-          <Pressable key={gemType} style={styles.gemBuyButton} onPress={() => handleBuyGem(gemType)}>
-            <Text style={styles.gemBuyLabel}>
-              {GEM_SPECS[gemType].name} x{gemCounts[gemType]}
-            </Text>
-            <Text style={styles.gemBuyPrice}>購買({GEM_SPECS[gemType].price} 金幣)</Text>
-          </Pressable>
-        ))}
+      <View style={styles.gemTypeSection}>
+        <Text style={styles.sectionLabel}>加成類</Text>
+        <View style={styles.gemTypeRow}>
+          {BONUS_GEM_TYPES.map((gemType) => (
+            <Pressable
+              key={gemType}
+              style={[styles.gemTypeChip, selectedGemType === gemType && styles.gemTypeChipSelected]}
+              onPress={() => setSelectedGemType(gemType)}
+            >
+              <Text style={styles.gemTypeChipLabel}>{GEM_SPECS[gemType].name}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.sectionLabel}>素質類</Text>
+        <View style={styles.gemTypeRow}>
+          {SUBSTAT_GEM_TYPES.map((gemType) => (
+            <Pressable
+              key={gemType}
+              style={[styles.gemTypeChip, selectedGemType === gemType && styles.gemTypeChipSelected]}
+              onPress={() => setSelectedGemType(gemType)}
+            >
+              <Text style={styles.gemTypeChipLabel}>{GEM_SPECS[gemType].name}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.tierCard}>
+        <Text style={styles.tierCardTitle}>{selectedSpec.name}</Text>
+        <View style={styles.tierRow}>
+          {MATERIAL_TIERS.map((tier) => (
+            <View key={tier} style={styles.tierCell}>
+              <Text style={styles.tierCellLabel}>{MATERIAL_TIER_LABELS[tier]}</Text>
+              <Text style={styles.tierCellCount}>x{selectedCounts[tier]}</Text>
+              {tier > 0 && (
+                <Pressable style={styles.tierCraftButton} onPress={() => handleCraft(tier)}>
+                  <Text style={styles.tierCraftButtonLabel}>合成</Text>
+                </Pressable>
+              )}
+            </View>
+          ))}
+        </View>
+        <Pressable style={styles.buyButton} onPress={handleBuyGem}>
+          <Text style={styles.buyButtonLabel}>購買初階({selectedSpec.price} 金幣)</Text>
+        </Pressable>
       </View>
 
       {equippedSlots.length === 0 && <Text style={styles.emptyHint}>還沒有裝備任何東西,先到「背包」分頁穿上再回來鑲嵌</Text>}
@@ -100,19 +167,17 @@ export function SocketPanel() {
               </Text>
             </View>
             <View style={styles.socketRow}>
-              {instance.socketedGems.map((gemType, index) =>
-                gemType ? (
+              {instance.socketedGems.map((socketed, index) =>
+                socketed ? (
                   <Pressable key={index} style={styles.socketFilled} onPress={() => handleUnsocket(itemId, index)}>
-                    <Text style={styles.socketFilledLabel}>{GEM_SHORT_LABELS[gemType]}</Text>
+                    <Text style={styles.socketFilledLabel}>
+                      {GEM_SPECS[socketed.type].name} {MATERIAL_TIER_LABELS[socketed.tier]}
+                    </Text>
                   </Pressable>
                 ) : (
-                  <View key={index} style={styles.socketEmpty}>
-                    {GEM_TYPES.map((g) => (
-                      <Pressable key={g} style={styles.socketOption} onPress={() => handleSocket(itemId, index, g)}>
-                        <Text style={styles.socketOptionLabel}>{GEM_SHORT_LABELS[g]}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                  <Pressable key={index} style={styles.socketEmpty} onPress={() => handleSocket(itemId, index)}>
+                    <Text style={styles.socketEmptyLabel}>鑲入{selectedSpec.name}</Text>
+                  </Pressable>
                 )
               )}
               {instance.socketedGems.length === 0 && <Text style={styles.noSocketText}>這件裝備沒有插槽</Text>}
@@ -136,25 +201,89 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 4,
   },
-  gemInventoryRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 4,
+  gemTypeSection: {
+    gap: 4,
   },
-  gemBuyButton: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 6,
+  sectionLabel: {
+    color: '#8a8a95',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  gemTypeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  gemTypeChip: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     borderRadius: 6,
     backgroundColor: '#2a2a35',
   },
-  gemBuyLabel: {
+  gemTypeChipSelected: {
+    backgroundColor: '#274357',
+    borderWidth: 1,
+    borderColor: '#6ab0e0',
+  },
+  gemTypeChipLabel: {
     color: '#f2f2f2',
     fontSize: 11,
   },
-  gemBuyPrice: {
+  tierCard: {
+    gap: 4,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#1c1c24',
+  },
+  tierCardTitle: {
     color: '#c9a94f',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tierRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  tierCell: {
+    flexBasis: '30%',
+    flexGrow: 1,
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#2a2a35',
+  },
+  tierCellLabel: {
+    color: '#8a8a95',
     fontSize: 11,
+  },
+  tierCellCount: {
+    color: '#f2f2f2',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  tierCraftButton: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    backgroundColor: '#4a4456',
+  },
+  tierCraftButtonLabel: {
+    color: '#f2f2f2',
+    fontSize: 11,
+  },
+  buyButton: {
+    marginTop: 2,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#4a4456',
+    alignItems: 'center',
+  },
+  buyButtonLabel: {
+    color: '#f2f2f2',
+    fontSize: 11,
+    fontWeight: '600',
   },
   emptyHint: {
     color: '#8a8a95',
@@ -200,21 +329,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   socketEmpty: {
-    flexDirection: 'row',
-    gap: 2,
-    padding: 3,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#59462b',
     borderStyle: 'dashed',
   },
-  socketOption: {
-    paddingVertical: 3,
-    paddingHorizontal: 5,
-    borderRadius: 4,
-    backgroundColor: '#2a2a35',
-  },
-  socketOptionLabel: {
+  socketEmptyLabel: {
     color: '#8a8a95',
     fontSize: 11,
   },

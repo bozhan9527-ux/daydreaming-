@@ -17,8 +17,11 @@ import {
   EquipmentLoadout,
   Gender,
   GemCounts,
+  GEM_TYPES,
+  GemType,
   getGenderUnlockItems,
   ItemInstances,
+  Substat,
   UnlockedItemIds,
   unlockItem,
   upgradeItemInstancesToV13,
@@ -26,7 +29,7 @@ import {
 import { DailyTaskId } from '../game/daily';
 import { createInitialDungeonState, DungeonState } from '../game/dungeon';
 import { createInitialLevelState, LevelState } from '../game/leveling';
-import { createEmptyTieredMaterialCounts, migrateFlatMaterialToTiered, TieredMaterialCounts } from '../game/materials';
+import { createEmptyTieredMaterialCounts, MaterialTier, migrateFlatMaterialToTiered, TieredMaterialCounts } from '../game/materials';
 import { SkillLevels, SKILL_IDS } from '../game/skills';
 import {
   ACTIVE_SLOT_IDS,
@@ -45,7 +48,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 36;
+export const SCHEMA_VERSION = 37;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -126,6 +129,8 @@ export interface SaveData {
   // 強化石(見 game/equipment.ts 的裝備強化):v35 起改成分階制(見 game/materials.ts 的
   // TieredMaterialCounts),初階+一階~五階共6階,呼應職業轉職階級。
   enhanceStones: TieredMaterialCounts;
+  // 鑲嵌石(見 game/equipment.ts 的鑲嵌系統):v37 起寶石種類擴充到13種(加成類3種+素質類10種)
+  // 且改成分階制,每種寶石各自初階~五階,道理跟 enhanceStones/skillBooks 完全一樣。
   gemCounts: GemCounts;
   // 技能書(見 game/skillTree.ts):v25 起技能升級改吃的獨立資源,不再跟角色升等搶銀行經驗值;
   // v35 起改成分階制,道理跟 enhanceStones 完全一樣。
@@ -776,10 +781,45 @@ function isItemInstances(value: unknown): value is ItemInstances {
   return Object.values(value as Record<string, unknown>).every(isItemInstanceDataV13);
 }
 
-function isGemCounts(value: unknown): value is GemCounts {
+function isGemCounts(value: unknown): value is LegacyGemCounts {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return typeof record.expGem === 'number' && typeof record.coinGem === 'number' && typeof record.speedGem === 'number';
+}
+
+// v37 之前(鑲嵌石加入素質類+分階制之前)的鑲嵌/寶石舊形狀凍結:寶石只有3種、持有量是單一
+// 數字(不分階級),鑲入插槽是純字串(不記階級)。所有 v13~v36 的存檔一律是這個形狀。
+type LegacyGemType = 'expGem' | 'coinGem' | 'speedGem';
+type LegacyGemCounts = Record<LegacyGemType, number>;
+interface LegacyItemInstanceData {
+  randomSubstat: Substat;
+  hiddenSubstat: Substat;
+  identified: boolean;
+  enhanceLevel: number;
+  socketedGems: (LegacyGemType | null)[];
+}
+type LegacyItemInstances = Record<string, LegacyItemInstanceData>;
+
+// 轉換成新形狀:舊種類的量全部歸進初階(tier 0),新增的10種素質類寶石一律從0開始;
+// 舊字串型態的鑲入寶石一律視為初階(tier 0)——不倒退玩家原本已經鑲上的加成,只是換一種
+// 形狀記錄同一件事,新種類/階級靠之後正常掉落/合成累積。
+function migrateGemCountsToTiered(old: LegacyGemCounts): GemCounts {
+  const next = createEmptyGemCounts();
+  (['expGem', 'coinGem', 'speedGem'] as LegacyGemType[]).forEach((gemType) => {
+    next[gemType] = { ...next[gemType], 0: old[gemType] };
+  });
+  return next;
+}
+
+function migrateItemInstanceSocketsToTiered(old: LegacyItemInstances): ItemInstances {
+  const next: ItemInstances = {};
+  for (const [id, instance] of Object.entries(old)) {
+    next[id] = {
+      ...instance,
+      socketedGems: instance.socketedGems.map((gemType) => (gemType ? { type: gemType as GemType, tier: 0 as MaterialTier } : null)),
+    };
+  }
+  return next;
 }
 
 interface SaveDataV13 {
@@ -795,9 +835,9 @@ interface SaveDataV13 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   lastActiveAt: number;
 }
 
@@ -843,9 +883,9 @@ interface SaveDataV14 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastActiveAt: number;
 }
@@ -887,9 +927,9 @@ interface SaveDataV15 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastActiveAt: number;
 }
@@ -931,9 +971,9 @@ interface SaveDataV16 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -986,9 +1026,9 @@ interface SaveDataV17 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -1040,9 +1080,9 @@ interface SaveDataV18 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -1138,9 +1178,9 @@ interface SaveDataV19 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -1200,9 +1240,9 @@ interface SaveDataV20 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -1264,9 +1304,9 @@ interface SaveDataV21 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -1332,9 +1372,9 @@ interface SaveDataV22 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -1408,9 +1448,9 @@ interface SaveDataV23 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -1483,9 +1523,9 @@ interface SaveDataV24 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
   dailyKillCount: number;
@@ -1560,9 +1600,9 @@ interface SaveDataV25 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   skillBooks: number;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
@@ -1641,9 +1681,9 @@ interface SaveDataV26 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   skillBooks: number;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
@@ -1723,9 +1763,9 @@ interface SaveDataV27 {
   unlockedItemIds: UnlockedItemIds;
   companions: CompanionState;
   secondaryJob: Archetype | null;
-  itemInstances: ItemInstances;
+  itemInstances: LegacyItemInstances;
   enhanceStones: number;
-  gemCounts: GemCounts;
+  gemCounts: LegacyGemCounts;
   skillBooks: number;
   stageProgress: StageProgress;
   lastDailyResetAt: string;
@@ -1976,18 +2016,79 @@ function isSaveDataV35(value: unknown): value is SaveDataV35 {
   );
 }
 
-// v36(職業階級晉升機制上線):現在的 SaveData 完整形狀,比 v35 多了 jobTier(見
-// game/combat.ts 的 JobTier)。這是 migrate() 的第一道 passthrough 檢查——已經是最新形狀的
-// 存檔直接原樣回傳,不用跑任何遷移邏輯。
-function isSaveDataV36(value: unknown): value is SaveData {
+// v36(職業階級晉升機制上線):比 v35 多了 jobTier(見 game/combat.ts 的 JobTier)。凍結成
+// 明確獨立的 interface+literal版本號檢查,itemInstances/gemCounts 沿用鑲嵌石加素質類+分階制
+// 上線前的舊形狀(LegacyItemInstances/LegacyGemCounts)——這是這兩個欄位最後一個舊形狀版本。
+interface SaveDataV36 extends Omit<SaveData, 'version' | 'itemInstances' | 'gemCounts'> {
+  version: 36;
+  itemInstances: LegacyItemInstances;
+  gemCounts: LegacyGemCounts;
+}
+
+function isSaveDataV36(value: unknown): value is SaveDataV36 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   // isSaveDataV35 要求 version===35,這裡驗證的是已經是 v36 的真正形狀——用 35 蓋掉 version
   // 欄位餵給 isSaveDataV35,只借用它對「其餘欄位」的檢查,jobTier 本身另外獨立驗證。
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 36 &&
     isSaveDataV35({ ...record, version: 35 }) &&
     (record.jobTier === 1 || record.jobTier === 2 || record.jobTier === 3 || record.jobTier === 4 || record.jobTier === 5)
+  );
+}
+
+function isMaterialTierValue(value: unknown): value is MaterialTier {
+  return value === 0 || value === 1 || value === 2 || value === 3 || value === 4 || value === 5;
+}
+
+function isGemTypeV2(value: unknown): value is GemType {
+  return typeof value === 'string' && (GEM_TYPES as string[]).includes(value);
+}
+
+function isSocketedGemV2(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return isGemTypeV2(record.type) && isMaterialTierValue(record.tier);
+}
+
+function isItemInstanceDataV2(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    isCurrentSubstat(record.randomSubstat) &&
+    isCurrentSubstat(record.hiddenSubstat) &&
+    typeof record.identified === 'boolean' &&
+    typeof record.enhanceLevel === 'number' &&
+    Array.isArray(record.socketedGems) &&
+    record.socketedGems.every((g) => g === null || isSocketedGemV2(g))
+  );
+}
+
+function isItemInstancesV2(value: unknown): value is ItemInstances {
+  if (typeof value !== 'object' || value === null) return false;
+  return Object.values(value as Record<string, unknown>).every(isItemInstanceDataV2);
+}
+
+function isGemCountsV2(value: unknown): value is GemCounts {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return GEM_TYPES.every((gemType) => isTieredMaterialCounts(record[gemType]));
+}
+
+// v37(鑲嵌石加入素質類+分階制):比 v36 多了鑲嵌石種類(13種)+分階(見 game/equipment.ts
+// 的鑲嵌系統),itemInstances.socketedGems/gemCounts 兩個欄位形狀跟著改變。這是 migrate() 的
+// 第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
+function isSaveDataV37(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  // isSaveDataV36 要求 itemInstances/gemCounts 是舊形狀,這裡驗證的是已經分階的真正形狀——
+  // 用空物件/舊形狀的合法佔位值蓋掉這兩個欄位餵給 isSaveDataV36,只借用它對「其餘欄位」的
+  // 檢查,新形狀本身另外用 isItemInstancesV2/isGemCountsV2 獨立驗證。
+  return (
+    record.version === SCHEMA_VERSION &&
+    isSaveDataV36({ ...record, version: 36, itemInstances: {}, gemCounts: { expGem: 0, coinGem: 0, speedGem: 0 } }) &&
+    isItemInstancesV2(record.itemInstances) &&
+    isGemCountsV2(record.gemCounts)
   );
 }
 
@@ -2079,7 +2180,19 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // 下一階)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV36(value)) return value;
+  if (isSaveDataV37(value)) return value;
+  // 舊存檔遷移到鑲嵌石加素質類+分階制:itemInstances.socketedGems/gemCounts 兩個欄位從舊形狀
+  // (寶石只有3種、鑲入插槽是純字串、持有量不分階級)轉成新形狀,不倒退玩家原本已經鑲上的
+  // 加成(視為初階),新種類/更高階只能靠之後正常掉落/合成累積(見 migrateGemCountsToTiered/
+  // migrateItemInstanceSocketsToTiered 的說明)。
+  if (isSaveDataV36(value)) {
+    return {
+      ...value,
+      version: SCHEMA_VERSION,
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
+    };
+  }
   // 舊存檔遷移到新的職業階級晉升機制:用 getCurrentTier(level.level) 回填 jobTier,
   // grandfather 老玩家在目前等級「原本就會有」的階級,不會平白倒退——只有這次更新之後
   // 的晉升才需要走新的晉升試煉+材料流程(見 SaveData.jobTier 的欄位註解)。
@@ -2088,6 +2201,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
     };
   }
   if (isSaveDataV34(value)) {
@@ -2095,6 +2210,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
     };
@@ -2104,6 +2221,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
@@ -2114,6 +2233,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
@@ -2125,6 +2246,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2138,6 +2261,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2154,6 +2279,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2172,6 +2299,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2192,6 +2321,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2213,6 +2344,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2237,6 +2370,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2262,6 +2397,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2287,6 +2424,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2313,6 +2452,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2340,6 +2481,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2367,6 +2510,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2396,6 +2541,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2426,6 +2573,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2459,6 +2608,8 @@ function migrate(value: unknown): SaveData {
       ...value,
       version: SCHEMA_VERSION,
       jobTier: getCurrentTier(value.level.level),
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       soundMuted: false,
       hasSeenWelcome: true,
       musicMuted: false,
@@ -2507,9 +2658,9 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: value.unlockedItemIds,
       companions: value.companions,
       secondaryJob: value.secondaryJob,
-      itemInstances: value.itemInstances,
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
-      gemCounts: value.gemCounts,
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: value.stageProgress,
       lastDailyResetAt: value.lastDailyResetAt,
@@ -2559,9 +2710,9 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: value.unlockedItemIds,
       companions: value.companions,
       secondaryJob: value.secondaryJob,
-      itemInstances: value.itemInstances,
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
-      gemCounts: value.gemCounts,
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: value.stageProgress,
       lastDailyResetAt: '',
@@ -2611,9 +2762,9 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: value.unlockedItemIds,
       companions: value.companions,
       secondaryJob: value.secondaryJob,
-      itemInstances: value.itemInstances,
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
-      gemCounts: value.gemCounts,
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: value.stageProgress,
       lastDailyResetAt: '',
@@ -2663,9 +2814,9 @@ function migrate(value: unknown): SaveData {
       unlockedItemIds: value.unlockedItemIds,
       companions: value.companions,
       secondaryJob: value.secondaryJob,
-      itemInstances: value.itemInstances,
+      itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
-      gemCounts: value.gemCounts,
+      gemCounts: migrateGemCountsToTiered(value.gemCounts),
       skillBooks: createEmptyTieredMaterialCounts(),
       stageProgress: createInitialStageProgress(),
       lastDailyResetAt: '',

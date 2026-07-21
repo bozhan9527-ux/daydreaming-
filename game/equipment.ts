@@ -1,5 +1,12 @@
 import { Archetype, getCurrentTier, getJobTitle, JobTier } from './combat';
 import { MAX_LEVEL } from './leveling';
+import {
+  canCraftMaterialTier,
+  craftMaterialTier,
+  createEmptyTieredMaterialCounts,
+  MaterialTier,
+  TieredMaterialCounts,
+} from './materials';
 
 export type EquipmentSlot =
   | 'back'
@@ -1313,12 +1320,19 @@ export interface Substat {
   value: number;
 }
 
+// 鑲入插槽的寶石不只記種類,還要記是第幾階(見下方鑲嵌系統),拔除才能原樣退回對應階級的庫存,
+// 不會退成一律歸零階或直接消失。
+export interface SocketedGem {
+  type: GemType;
+  tier: MaterialTier;
+}
+
 export interface ItemInstanceData {
   randomSubstat: Substat;
   hiddenSubstat: Substat;
   identified: boolean;
   enhanceLevel: number;
-  socketedGems: (GemType | null)[];
+  socketedGems: (SocketedGem | null)[];
 }
 
 const SUBSTAT_TYPES: SubstatType[] = [
@@ -1417,6 +1431,9 @@ function addSubstatToTotals(totals: SubstatTotals, substat: Substat): void {
 }
 
 // 只算目前已裝備的項目;隱藏素質要鑑定過(identified)才計入。
+// 素質類鑲嵌石(見下方鑲嵌系統)直接疊加進同一組總表,跟裝備本身的隨機/隱藏素質是同一個維度——
+// 對戰鬥計算/UI顯示來說「這件裝備+鑲的石頭」本來就該是同一份合計,不需要另外拆一份
+// getSubstatTotalsFull。
 export function getSubstatTotals(loadout: EquipmentLoadout, instances: ItemInstances): SubstatTotals {
   const totals: SubstatTotals = {
     physicalResistance: 0, magicResistance: 0,
@@ -1432,6 +1449,13 @@ export function getSubstatTotals(loadout: EquipmentLoadout, instances: ItemInsta
     if (!instance) continue;
     addSubstatToTotals(totals, instance.randomSubstat);
     if (instance.identified) addSubstatToTotals(totals, instance.hiddenSubstat);
+    for (const socketed of instance.socketedGems) {
+      if (!socketed) continue;
+      const spec = GEM_SPECS[socketed.type];
+      if (spec.kind === 'substat') {
+        addSubstatToTotals(totals, { type: spec.stat, value: gemValueAtTier(spec.baseValue, socketed.tier) });
+      }
+    }
   }
   return totals;
 }
@@ -1526,24 +1550,56 @@ export function rollEnhanceOutcome(
 }
 
 // ---- 鑲嵌系統 ----
-// 寶石鑲入裝備插槽,直接加成 exp/coins/speed(跟裝備主加成同一個維度),插槽數依裝備階級(1~5階
-// 對應 1~3 格)。寶石雙軌取得:戰鬥獨立掉落 + 商店用金幣買,拔除寶石不會損毀、原樣退回背包。
-export type GemType = 'expGem' | 'coinGem' | 'speedGem';
+// 寶石鑲入裝備插槽,分兩大類:exp/coins/speed(跟裝備主加成同一個維度)+ 素質類(跟裝備
+// 隨機/隱藏素質同一個維度,見上方 SubstatType,涵蓋物理/魔法抗性、爆擊率、爆擊傷害、攻擊力、
+// 吸血、回血共10種)。插槽數依裝備階級(1~5階對應1~3格)。每種寶石各自走「初階~五階」分階制
+// (見 game/materials.ts 的 TieredMaterialCounts/canCraftMaterialTier/craftMaterialTier,
+// 直接沿用同一套2:1合成規則,不重新發明),數值隨階級遞增。雙軌取得:戰鬥獨立掉落+商店用金幣買
+// (兩者都固定初階,更高階只能自己合成),拔除寶石不會損毀、原樣退回對應階級的庫存。
+export type GemType =
+  | 'expGem' | 'coinGem' | 'speedGem'
+  | 'physicalResistanceGem' | 'magicResistanceGem'
+  | 'physicalCritRateGem' | 'physicalCritDamageGem'
+  | 'magicCritRateGem' | 'magicCritDamageGem'
+  | 'physicalAttackGem' | 'magicAttackGem'
+  | 'lifestealGem' | 'hpRegenGem';
 
-interface GemSpec {
-  stat: EquipmentBonusStat;
-  value: number;
-  price: number;
-  name: string;
-}
+type GemSpec =
+  | { kind: 'bonus'; stat: EquipmentBonusStat; baseValue: number; price: number; name: string }
+  | { kind: 'substat'; stat: SubstatType; baseValue: number; price: number; name: string };
 
 export const GEM_SPECS: Record<GemType, GemSpec> = {
-  expGem: { stat: 'exp', value: 0.03, price: 80, name: '經驗石' },
-  coinGem: { stat: 'coins', value: 0.03, price: 80, name: '金幣石' },
-  speedGem: { stat: 'speed', value: 0.03, price: 80, name: '速度石' },
+  expGem: { kind: 'bonus', stat: 'exp', baseValue: 0.03, price: 80, name: '經驗石' },
+  coinGem: { kind: 'bonus', stat: 'coins', baseValue: 0.03, price: 80, name: '金幣石' },
+  speedGem: { kind: 'bonus', stat: 'speed', baseValue: 0.03, price: 80, name: '速度石' },
+  physicalResistanceGem: { kind: 'substat', stat: 'physicalResistance', baseValue: 0.03, price: 80, name: '物理抗性石' },
+  magicResistanceGem: { kind: 'substat', stat: 'magicResistance', baseValue: 0.03, price: 80, name: '魔法抗性石' },
+  physicalCritRateGem: { kind: 'substat', stat: 'physicalCritRate', baseValue: 0.03, price: 80, name: '物理爆擊率石' },
+  physicalCritDamageGem: { kind: 'substat', stat: 'physicalCritDamage', baseValue: 0.03, price: 80, name: '物理爆擊傷害石' },
+  magicCritRateGem: { kind: 'substat', stat: 'magicCritRate', baseValue: 0.03, price: 80, name: '魔法爆擊率石' },
+  magicCritDamageGem: { kind: 'substat', stat: 'magicCritDamage', baseValue: 0.03, price: 80, name: '魔法爆擊傷害石' },
+  physicalAttackGem: { kind: 'substat', stat: 'physicalAttack', baseValue: 0.03, price: 80, name: '物理攻擊石' },
+  magicAttackGem: { kind: 'substat', stat: 'magicAttack', baseValue: 0.03, price: 80, name: '魔法攻擊石' },
+  lifestealGem: { kind: 'substat', stat: 'lifesteal', baseValue: 0.03, price: 80, name: '吸血石' },
+  hpRegenGem: { kind: 'substat', stat: 'hpRegen', baseValue: 0.03, price: 80, name: '回血石' },
 };
 
-export const GEM_TYPES: GemType[] = ['expGem', 'coinGem', 'speedGem'];
+export const GEM_TYPES: GemType[] = [
+  'expGem', 'coinGem', 'speedGem',
+  'physicalResistanceGem', 'magicResistanceGem',
+  'physicalCritRateGem', 'physicalCritDamageGem',
+  'magicCritRateGem', 'magicCritDamageGem',
+  'physicalAttackGem', 'magicAttackGem',
+  'lifestealGem', 'hpRegenGem',
+];
+
+// 階級對數值的加成:跟強化系統(ENHANCE_BONUS_PER_LEVEL)同一種「基準值 * (1 + 階級*係數)」寫法,
+// 五階(tier5)剛好是基準值的兩倍。
+const GEM_TIER_VALUE_STEP = 0.2;
+
+export function gemValueAtTier(baseValue: number, tier: MaterialTier): number {
+  return Math.round(baseValue * (1 + tier * GEM_TIER_VALUE_STEP) * 10000) / 10000;
+}
 
 // 強化石/寶石掉落:跟寵物/坐騎掉落一樣,每次擊殺獨立判定一次,互不干擾、多數時候不會掉落。
 const ENHANCE_STONE_DROP_CHANCE = 0.04;
@@ -1553,6 +1609,7 @@ export function rollEnhanceStoneDrop(rng: () => number = Math.random): boolean {
   return rng() < ENHANCE_STONE_DROP_CHANCE;
 }
 
+// 掉落固定初階(tier 0),跟技能書/強化石既有掉落機制一致,更高階只能靠合成。
 export function rollGemDrop(rng: () => number = Math.random): GemType | null {
   if (rng() >= GEM_DROP_CHANCE) return null;
   return GEM_TYPES[Math.floor(rng() * GEM_TYPES.length)];
@@ -1582,13 +1639,30 @@ export function getSocketCount(item: EquipmentItem): number {
   return Math.ceil(tier / 2);
 }
 
-export type GemCounts = Record<GemType, number>;
+// 每種寶石各自一份「初階~五階」持有量,跟技能書/強化石的 TieredMaterialCounts 同一套形狀。
+export type GemCounts = Record<GemType, TieredMaterialCounts>;
 
 export function createEmptyGemCounts(): GemCounts {
-  return { expGem: 0, coinGem: 0, speedGem: 0 };
+  const empty = {} as GemCounts;
+  for (const gemType of GEM_TYPES) empty[gemType] = createEmptyTieredMaterialCounts();
+  return empty;
 }
 
-// 只算目前已裝備項目上鑲嵌的寶石,跟裝備主加成/強化是同一個 exp/coins/speed 維度,直接相加。
+// 商店買寶石固定拿初階(tier 0),跟強化石購買同一套規則,更高階只能自己合成。
+export function grantGemDrop(counts: GemCounts, gemType: GemType): GemCounts {
+  return { ...counts, [gemType]: { ...counts[gemType], 0: counts[gemType][0] + 1 } };
+}
+
+export function canCraftGemTier(gemType: GemType, tier: MaterialTier, counts: GemCounts): boolean {
+  return canCraftMaterialTier(tier, counts[gemType]);
+}
+
+export function craftGemTier(gemType: GemType, tier: MaterialTier, counts: GemCounts): GemCounts {
+  return { ...counts, [gemType]: craftMaterialTier(tier, counts[gemType]) };
+}
+
+// 只算目前已裝備項目上鑲嵌的加成類(exp/coins/speed)寶石,跟裝備主加成/強化是同一個維度,
+// 直接相加;素質類寶石併進 getSubstatTotals 那份總表,不是同一個維度不能混在一起加。
 export function getGemBonusTotals(loadout: EquipmentLoadout, instances: ItemInstances): EquipmentBonusTotals {
   const totals: EquipmentBonusTotals = { exp: 0, coins: 0, speed: 0 };
   for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
@@ -1596,10 +1670,10 @@ export function getGemBonusTotals(loadout: EquipmentLoadout, instances: ItemInst
     if (!itemId) continue;
     const instance = instances[itemId];
     if (!instance) continue;
-    for (const gemType of instance.socketedGems) {
-      if (!gemType) continue;
-      const spec = GEM_SPECS[gemType];
-      totals[spec.stat] += spec.value;
+    for (const socketed of instance.socketedGems) {
+      if (!socketed) continue;
+      const spec = GEM_SPECS[socketed.type];
+      if (spec.kind === 'bonus') totals[spec.stat] += gemValueAtTier(spec.baseValue, socketed.tier);
     }
   }
   return totals;

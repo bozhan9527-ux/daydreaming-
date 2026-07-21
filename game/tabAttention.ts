@@ -2,7 +2,7 @@ import { Archetype, DUAL_CLASS_UNLOCK_LEVEL, JobTier, TIER_UNLOCK_LEVELS } from 
 import { canUpgradeCompanionGearSlot, CompanionGearState } from './companions';
 import { applyDungeonTicketRegen, DungeonState } from './dungeon';
 import { EquipmentLoadout, GemCounts, SLOT_Z_ORDER } from './equipment';
-import { currentMaterialTier, TieredMaterialCounts } from './materials';
+import { currentMaterialTier, sumTieredMaterialCounts, TieredMaterialCounts } from './materials';
 import { canUpgradeSkillSlot, SkillSlotId, SKILL_SLOT_IDS } from './skillTree';
 import { canUpgradeStudentSkillSlot } from './studentSkillTree';
 
@@ -77,7 +77,7 @@ export function computeTabAttentionFlags(input: TabAttentionInput): TabAttention
 
   return {
     job: canGraduate || (canDualClass && hasUsableTransferProof),
-    equipment: availableEnhanceStones > 0 || Object.values(input.gemCounts).some((count) => count > 0),
+    equipment: availableEnhanceStones > 0 || Object.values(input.gemCounts).some((counts) => sumTieredMaterialCounts(counts) > 0),
     inventory: hasAnyEmptySlot(input.equipment),
     skill: hasAnySkillUpgrade(input.hasChosenJob, input.jobTier, input.activeSkillLevels, input.skillBooks),
     companion: hasAnyCompanionGearUpgrade(input.companionGear, input.level, input.coins),

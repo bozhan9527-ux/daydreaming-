@@ -7,7 +7,7 @@ import {
   getAchievementBonusMultiplier,
   getAchievementProgressDisplay,
 } from '../game/achievements';
-import { GemType } from '../game/equipment';
+import { GEM_SPECS, GemType } from '../game/equipment';
 import { computeAchievementProgress, useGameState } from '../hooks/useGameState';
 
 const CATEGORY_LABELS: Record<AchievementCategory, string> = {
@@ -30,18 +30,12 @@ const CATEGORY_ORDER: AchievementCategory[] = [
   'stage',
 ];
 
-const GEM_LABELS: Record<GemType, string> = {
-  expGem: '經驗石',
-  coinGem: '金幣石',
-  speedGem: '速度石',
-};
-
 function formatReward(def: AchievementDef): string {
   const parts = [`${def.reward.coins} 金幣`];
   if (def.reward.enhanceStones) parts.push(`強化石 x${def.reward.enhanceStones}`);
   if (def.reward.gems) {
     for (const [gemType, amount] of Object.entries(def.reward.gems) as [GemType, number][]) {
-      if (amount) parts.push(`${GEM_LABELS[gemType]} x${amount}`);
+      if (amount) parts.push(`${GEM_SPECS[gemType].name} x${amount}`);
     }
   }
   return parts.join(' / ');
