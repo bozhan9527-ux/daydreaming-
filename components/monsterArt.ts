@@ -24,7 +24,8 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 376 / 308,
     windupAspectRatio: 401 / 203,
     strikeAspectRatio: 538 / 255,
-    scale: 0.5,
+    // 再縮小一半(0.5→0.25),尺寸比其他同樣0.5倍的小體型原型再更嬌小一號。
+    scale: 0.25,
   },
   // 史萊姆/蝙蝠/甲蟲/香菇/幼龍/哥布林/狼(blob/flying/insect/fungal/dragon/biped/quadruped)
   // 體型設定上比其他原型小一號,縮小成 0.5 倍讓牠們在畫面上看起來確實比較嬌小,
@@ -63,6 +64,7 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 402 / 560,
     windupAspectRatio: 358 / 494,
     strikeAspectRatio: 548 / 455,
+    scale: 0.5,
   },
   construct: {
     idle: require('../assets/sprites/monsters/ai/construct_open.png'),
@@ -106,6 +108,7 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 434 / 429,
     windupAspectRatio: 426 / 428,
     strikeAspectRatio: 471 / 390,
+    scale: 0.5,
   },
   elemental: {
     idle: require('../assets/sprites/monsters/ai/elemental_open.png'),
@@ -122,7 +125,8 @@ const MONSTER_ART: Partial<Record<string, MonsterArt>> = {
     idleAspectRatio: 450 / 327,
     windupAspectRatio: 432 / 449,
     strikeAspectRatio: 533 / 289,
-    scale: 0.5,
+    // 再縮小一半(0.5→0.25)。
+    scale: 0.25,
   },
   boss_tier1: {
     idle: require('../assets/sprites/monsters/ai/boss_tier1_open.png'),
