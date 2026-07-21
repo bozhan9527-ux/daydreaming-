@@ -50,7 +50,7 @@ import {
   equipItem,
   EquipmentLoadout,
   EQUIPMENT_ITEMS,
-  filterLoadoutForArchetype,
+  filterLoadoutForJob,
   Gender,
   GEM_SPECS,
   GEM_TYPES,
@@ -1219,7 +1219,7 @@ export const useGameState = create<GameState>((set, get) => ({
 
     // 裝備掉落:免費直接解鎖一件當前職業/等級穿得下的付費款,豐富擊殺獎勵種類,
     // 跟上面幾種掉落一樣各自獨立判定、互不影響。
-    const equipmentDrop = rollEquipmentDrop(state.job.archetype, state.level.level, state.unlockedItemIds);
+    const equipmentDrop = rollEquipmentDrop(state.job.archetype, state.job.branch, state.level.level, state.unlockedItemIds);
     let nextUnlockedItemIds = state.unlockedItemIds;
     let nextItemInstances = state.itemInstances;
     let lastEquipmentDropId: string | null = null;
@@ -1534,7 +1534,7 @@ export const useGameState = create<GameState>((set, get) => ({
       set({
         job: { archetype, branch },
         hasChosenJob: true,
-        equipment: filterLoadoutForArchetype(equipment, archetype),
+        equipment: filterLoadoutForJob(equipment, archetype, branch),
         // 職業認同上限(見 game/skillTree.ts):畢業前的佔位配置可能指到跟真正選定主職不同的
         // archetype,超標的借用格清掉——反正這時候 skillTree 投資都還是 0,清掉不影響任何實質效果。
         activeSkillLoadout: enforceLoadoutIdentityCap(activeSkillLoadout, archetype),
@@ -1561,7 +1561,7 @@ export const useGameState = create<GameState>((set, get) => ({
     set({
       job: { archetype, branch },
       secondaryJob: nextSecondaryJob,
-      equipment: filterLoadoutForArchetype(equipment, archetype),
+      equipment: filterLoadoutForJob(equipment, archetype, branch),
       // 職業認同上限(見 game/skillTree.ts):轉職後基準跟著換了,原本合法的配置可能瞬間
       // 超標(例如4格都是舊職業的技能),超標的借用格清掉,不會卡在不合法狀態。
       activeSkillLoadout: enforceLoadoutIdentityCap(activeSkillLoadout, archetype),
@@ -1592,7 +1592,7 @@ export const useGameState = create<GameState>((set, get) => ({
   equip: (itemId) => {
     const { equipment, unlockedItemIds, job, level, itemInstances } = get();
     const item = getItemById(itemId);
-    if (!item || !canEquipItem(item, job.archetype, level.level)) return;
+    if (!item || !canEquipItem(item, job.archetype, job.branch, level.level)) return;
     if (!isItemUnlocked(unlockedItemIds, itemId)) return;
     set({ equipment: equipItem(equipment, itemId), itemInstances: ensureItemInstance(itemId, itemInstances) });
     persist(get());
@@ -1611,7 +1611,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const { equipment, coins, unlockedItemIds, job, level, itemInstances } = get();
     const item = getItemById(itemId);
     if (!item) return;
-    if (!canEquipItem(item, job.archetype, level.level)) return;
+    if (!canEquipItem(item, job.archetype, job.branch, level.level)) return;
 
     if (isItemUnlocked(unlockedItemIds, itemId)) {
       set({ equipment: equipItem(equipment, itemId), itemInstances: ensureItemInstance(itemId, itemInstances) });

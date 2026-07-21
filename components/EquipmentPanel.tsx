@@ -158,7 +158,7 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
 
   const currentId = equipment[selectedSlot];
   const currentItem = currentId !== undefined ? getItemById(currentId) : undefined;
-  const items = [...getEquippableItemsForSlot(selectedSlot, job.archetype)].sort(
+  const items = [...getEquippableItemsForSlot(selectedSlot, job.archetype, job.branch)].sort(
     (a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0)
   );
   // 商店:還沒擁有(不管有沒有等級鎖)的款式;已擁有但沒穿的背包款式改到獨立的

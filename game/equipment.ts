@@ -1,4 +1,4 @@
-import { Archetype, getCurrentTier, getJobTitle, JobTier } from './combat';
+import { Archetype, getCurrentTier, getJobTitle, JobBranch, JobTier } from './combat';
 import { MAX_LEVEL } from './leveling';
 import {
   canCraftMaterialTier,
@@ -36,6 +36,9 @@ export interface EquipmentItem {
   twoHanded?: boolean;
   // undefined = 不限職業(起始/性別預設款);有值 = 職業鎖裝,只有該職業能裝備。
   archetype?: Archetype;
+  // undefined = 不限分支(起始/學生款,或 tier1——兩分支尚未分岔,見 JOB_TITLES 的說明);
+  // 有值 = 只有選了該分支的玩家能裝備,呼應 tier2 起 A/B 分支各自的職業身分。
+  branch?: JobBranch;
   // undefined = 無等級限制;有值 = 要練到這個等級才能購買/裝備。
   requiredLevel?: number;
   // undefined = 不限等級檔(起始/性別預設款);有值 = 生成式目錄的等級檔編號(1-50),
@@ -194,6 +197,8 @@ const ARCHETYPES: Archetype[] = [
   'magicRanged',
   'magicSupport',
 ];
+
+const JOB_BRANCHES: JobBranch[] = ['A', 'B'];
 
 const BRACKET_COUNT = 50;
 
@@ -920,6 +925,539 @@ const SLOT_COLOR_BY_ARCHETYPE_TIER: Record<Archetype, SlotNounsByTier> = {
   },
 };
 
+// ---- 分支 B 裝備(tier2 起,呼應 game/combat.ts JOB_TITLES 的分支 B 職業身分)----
+// tier1 兩分支尚未分岔(見 JOB_TITLES 的說明),所以這裡沒有 tier1,共用上面 SLOT_BASE_NOUN_BY_ARCHETYPE_TIER
+// 跟 SLOT_COLOR_BY_ARCHETYPE_TIER 的 tier1 資料(=分支 A 的資料表同時也是兩分支共用的基底)。
+type BranchBSlotNounsByTier = Partial<Record<Exclude<JobTier, 1>, Partial<Record<EquipmentSlot, string>>>>;
+
+const SLOT_BASE_NOUN_BRANCH_B_BY_ARCHETYPE_TIER: Record<Archetype, BranchBSlotNounsByTier> = {
+  // 拳擊館學員 → 拳擊教練 → 職業拳擊手 → 傳說拳王
+  physicalMelee: {
+    2: {
+      back: '拳擊館置物袋背帶',
+      bottom: '拳擊訓練短褲',
+      top: '訓練背心',
+      belt: '舉重護腰帶',
+      headwear: '吸汗頭帶',
+      face: '護齒套',
+      gloves: '拳擊訓練手套',
+      offhand: '速度球',
+    },
+    3: {
+      back: '教練戰術包',
+      bottom: '教練運動長褲',
+      top: '教練 Polo 衫',
+      belt: '戰術哨子腰包',
+      headwear: '教練鴨舌帽',
+      face: '教練墨鏡',
+      gloves: '對打護具手靶',
+      offhand: '訓練碼錶',
+    },
+    4: {
+      back: '入場戰袍',
+      bottom: '職業賽短褲',
+      top: '隊服入場外套',
+      belt: '拳手護腰帶',
+      headwear: '訓練頭部護具',
+      face: '止血凡士林棉棒',
+      gloves: '職業賽拳套',
+      offhand: '戰績紀錄板',
+    },
+    5: {
+      back: '冠軍入場戰袍',
+      bottom: '金色戰袍褲',
+      top: '傳說戰袍',
+      belt: '金腰帶',
+      headwear: '桂冠頭巾',
+      face: '傳奇墨鏡',
+      gloves: '傳說金拳套',
+      offhand: '金色獎盃',
+    },
+  },
+  // 貨車司機 → 保鑣 → 特技替身演員 → 頂尖鏢客
+  physicalRanged: {
+    2: {
+      back: '貨物固定網背帶',
+      bottom: '貨運工作長褲',
+      top: '貨運制服上衣',
+      belt: '對講機腰包',
+      headwear: '貨運鴨舌帽',
+      face: '防曬太陽眼鏡',
+      gloves: '搬貨手套',
+      offhand: '隨車導航機',
+    },
+    3: {
+      back: '防彈公事包背帶',
+      bottom: '西裝長褲',
+      top: '保鑣西裝外套',
+      belt: '槍套腰帶',
+      headwear: '隱藏式藍牙耳機',
+      face: '黑色太陽眼鏡',
+      gloves: '防滑皮手套',
+      offhand: '對講機耳麥',
+    },
+    4: {
+      back: '特技威亞背帶',
+      bottom: '防護緩衝長褲',
+      top: '特技護具背心',
+      belt: '護具腰帶',
+      headwear: '特技安全帽',
+      face: '護目鏡',
+      gloves: '抓握防護手套',
+      offhand: '攝影機遙控器',
+    },
+    5: {
+      back: '西部風長披風',
+      bottom: '牛仔長褲',
+      top: '鏢客皮背心',
+      belt: '雙槍腰帶',
+      headwear: '牛仔帽',
+      face: '神秘面巾',
+      gloves: '皮革射擊手套',
+      offhand: '星形警徽',
+    },
+  },
+  // 空服員 → 居家照護員 → 物理治療師 → 奧運隨隊防護員
+  physicalSupport: {
+    2: {
+      back: '空服員拉桿箱',
+      bottom: '空服員制服窄裙褲',
+      top: '空服員制服上衣',
+      belt: '安全示範腰帶',
+      headwear: '空服員絲巾髮髻',
+      face: '空服員淡妝眼鏡',
+      gloves: '白手套',
+      offhand: '服務推車手把',
+    },
+    3: {
+      back: '居家照護包',
+      bottom: '舒適工作長褲',
+      top: '居家照護背心',
+      belt: '隨身藥物腰包',
+      headwear: '居家照護頭巾',
+      face: '溫和款口罩',
+      gloves: '看護用手套',
+      offhand: '居家用血壓計',
+    },
+    4: {
+      back: '治療師背包',
+      bottom: '治療師運動長褲',
+      top: '治療師運動 Polo 衫',
+      belt: '彈力帶腰包',
+      headwear: '治療師頭帶',
+      face: '專業眼鏡',
+      gloves: '按摩治療手套',
+      offhand: '筋膜按摩滾筒',
+    },
+    5: {
+      back: '國家隊防護背包',
+      bottom: '隨隊運動長褲',
+      top: '國家隊防護員外套',
+      belt: '急救噴劑腰包',
+      headwear: '隨隊工作證頭帶',
+      face: '專業運動護目鏡',
+      gloves: '高階運動貼紮手套',
+      offhand: '奧運隊徽急救箱',
+    },
+  },
+  // 八家將小將 → 乩童 → 風水師 → 一代宗師
+  magicMelee: {
+    2: {
+      back: '神將背旗',
+      bottom: '陣頭褲',
+      top: '八家將臉譜背心',
+      belt: '神將令牌腰帶',
+      headwear: '神將帽飾',
+      face: '八家將臉譜彩繪',
+      gloves: '神將白手套',
+      offhand: '神將令旗',
+    },
+    3: {
+      back: '乩童紅布披風',
+      bottom: '乩童赤足陣頭短褲',
+      top: '乩童彩帶肩帶',
+      belt: '神兵法器腰帶',
+      headwear: '乩童散髮頭巾',
+      face: '恍神狀態面容彩繪',
+      gloves: '起乩護手',
+      offhand: '七星劍鞘',
+    },
+    4: {
+      back: '羅盤背袋',
+      bottom: '風水師唐裝褲',
+      top: '風水師唐裝外套',
+      belt: '銅錢羅盤腰帶',
+      headwear: '風水師禮帽',
+      face: '看風水用老花眼鏡',
+      gloves: '堪輿手套',
+      offhand: '魯班尺',
+    },
+    5: {
+      back: '宗師武學披風',
+      bottom: '宗師長袍褲',
+      top: '宗師武學長袍',
+      belt: '宗師武學腰帶',
+      headwear: '宗師髮髻冠',
+      face: '宗師沉穩神情面紗',
+      gloves: '宗師鐵砂掌護手',
+      offhand: '宗師武學祕笈',
+    },
+  },
+  // 資料科學家 → 量子物理博士生 → 密碼學專家 → 諾貝爾獎得主
+  magicRanged: {
+    2: {
+      back: '資料科學家筆電包',
+      bottom: '休閒工作長褲',
+      top: '格紋襯衫',
+      belt: '隨身硬碟腰帶',
+      headwear: '降噪耳機',
+      face: '圓框眼鏡',
+      gloves: '觸控手套',
+      offhand: '圖表分析平板',
+    },
+    3: {
+      back: '實驗室背包',
+      bottom: '研究生休閒長褲',
+      top: '研究生連帽衫',
+      belt: '識別證吊帶',
+      headwear: '蓬亂研究生髮型頭套',
+      face: '厚重近視眼鏡',
+      gloves: '精密儀器手套',
+      offhand: '量子力學筆記本',
+    },
+    4: {
+      back: '加密隨身包',
+      bottom: '深色連帽長褲',
+      top: '密碼學專家連帽外套',
+      belt: '加密硬體金鑰腰帶',
+      headwear: '面罩兜帽',
+      face: '反光防窺面罩',
+      gloves: '加密鍵盤觸控手套',
+      offhand: '量子加密終端機',
+    },
+    5: {
+      back: '頒獎典禮西裝背帶',
+      bottom: '諾貝爾獎典禮西裝褲',
+      top: '諾貝爾獎典禮燕尾服',
+      belt: '得獎者絲質腰帶',
+      headwear: '學術界紳士帽',
+      face: '學者金絲眼鏡',
+      gloves: '頒獎白手套',
+      offhand: '諾貝爾獎章',
+    },
+  },
+  // 獸醫 → 芳療師 → 針灸師 → 都市傳說級神醫
+  magicSupport: {
+    2: {
+      back: '獸醫出診包',
+      bottom: '獸醫工作長褲',
+      top: '獸醫白袍',
+      belt: '獸醫器械腰包',
+      headwear: '獸醫帽',
+      face: '防抓咬護目鏡',
+      gloves: '獸醫觸診手套',
+      offhand: '寵物聽診器',
+    },
+    3: {
+      back: '芳療師精油背包',
+      bottom: '芳療師舒適長褲',
+      top: '芳療師工作服',
+      belt: '精油瓶腰包',
+      headwear: '芳療頭巾',
+      face: '舒壓眼罩',
+      gloves: '按摩油護手',
+      offhand: '精油按摩滾輪',
+    },
+    4: {
+      back: '針灸師器械背包',
+      bottom: '針灸師唐裝褲',
+      top: '針灸師醫袍',
+      belt: '銀針收納腰帶',
+      headwear: '針灸師髮帽',
+      face: '把脈用老花眼鏡',
+      gloves: '精細銀針手套',
+      offhand: '艾灸盒',
+    },
+    5: {
+      back: '傳說神醫藥箱背帶',
+      bottom: '神醫仙風長袍褲',
+      top: '都市傳說神醫長袍',
+      belt: '傳說金針腰帶',
+      headwear: '神醫醫仙冠',
+      face: '傳說神醫面紗',
+      gloves: '神醫金針手套',
+      offhand: '傳說再生藥丸',
+    },
+  },
+};
+
+const SLOT_COLOR_BRANCH_B_BY_ARCHETYPE_TIER: Record<Archetype, BranchBSlotNounsByTier> = {
+  physicalMelee: {
+    2: {
+      back: '#7a3a3a',
+      bottom: '#2a2a2a',
+      top: '#6a6a6a',
+      belt: '#1a1a1a',
+      headwear: '#a02020',
+      face: '#e8e8e0',
+      gloves: '#c0281a',
+      offhand: '#3a2a2a',
+    },
+    3: {
+      back: '#2a3a5a',
+      bottom: '#3a3a3a',
+      top: '#2a3a5a',
+      belt: '#1a1a1a',
+      headwear: '#2a3a5a',
+      face: '#1a1a1a',
+      gloves: '#8a1a1a',
+      offhand: '#a8a8a8',
+    },
+    4: {
+      back: '#8a1a1a',
+      bottom: '#c02020',
+      top: '#8a1a1a',
+      belt: '#1a1a1a',
+      headwear: '#c0281a',
+      face: '#e8d8c8',
+      gloves: '#c0281a',
+      offhand: '#6b4a2a',
+    },
+    5: {
+      back: '#d4af37',
+      bottom: '#c9a030',
+      top: '#d4af37',
+      belt: '#d4af37',
+      headwear: '#e8c020',
+      face: '#1a1a1a',
+      gloves: '#d4af37',
+      offhand: '#e8c020',
+    },
+  },
+  physicalRanged: {
+    2: {
+      back: '#6a5a3a',
+      bottom: '#3a3a3a',
+      top: '#4a6a3a',
+      belt: '#2a2a2a',
+      headwear: '#4a6a3a',
+      face: '#1a1a1a',
+      gloves: '#6a5a3a',
+      offhand: '#4a4a4a',
+    },
+    3: {
+      back: '#1a1a1a',
+      bottom: '#1a1a1a',
+      top: '#1a1a1a',
+      belt: '#2a2a2a',
+      headwear: '#2a2a2a',
+      face: '#1a1a1a',
+      gloves: '#2a2a2a',
+      offhand: '#3a3a3a',
+    },
+    4: {
+      back: '#4a4a4a',
+      bottom: '#3a3a3a',
+      top: '#6a6a6a',
+      belt: '#2a2a2a',
+      headwear: '#c0281a',
+      face: '#6ab0e0',
+      gloves: '#3a3a3a',
+      offhand: '#2a2a2a',
+    },
+    5: {
+      back: '#6a4a2a',
+      bottom: '#4a3a24',
+      top: '#6a4a2a',
+      belt: '#3a2a1a',
+      headwear: '#8a6a3a',
+      face: '#4a2a1a',
+      gloves: '#6a4a2a',
+      offhand: '#d4af37',
+    },
+  },
+  physicalSupport: {
+    2: {
+      back: '#1a2a4a',
+      bottom: '#1a2a4a',
+      top: '#1a2a4a',
+      belt: '#c9a94f',
+      headwear: '#c02020',
+      face: '#6a4a3a',
+      gloves: '#f0f0e8',
+      offhand: '#a8a8a8',
+    },
+    3: {
+      back: '#6a8a6a',
+      bottom: '#4a5a4a',
+      top: '#6a8a6a',
+      belt: '#e8e2d0',
+      headwear: '#6a8a6a',
+      face: '#a8d0e8',
+      gloves: '#a8d0e0',
+      offhand: '#d8d8d0',
+    },
+    4: {
+      back: '#4a6a8a',
+      bottom: '#2a2a2a',
+      top: '#4a6a8a',
+      belt: '#3a5a3a',
+      headwear: '#4a6a8a',
+      face: '#2a2a2a',
+      gloves: '#4a6a8a',
+      offhand: '#3a3a3a',
+    },
+    5: {
+      back: '#1a3a6a',
+      bottom: '#1a3a6a',
+      top: '#1a3a6a',
+      belt: '#c0281a',
+      headwear: '#d4af37',
+      face: '#6ab0e0',
+      gloves: '#1a3a6a',
+      offhand: '#d4af37',
+    },
+  },
+  magicMelee: {
+    2: {
+      back: '#a01818',
+      bottom: '#8a1818',
+      top: '#c02020',
+      belt: '#e8c020',
+      headwear: '#a01818',
+      face: '#c02020',
+      gloves: '#f0f0e8',
+      offhand: '#c9a030',
+    },
+    3: {
+      back: '#a01818',
+      bottom: '#8a1818',
+      top: '#c02020',
+      belt: '#2a2a2a',
+      headwear: '#1a1a1a',
+      face: '#e8c020',
+      gloves: '#8a1a1a',
+      offhand: '#7a5a30',
+    },
+    4: {
+      back: '#8a6a3a',
+      bottom: '#1a1a1a',
+      top: '#2a3a5a',
+      belt: '#c9a030',
+      headwear: '#1a1a1a',
+      face: '#c9a030',
+      gloves: '#8a6a3a',
+      offhand: '#6b4a2a',
+    },
+    5: {
+      back: '#1a1a1a',
+      bottom: '#1a1a1a',
+      top: '#2a2a2a',
+      belt: '#d4af37',
+      headwear: '#d4af37',
+      face: '#e8e0d0',
+      gloves: '#4a3a2a',
+      offhand: '#6b4a2a',
+    },
+  },
+  magicRanged: {
+    2: {
+      back: '#3a5a5a',
+      bottom: '#4a4a4a',
+      top: '#3a5a5a',
+      belt: '#2a2a2a',
+      headwear: '#2a2a2a',
+      face: '#4a4a4a',
+      gloves: '#2a2a2a',
+      offhand: '#3a5a5a',
+    },
+    3: {
+      back: '#4a4a6a',
+      bottom: '#4a4a4a',
+      top: '#4a4a6a',
+      belt: '#2a2a2a',
+      headwear: '#2a2a2a',
+      face: '#4a4a4a',
+      gloves: '#6a6a8a',
+      offhand: '#4a4a6a',
+    },
+    4: {
+      back: '#1a1a1a',
+      bottom: '#1a1a1a',
+      top: '#1a1a1a',
+      belt: '#1a1a1a',
+      headwear: '#1a1a1a',
+      face: '#2a2a2a',
+      gloves: '#1a1a1a',
+      offhand: '#1a2a1a',
+    },
+    5: {
+      back: '#1a1a1a',
+      bottom: '#1a1a1a',
+      top: '#1a1a1a',
+      belt: '#d4af37',
+      headwear: '#1a1a1a',
+      face: '#d4af37',
+      gloves: '#f0f0e8',
+      offhand: '#d4af37',
+    },
+  },
+  magicSupport: {
+    2: {
+      back: '#4a6a4a',
+      bottom: '#4a5a4a',
+      top: '#f0f0e8',
+      belt: '#4a6a4a',
+      headwear: '#f0f0e8',
+      face: '#a8d0e8',
+      gloves: '#a8d0e0',
+      offhand: '#4a6a4a',
+    },
+    3: {
+      back: '#b0a0c8',
+      bottom: '#a8b090',
+      top: '#b0a0c8',
+      belt: '#7a5a3a',
+      headwear: '#b0a0c8',
+      face: '#b0a0c8',
+      gloves: '#d0b888',
+      offhand: '#b0a0c8',
+    },
+    4: {
+      back: '#2a6a5a',
+      bottom: '#2a3a5a',
+      top: '#2a6a5a',
+      belt: '#a8a8a8',
+      headwear: '#2a6a5a',
+      face: '#c9a030',
+      gloves: '#a8a8a8',
+      offhand: '#6b4a2a',
+    },
+    5: {
+      back: '#8a6a30',
+      bottom: '#2a6a5a',
+      top: '#2a6a5a',
+      belt: '#d4af37',
+      headwear: '#d4af37',
+      face: '#e8e0c0',
+      gloves: '#d4af37',
+      offhand: '#e04030',
+    },
+  },
+};
+
+// 依分支查詢插槽名稱/顏色:tier1 或 branch A 直接吃基底表;branch B 的 tier2-5 才查專屬表
+// (查不到就 fallback 回基底表,理論上不會發生,只是防呆)。
+function slotBaseNounFor(archetype: Archetype, branch: JobBranch, tier: JobTier, slot: EquipmentSlot): string | undefined {
+  if (tier === 1 || branch === 'A') return SLOT_BASE_NOUN_BY_ARCHETYPE_TIER[archetype][tier][slot];
+  return SLOT_BASE_NOUN_BRANCH_B_BY_ARCHETYPE_TIER[archetype][tier]?.[slot] ?? SLOT_BASE_NOUN_BY_ARCHETYPE_TIER[archetype][tier][slot];
+}
+
+function slotColorFor(archetype: Archetype, branch: JobBranch, tier: JobTier, slot: EquipmentSlot): string | undefined {
+  if (tier === 1 || branch === 'A') return SLOT_COLOR_BY_ARCHETYPE_TIER[archetype][tier][slot];
+  return SLOT_COLOR_BRANCH_B_BY_ARCHETYPE_TIER[archetype][tier]?.[slot] ?? SLOT_COLOR_BY_ARCHETYPE_TIER[archetype][tier][slot];
+}
+
 // 武器一樣按 5 階換款,呼應各階現實身分(見上方 SLOT_BASE_NOUN_BY_ARCHETYPE_TIER 的職業世界觀)。
 type WeaponNounsByTier = Record<JobTier, { oneHanded: string; twoHanded: string }>;
 
@@ -979,6 +1517,67 @@ const WEAPON_COLOR_BY_TIER: Record<Archetype, Record<JobTier, string>> = {
   magicSupport: { 1: '#a86a20', 2: '#c0281a', 3: '#a0c0d8', 4: '#c0c0c0', 5: '#d4af37' },
 };
 
+// 武器分支 B(tier2 起),同樣 tier1 兩分支共用上面 WEAPON_NOUNS_BY_TIER/WEAPON_COLOR_BY_TIER 的資料。
+type BranchBWeaponNounsByTier = Partial<Record<Exclude<JobTier, 1>, { oneHanded: string; twoHanded: string }>>;
+
+const WEAPON_NOUNS_BRANCH_B_BY_TIER: Record<Archetype, BranchBWeaponNounsByTier> = {
+  physicalMelee: {
+    2: { oneHanded: '纏繞式拳擊繃帶', twoHanded: '訓練重沙包' },
+    3: { oneHanded: '對打練習拳靶', twoHanded: '戰術訓練架' },
+    4: { oneHanded: '職業比賽拳套', twoHanded: '開賽銅鑼' },
+    5: { oneHanded: '拳王黃金拳套', twoHanded: '巨型冠軍獎盃' },
+  },
+  physicalRanged: {
+    2: { oneHanded: '貨車鑰匙鏈', twoHanded: '液壓尾板控制桿' },
+    3: { oneHanded: '消音手槍', twoHanded: '防爆盾牌' },
+    4: { oneHanded: '特技道具槍', twoHanded: '威亞發射器' },
+    5: { oneHanded: '左輪手槍', twoHanded: '溫徹斯特步槍' },
+  },
+  physicalSupport: {
+    2: { oneHanded: '飲料推車拉桿', twoHanded: '緊急氧氣瓶' },
+    3: { oneHanded: '血壓計壓脈帶', twoHanded: '輪椅' },
+    4: { oneHanded: '貼紮繃帶', twoHanded: '治療床' },
+    5: { oneHanded: '隨隊急救噴劑', twoHanded: '移動式治療推車' },
+  },
+  magicMelee: {
+    2: { oneHanded: '七星步法令旗', twoHanded: '神將大關刀道具' },
+    3: { oneHanded: '起乩七星劍', twoHanded: '五寶刺球' },
+    4: { oneHanded: '羅盤權杖', twoHanded: '魯班尺長杖' },
+    5: { oneHanded: '一代宗師之拳', twoHanded: '武學傳承棍' },
+  },
+  magicRanged: {
+    2: { oneHanded: '資料視覺化手寫筆', twoHanded: '多螢幕工作站' },
+    3: { oneHanded: '論文發表雷射筆', twoHanded: '粒子加速器模型' },
+    4: { oneHanded: '加密硬體金鑰', twoHanded: '量子電腦主機' },
+    5: { oneHanded: '諾貝爾獎章權杖', twoHanded: '頒獎典禮講台' },
+  },
+  magicSupport: {
+    2: { oneHanded: '動物麻醉筆', twoHanded: '大型獸醫診療台' },
+    3: { oneHanded: '精油滴管', twoHanded: '芳療按摩床' },
+    4: { oneHanded: '針灸銀針', twoHanded: '艾灸架' },
+    5: { oneHanded: '傳說神醫金針', twoHanded: '都市傳說神醫藥櫃' },
+  },
+};
+
+const WEAPON_COLOR_BRANCH_B_BY_TIER: Record<Archetype, Partial<Record<Exclude<JobTier, 1>, string>>> = {
+  physicalMelee: { 2: '#8a4a3a', 3: '#4a5a7a', 4: '#c0281a', 5: '#d4af37' },
+  physicalRanged: { 2: '#6a6a6a', 3: '#2a2a2a', 4: '#4a4a4a', 5: '#6a4a2a' },
+  physicalSupport: { 2: '#a8a8a8', 3: '#6a8a6a', 4: '#4a6a8a', 5: '#1a3a6a' },
+  magicMelee: { 2: '#a01818', 3: '#8a1a1a', 4: '#8a6a3a', 5: '#1a1a1a' },
+  magicRanged: { 2: '#3a5a5a', 3: '#4a4a6a', 4: '#1a1a1a', 5: '#d4af37' },
+  magicSupport: { 2: '#4a6a4a', 3: '#b0a0c8', 4: '#2a6a5a', 5: '#d4af37' },
+};
+
+function weaponNounsFor(archetype: Archetype, branch: JobBranch, tier: JobTier): { oneHanded: string; twoHanded: string } {
+  if (tier === 1 || branch === 'A') return WEAPON_NOUNS_BY_TIER[archetype][tier];
+  return WEAPON_NOUNS_BRANCH_B_BY_TIER[archetype][tier] ?? WEAPON_NOUNS_BY_TIER[archetype][tier];
+}
+
+function weaponColorFor(archetype: Archetype, branch: JobBranch, tier: JobTier): string {
+  if (tier === 1 || branch === 'A') return WEAPON_COLOR_BY_TIER[archetype][tier];
+  return WEAPON_COLOR_BRANCH_B_BY_TIER[archetype][tier] ?? WEAPON_COLOR_BY_TIER[archetype][tier];
+}
+
 const ARCHETYPE_BASE_COLOR: Record<Archetype, string> = {
   physicalMelee: '#8b8698',
   physicalRanged: '#7a9e7e',
@@ -1006,73 +1605,127 @@ function shiftColorForBracket(baseHex: string, bracket: number): string {
   return rgbToHex(r + (255 - r) * brighten, g + (255 - g) * brighten, b + (255 - b) * brighten);
 }
 
-function jobTierAndTitleAtLevel(archetype: Archetype, level: number): { tier: JobTier; title: string } {
+function jobTierAndTitleAtLevel(archetype: Archetype, branch: JobBranch, level: number): { tier: JobTier; title: string } {
   const tier = getCurrentTier(level);
-  return { tier, title: getJobTitle(archetype, 'A', tier) };
+  return { tier, title: getJobTitle(archetype, branch, tier) };
 }
 
+// tier1(两分支尚未分岔)只生成一款不分支的道具,維持舊 id 格式(無 branch 區段),
+// 現有玩家的 tier1 裝備 id 完全不受這次改動影響,不需要遷移。tier2 起才分別為 A/B
+// 兩分支各自生成一款(id 加上 branch 區段),呼應 JOB_TITLES 從 tier2 起才分岔的設計。
 function generateRegularSlotItems(slot: EquipmentSlot): EquipmentItem[] {
   const stat = SLOT_STAT[slot];
   const items: EquipmentItem[] = [];
   for (const archetype of ARCHETYPES) {
     for (let bracket = 1; bracket <= BRACKET_COUNT; bracket++) {
       const requiredLevel = bracketRequiredLevel(bracket);
-      const { tier, title } = jobTierAndTitleAtLevel(archetype, requiredLevel);
-      const baseNoun = SLOT_BASE_NOUN_BY_ARCHETYPE_TIER[archetype][tier][slot];
-      if (!baseNoun) continue;
-      const tierColor = SLOT_COLOR_BY_ARCHETYPE_TIER[archetype][tier][slot] ?? ARCHETYPE_BASE_COLOR[archetype];
-      items.push({
-        id: `${slot}-${archetype}-${bracket}`,
-        slot,
-        name: `${title}${qualityWordForBracket(bracket)}${baseNoun}·Lv${requiredLevel}`,
-        color: shiftColorForBracket(tierColor, bracket),
-        price: bracketPrice(bracket),
-        bonus: { stat, value: bracketBonusValue(bracket) },
-        archetype,
-        requiredLevel,
-        bracket,
-      });
+      const tier = getCurrentTier(requiredLevel);
+      if (tier === 1) {
+        const { title } = jobTierAndTitleAtLevel(archetype, 'A', requiredLevel);
+        const baseNoun = slotBaseNounFor(archetype, 'A', tier, slot);
+        if (!baseNoun) continue;
+        const tierColor = slotColorFor(archetype, 'A', tier, slot) ?? ARCHETYPE_BASE_COLOR[archetype];
+        items.push({
+          id: `${slot}-${archetype}-${bracket}`,
+          slot,
+          name: `${title}${qualityWordForBracket(bracket)}${baseNoun}·Lv${requiredLevel}`,
+          color: shiftColorForBracket(tierColor, bracket),
+          price: bracketPrice(bracket),
+          bonus: { stat, value: bracketBonusValue(bracket) },
+          archetype,
+          requiredLevel,
+          bracket,
+        });
+        continue;
+      }
+      for (const branch of JOB_BRANCHES) {
+        const { title } = jobTierAndTitleAtLevel(archetype, branch, requiredLevel);
+        const baseNoun = slotBaseNounFor(archetype, branch, tier, slot);
+        if (!baseNoun) continue;
+        const tierColor = slotColorFor(archetype, branch, tier, slot) ?? ARCHETYPE_BASE_COLOR[archetype];
+        items.push({
+          id: `${slot}-${archetype}-${branch}-${bracket}`,
+          slot,
+          name: `${title}${qualityWordForBracket(bracket)}${baseNoun}·Lv${requiredLevel}`,
+          color: shiftColorForBracket(tierColor, bracket),
+          price: bracketPrice(bracket),
+          bonus: { stat, value: bracketBonusValue(bracket) },
+          archetype,
+          branch,
+          requiredLevel,
+          bracket,
+        });
+      }
     }
   }
   return items;
 }
 
+function pushMainhandPair(
+  items: EquipmentItem[],
+  archetype: Archetype,
+  branch: JobBranch | undefined,
+  bracket: number,
+  requiredLevel: number,
+  title: string,
+  nouns: { oneHanded: string; twoHanded: string },
+  color: string,
+  stat: EquipmentBonusStat
+): void {
+  const oneHandedBonus = bracketBonusValue(bracket);
+  const price = bracketPrice(bracket);
+  const idSuffix = branch === undefined ? `${archetype}-${bracket}` : `${archetype}-${branch}-${bracket}`;
+
+  items.push({
+    id: `mainhand-1h-${idSuffix}`,
+    slot: 'mainhand',
+    name: `${title}${qualityWordForBracket(bracket)}${nouns.oneHanded}·Lv${requiredLevel}`,
+    color,
+    price,
+    bonus: { stat, value: oneHandedBonus },
+    archetype,
+    branch,
+    requiredLevel,
+    bracket,
+  });
+
+  items.push({
+    id: `mainhand-2h-${idSuffix}`,
+    slot: 'mainhand',
+    name: `${title}${qualityWordForBracket(bracket)}${nouns.twoHanded}·Lv${requiredLevel}(雙手)`,
+    color,
+    price: Math.round(price * TWO_HANDED_PRICE_MULTIPLIER),
+    bonus: { stat, value: Math.round(oneHandedBonus * TWO_HANDED_BONUS_MULTIPLIER * 1000) / 1000 },
+    archetype,
+    branch,
+    requiredLevel,
+    bracket,
+    twoHanded: true,
+  });
+}
+
+// 跟 generateRegularSlotItems 同一套 tier1 不分支/tier2 起分支的規則,武器也是同一組 id 命名慣例
+// (tier1 沿用舊格式無 branch 區段,舊玩家的 tier1 武器不受影響)。
 function generateMainhandItems(): EquipmentItem[] {
   const stat = SLOT_STAT.mainhand;
   const items: EquipmentItem[] = [];
   for (const archetype of ARCHETYPES) {
     for (let bracket = 1; bracket <= BRACKET_COUNT; bracket++) {
       const requiredLevel = bracketRequiredLevel(bracket);
-      const { tier, title } = jobTierAndTitleAtLevel(archetype, requiredLevel);
-      const nouns = WEAPON_NOUNS_BY_TIER[archetype][tier];
-      const color = shiftColorForBracket(WEAPON_COLOR_BY_TIER[archetype][tier], bracket);
-      const oneHandedBonus = bracketBonusValue(bracket);
-      const price = bracketPrice(bracket);
-
-      items.push({
-        id: `mainhand-1h-${archetype}-${bracket}`,
-        slot: 'mainhand',
-        name: `${title}${qualityWordForBracket(bracket)}${nouns.oneHanded}·Lv${requiredLevel}`,
-        color,
-        price,
-        bonus: { stat, value: oneHandedBonus },
-        archetype,
-        requiredLevel,
-        bracket,
-      });
-
-      items.push({
-        id: `mainhand-2h-${archetype}-${bracket}`,
-        slot: 'mainhand',
-        name: `${title}${qualityWordForBracket(bracket)}${nouns.twoHanded}·Lv${requiredLevel}(雙手)`,
-        color,
-        price: Math.round(price * TWO_HANDED_PRICE_MULTIPLIER),
-        bonus: { stat, value: Math.round(oneHandedBonus * TWO_HANDED_BONUS_MULTIPLIER * 1000) / 1000 },
-        archetype,
-        requiredLevel,
-        bracket,
-        twoHanded: true,
-      });
+      const tier = getCurrentTier(requiredLevel);
+      if (tier === 1) {
+        const { title } = jobTierAndTitleAtLevel(archetype, 'A', requiredLevel);
+        const nouns = weaponNounsFor(archetype, 'A', tier);
+        const color = shiftColorForBracket(weaponColorFor(archetype, 'A', tier), bracket);
+        pushMainhandPair(items, archetype, undefined, bracket, requiredLevel, title, nouns, color, stat);
+        continue;
+      }
+      for (const branch of JOB_BRANCHES) {
+        const { title } = jobTierAndTitleAtLevel(archetype, branch, requiredLevel);
+        const nouns = weaponNounsFor(archetype, branch, tier);
+        const color = shiftColorForBracket(weaponColorFor(archetype, branch, tier), bracket);
+        pushMainhandPair(items, archetype, branch, bracket, requiredLevel, title, nouns, color, stat);
+      }
     }
   }
   return items;
@@ -1127,27 +1780,32 @@ export function isArchetypeCompatible(item: EquipmentItem, archetype: Archetype)
   return item.archetype === undefined || item.archetype === archetype;
 }
 
+// undefined = tier1 或不限分支的舊起始/學生款,兩分支都能穿;有值就只有選了同一分支的玩家能穿。
+export function isBranchCompatible(item: EquipmentItem, branch: JobBranch): boolean {
+  return item.branch === undefined || item.branch === branch;
+}
+
 export function isLevelSufficient(item: EquipmentItem, level: number): boolean {
   return item.requiredLevel === undefined || level >= item.requiredLevel;
 }
 
-export function canEquipItem(item: EquipmentItem, archetype: Archetype, level: number): boolean {
-  return isArchetypeCompatible(item, archetype) && isLevelSufficient(item, level);
+export function canEquipItem(item: EquipmentItem, archetype: Archetype, branch: JobBranch, level: number): boolean {
+  return isArchetypeCompatible(item, archetype) && isBranchCompatible(item, branch) && isLevelSufficient(item, level);
 }
 
-// 只回傳目前職業能穿的款式(不限職業的舊起始款 + 對應職業的鎖裝款),給 UI 篩選用。
-export function getEquippableItemsForSlot(slot: EquipmentSlot, archetype: Archetype): EquipmentItem[] {
-  return getItemsForSlot(slot).filter((item) => isArchetypeCompatible(item, archetype));
+// 只回傳目前職業+分支能穿的款式(不限職業/分支的舊起始款 + 對應職業分支的鎖裝款),給 UI 篩選用。
+export function getEquippableItemsForSlot(slot: EquipmentSlot, archetype: Archetype, branch: JobBranch): EquipmentItem[] {
+  return getItemsForSlot(slot).filter((item) => isArchetypeCompatible(item, archetype) && isBranchCompatible(item, branch));
 }
 
-// 切職業後,原本裝備的職業鎖裝若跟新職業不符就直接卸下,不限職業的款式不受影響。
-export function filterLoadoutForArchetype(loadout: EquipmentLoadout, archetype: Archetype): EquipmentLoadout {
+// 切職業/切分支後,原本裝備的職業鎖裝若跟新職業或新分支不符就直接卸下,不限職業/分支的款式不受影響。
+export function filterLoadoutForJob(loadout: EquipmentLoadout, archetype: Archetype, branch: JobBranch): EquipmentLoadout {
   const next: EquipmentLoadout = {};
   for (const slot of Object.keys(loadout) as EquipmentSlot[]) {
     const itemId = loadout[slot];
     if (!itemId) continue;
     const item = getItemById(itemId);
-    if (item && isArchetypeCompatible(item, archetype)) next[slot] = itemId;
+    if (item && isArchetypeCompatible(item, archetype) && isBranchCompatible(item, branch)) next[slot] = itemId;
   }
   return next;
 }
@@ -1622,12 +2280,13 @@ const EQUIPMENT_DROP_CHANCE = 0.05;
 
 export function rollEquipmentDrop(
   archetype: Archetype,
+  branch: JobBranch,
   level: number,
   unlockedItemIds: UnlockedItemIds,
   rng: () => number = Math.random
 ): EquipmentItem | null {
   if (rng() >= EQUIPMENT_DROP_CHANCE) return null;
-  const eligible = EQUIPMENT_ITEMS.filter((item) => item.price > 0 && canEquipItem(item, archetype, level));
+  const eligible = EQUIPMENT_ITEMS.filter((item) => item.price > 0 && canEquipItem(item, archetype, branch, level));
   if (eligible.length === 0) return null;
   const notYetUnlocked = eligible.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
   const pool = notYetUnlocked.length > 0 ? notYetUnlocked : eligible;

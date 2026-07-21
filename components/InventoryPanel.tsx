@@ -80,7 +80,7 @@ export function InventoryPanel({ selectedSlot, onSelectSlot }: InventoryPanelPro
   const [previewItem, setPreviewItem] = useState<EquipmentItem | null>(null);
 
   const currentId = equipment[selectedSlot];
-  const items = getEquippableItemsForSlot(selectedSlot, job.archetype);
+  const items = getEquippableItemsForSlot(selectedSlot, job.archetype, job.branch);
   const bagItems = items
     .filter((item) => isItemUnlocked(unlockedItemIds, item.id))
     .filter((item) => statFilter === 'all' || item.bonus.stat === statFilter)

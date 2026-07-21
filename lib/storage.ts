@@ -15,11 +15,14 @@ import {
   createEmptyLoadout,
   createEmptyUnlockedItems,
   EquipmentLoadout,
+  EquipmentSlot,
   Gender,
   GemCounts,
   GEM_TYPES,
   GemType,
   getGenderUnlockItems,
+  getItemById,
+  ItemInstanceData,
   ItemInstances,
   Substat,
   UnlockedItemIds,
@@ -48,7 +51,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 37;
+export const SCHEMA_VERSION = 38;
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -2076,8 +2079,9 @@ function isGemCountsV2(value: unknown): value is GemCounts {
 }
 
 // v37(鑲嵌石加入素質類+分階制):比 v36 多了鑲嵌石種類(13種)+分階(見 game/equipment.ts
-// 的鑲嵌系統),itemInstances.socketedGems/gemCounts 兩個欄位形狀跟著改變。這是 migrate() 的
-// 第一道 passthrough 檢查——已經是最新形狀的存檔直接原樣回傳,不用跑任何遷移邏輯。
+// 的鑲嵌系統),itemInstances.socketedGems/gemCounts 兩個欄位形狀跟著改變。
+// v38 幫裝備加入分支維度後,version 字面數字往前推一位——這裡改成比對字面 37(不再是
+// SCHEMA_VERSION,現在 SCHEMA_VERSION 已經是38),跟 isSaveDataV36 當初凍結的做法一樣。
 function isSaveDataV37(value: unknown): value is SaveData {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
@@ -2085,11 +2089,22 @@ function isSaveDataV37(value: unknown): value is SaveData {
   // 用空物件/舊形狀的合法佔位值蓋掉這兩個欄位餵給 isSaveDataV36,只借用它對「其餘欄位」的
   // 檢查,新形狀本身另外用 isItemInstancesV2/isGemCountsV2 獨立驗證。
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 37 &&
     isSaveDataV36({ ...record, version: 36, itemInstances: {}, gemCounts: { expGem: 0, coinGem: 0, speedGem: 0 } }) &&
     isItemInstancesV2(record.itemInstances) &&
     isGemCountsV2(record.gemCounts)
   );
+}
+
+// v38(裝備加入分支 A/B 維度,見 game/equipment.ts 的 JOB_TITLES tier2 起分支各自專屬裝備):
+// 沒有新增/改變任何欄位形狀,單純是 equipment/unlockedItemIds/itemInstances 三個欄位裡的
+// tier2-5 裝備 id 字串內容從舊格式(無 branch 區段)換成新格式(含 branch 區段)——這種「同
+// 形狀、只是內容字串換格式」的變更沒辦法靠結構驗證分辨新舊,只能單純比對 version 字面數字。
+// 這是 migrate() 的第一道 passthrough 檢查——已經跑過分支 id 轉換的存檔直接原樣回傳。
+function isSaveDataV38(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return record.version === SCHEMA_VERSION && isSaveDataV37({ ...record, version: 37 });
 }
 
 // passive3(見 game/skillTree.ts 的 passive3/lifeMastery)是 v27 新增的第3個被動欄位,v27之前
@@ -2179,8 +2194,8 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // 不會平白消失,只是換了個容器裝,之後要升到更高階要透過新的合成機制(兩本前一階換一本
 // 下一階)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
-function migrate(value: unknown): SaveData {
-  if (isSaveDataV37(value)) return value;
+function migrateShape(value: unknown): SaveData {
+  if (isSaveDataV37(value)) return { ...value, version: SCHEMA_VERSION };
   // 舊存檔遷移到鑲嵌石加素質類+分階制:itemInstances.socketedGems/gemCounts 兩個欄位從舊形狀
   // (寶石只有3種、鑲入插槽是純字串、持有量不分階級)轉成新形狀,不倒退玩家原本已經鑲上的
   // 加成(視為初階),新種類/更高階只能靠之後正常掉落/合成累積(見 migrateGemCountsToTiered/
@@ -3472,6 +3487,57 @@ function migrate(value: unknown): SaveData {
     };
   }
   return createInitialSaveData();
+}
+
+// 舊格式(無 branch 區段)的 tier2-5 生成式裝備 id,例如 top-physicalMelee-20、
+// mainhand-1h-physicalMelee-20。tier1 brackets(兩分支尚未分岔,id 本來就沒有 branch 區段)、
+// 起始/學生款(-01/-02/-student2 等)都不吻合這個格式,不受影響。
+const LEGACY_REGULAR_ITEM_ID = /^([a-z]+)-([a-zA-Z]+)-(\d+)$/;
+const LEGACY_MAINHAND_ITEM_ID = /^mainhand-(1h|2h)-([a-zA-Z]+)-(\d+)$/;
+
+// 裝備加分支維度前,3000+ 款生成式裝備一律沒有 branch 區段;既有玩家身上/背包裡的這些舊 id
+// 在新目錄裡已經查不到(見 game/equipment.ts 的 id 生成規則),一律補上「分支 A」——這正是
+// 玩家原本實際擁有的那個版本(唯一存在過的資料表就是現在的分支 A),名稱/顏色/加成完全不變,
+// 只是 id 多了一段。用 getItemById 判斷「這個 id 還查得到嗎」而不是自己重算 tier,可以讓
+// tier1 id、或這個函式重複套用過的新格式 id 直接原樣通過(冪等,不會誤傷)。
+function remapLegacyEquipmentItemId(id: string): string {
+  if (getItemById(id)) return id;
+  const mainhandMatch = id.match(LEGACY_MAINHAND_ITEM_ID);
+  if (mainhandMatch) {
+    const [, hand, archetype, bracket] = mainhandMatch;
+    return `mainhand-${hand}-${archetype}-A-${bracket}`;
+  }
+  const regularMatch = id.match(LEGACY_REGULAR_ITEM_ID);
+  if (regularMatch) {
+    const [, slot, archetype, bracket] = regularMatch;
+    return `${slot}-${archetype}-A-${bracket}`;
+  }
+  // 認不得的格式(理論上不會發生):原樣放回去,不讓遷移拋錯連累其他欄位。
+  return id;
+}
+
+// 套用到 equipment(已裝備)/unlockedItemIds(已解鎖)/itemInstances(隨機素質等實例資料,
+// key 就是 id)三個會存到裝備 id 字串的欄位——不管存檔原本停在 migrateShape 的哪一個分支,
+// 這一步統一在最後跑一次,冪等、對已經是新格式的存檔完全不影響。
+function remapLegacyEquipmentBranchIds(save: SaveData): SaveData {
+  const equipment: EquipmentLoadout = {};
+  for (const slot of Object.keys(save.equipment) as EquipmentSlot[]) {
+    const id = save.equipment[slot];
+    if (id) equipment[slot] = remapLegacyEquipmentItemId(id);
+  }
+  const unlockedItemIds: UnlockedItemIds = save.unlockedItemIds.map(remapLegacyEquipmentItemId);
+  const itemInstances: ItemInstances = {};
+  for (const [id, instance] of Object.entries(save.itemInstances) as [string, ItemInstanceData][]) {
+    itemInstances[remapLegacyEquipmentItemId(id)] = instance;
+  }
+  return { ...save, version: SCHEMA_VERSION, equipment, unlockedItemIds, itemInstances };
+}
+
+// v38:裝備分支 id 轉換獨立成最後一道統一步驟(見上面兩個 helper 的說明),不用像先前每個
+// schema 版本那樣在 migrateShape 的每一條分支裡各自插入轉換呼叫。
+function migrate(value: unknown): SaveData {
+  if (isSaveDataV38(value)) return value;
+  return remapLegacyEquipmentBranchIds(migrateShape(value));
 }
 
 export async function loadSave(): Promise<SaveData> {
