@@ -2260,8 +2260,9 @@ export function gemValueAtTier(baseValue: number, tier: MaterialTier): number {
 }
 
 // 強化石/寶石掉落:跟寵物/坐騎掉落一樣,每次擊殺獨立判定一次,互不干擾、多數時候不會掉落。
-const ENHANCE_STONE_DROP_CHANCE = 0.04;
-const GEM_DROP_CHANCE = 0.04;
+// 兩個常數 export 出去給 game/offlineProgress.ts 算離線期間的期望值掉落用,單一真相來源。
+export const ENHANCE_STONE_DROP_CHANCE = 0.04;
+export const GEM_DROP_CHANCE = 0.04;
 
 export function rollEnhanceStoneDrop(rng: () => number = Math.random): boolean {
   return rng() < ENHANCE_STONE_DROP_CHANCE;

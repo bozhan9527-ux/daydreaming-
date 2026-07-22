@@ -1,12 +1,16 @@
 // 離線期間讓「關卡進度」也真的推進,不是只補經驗值——沿用即時戰鬥(hooks/useGameState.ts的
 // tickBattle)同一套規則(每小關5殺、魔王小關1殺晉級、大魔王觸發轉生點數),但簡化成不擲稀有度
-// 亂數(直接用平均值)、不觸發任何掉落/技能/爆擊/成就,維持「離線是簡化版」的既有定位。
+// 亂數(直接用平均值)、不觸發裝備/寵物/轉職碎片這類「一次性、有意義內容」的掉落/技能/爆擊/成就,
+// 維持「離線是簡化版」的既有定位。強化石/寶石/技能書這三種純數量材料是例外——用擊殺數×掉落機率
+// 算期望值(無條件四捨五入),不逐次擲亂數,一樣不違背「離線=期望值計算、不加RNG」的精神。
 // 獨立成一個檔案而不是塞進 game/battle.ts,是因為 battle.ts 的既有設計刻意不認識關卡系統的
 // StageProgress 結構(見 battle.ts 的 generateEncounter 說明);這裡是兩邊規則的交會點,
 // 跟 tickBattle 本身是同樣定位,只是拆出來成純函式方便離線結算重用/測試。
 import { getCycleCount } from './ascension';
 import { coinsForRarity } from './currency';
+import { ENHANCE_STONE_DROP_CHANCE, GEM_DROP_CHANCE, GEM_TYPES, GemType } from './equipment';
 import { monsterHp } from './heroHealth';
+import { SKILL_BOOK_DROP_CHANCE } from './skillTree';
 import {
   advanceStageProgress,
   getStageDifficultyMultiplier,
@@ -39,6 +43,9 @@ export interface OfflineStageProgressResult {
   kills: number;
   coins: number;
   ascensionPointsGained: number;
+  enhanceStonesGained: number;
+  skillBooksGained: number;
+  gemsGained: Partial<Record<GemType, number>>;
 }
 
 export function simulateOfflineStageProgress(
@@ -76,6 +83,15 @@ export function simulateOfflineStageProgress(
     progress = advanceStageProgress(progress);
   }
 
+  // 三種材料掉落用「這段期間擊殺數 × 掉落機率」算期望值,不逐次擲亂數(理由見檔案開頭說明)。
+  const enhanceStonesGained = Math.round(killsThisPeriod * ENHANCE_STONE_DROP_CHANCE);
+  const skillBooksGained = Math.round(killsThisPeriod * SKILL_BOOK_DROP_CHANCE);
+  const gemsGained: Partial<Record<GemType, number>> = {};
+  const perGemTypeGained = Math.round((killsThisPeriod * GEM_DROP_CHANCE) / GEM_TYPES.length);
+  if (perGemTypeGained > 0) {
+    for (const gemType of GEM_TYPES) gemsGained[gemType] = perGemTypeGained;
+  }
+
   return {
     stageProgress: progress,
     totalStagesCleared: stagesCleared,
@@ -83,5 +99,8 @@ export function simulateOfflineStageProgress(
     kills: killsThisPeriod,
     coins,
     ascensionPointsGained,
+    enhanceStonesGained,
+    skillBooksGained,
+    gemsGained,
   };
 }

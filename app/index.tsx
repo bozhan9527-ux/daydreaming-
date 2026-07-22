@@ -39,6 +39,9 @@ export default function HomeScreen() {
   const lastOfflineGain = useGameState((state) => state.lastOfflineGain);
   const lastOfflineKills = useGameState((state) => state.lastOfflineKills);
   const lastOfflineCoins = useGameState((state) => state.lastOfflineCoins);
+  const lastOfflineEnhanceStones = useGameState((state) => state.lastOfflineEnhanceStones);
+  const lastOfflineSkillBooks = useGameState((state) => state.lastOfflineSkillBooks);
+  const lastOfflineGems = useGameState((state) => state.lastOfflineGems);
   const stageProgress = useGameState((state) => state.stageProgress);
   const hasSeenWelcome = useGameState((state) => state.hasSeenWelcome);
   const coins = useGameState((state) => state.coins);
@@ -138,6 +141,13 @@ export default function HomeScreen() {
   // 新手歡迎彈窗(見 WelcomeModal.tsx)優先權最高——沒看過之前不能讓離線收益/每日登入獎勵
   // 這兩個彈窗疊上去搶焦點(全新存檔常常兩個條件同時成立,疊出來的畫面會擋住歡迎彈窗的按鈕)。
   const showOfflineModal = hasSeenWelcome && lastOfflineKills > 0 && !offlineModalDismissed;
+  // 強化石/技能書/寶石是期望值換算,短時間離線常常是0,湊成一句話、全部是0就不顯示這行,
+  // 避免出現「獲得 0 個強化石」這種沒意義的文字。
+  const offlineMaterialParts = [
+    lastOfflineEnhanceStones > 0 ? `${lastOfflineEnhanceStones} 個強化石` : null,
+    lastOfflineSkillBooks > 0 ? `${lastOfflineSkillBooks} 本技能書` : null,
+    lastOfflineGems > 0 ? `${lastOfflineGems} 顆寶石` : null,
+  ].filter((part): part is string => part !== null);
   const showDailyBonusModal = hasSeenWelcome && lastDailyLoginBonus !== null && !dailyBonusModalDismissed;
 
   // 跨分頁提醒角標(見 game/tabAttention.ts):判斷每個分頁圖示要不要顯示小紅點,
@@ -262,8 +272,9 @@ export default function HomeScreen() {
             </Pressable>
           </View>
           <Text style={styles.offlineModalText}>
-            離線期間擊敗了 {lastOfflineKills} 隻怪,{'\n'}獲得 {lastOfflineGain} 經驗、{lastOfflineCoins} 金幣{'\n'}
-            關卡推進到 第{stageProgress.stage}關‧第{stageProgress.subStage}小關
+            離線期間擊敗了 {lastOfflineKills} 隻怪,{'\n'}獲得 {lastOfflineGain} 經驗、{lastOfflineCoins} 金幣
+            {offlineMaterialParts.length > 0 ? `、${offlineMaterialParts.join('、')}` : ''}
+            {'\n'}關卡推進到 第{stageProgress.stage}關‧第{stageProgress.subStage}小關
           </Text>
         </View>
       </Modal>

@@ -123,7 +123,8 @@ export function upgradeSkillSlot(level: number, tier: JobTier): number {
 // 技能書掉落:原本比照 game/equipment.ts 的強化石/寶石掉落訂在4%,但技能書的花費曲線比
 // 強化石陡很多(見 skillSlotUpgradeBookCost 的指數成長),同樣4%換算下來後期進度慢到失衡,
 // 拉到8%單獨補償——強化石/寶石維持4%不變,兩者原本就服務不同的養成節奏。
-const SKILL_BOOK_DROP_CHANCE = 0.08;
+// export 出去給 game/offlineProgress.ts 算離線期間的期望值掉落用,單一真相來源。
+export const SKILL_BOOK_DROP_CHANCE = 0.08;
 
 export function rollSkillBookDrop(rng: () => number = Math.random): boolean {
   return rng() < SKILL_BOOK_DROP_CHANCE;

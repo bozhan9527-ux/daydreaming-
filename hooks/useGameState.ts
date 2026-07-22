@@ -453,6 +453,9 @@ interface GameState {
   lastOfflineGain: number;
   lastOfflineKills: number;
   lastOfflineCoins: number;
+  lastOfflineEnhanceStones: number;
+  lastOfflineSkillBooks: number;
+  lastOfflineGems: number;
   currentEncounter: Encounter | null;
   fightStartedAt: number | null;
   fightElapsedMs: number;
@@ -770,6 +773,9 @@ export const useGameState = create<GameState>((set, get) => ({
   lastOfflineGain: 0,
   lastOfflineKills: 0,
   lastOfflineCoins: 0,
+  lastOfflineEnhanceStones: 0,
+  lastOfflineSkillBooks: 0,
+  lastOfflineGems: 0,
   currentEncounter: null,
   fightStartedAt: null,
   fightElapsedMs: 0,
@@ -859,6 +865,16 @@ export const useGameState = create<GameState>((set, get) => ({
     );
     const coins = save.coins + offlineStageResult.coins + (dailyLoginBonus?.coins ?? 0);
 
+    // 離線期間的強化石/技能書/寶石掉落(見 game/offlineProgress.ts 的期望值計算),套用方式
+    // 跟前景 tickBattle 掉落到帳的寫法(grantBasicMaterial/逐一寶石類型)完全一致。
+    const nextEnhanceStones = grantBasicMaterial(save.enhanceStones, offlineStageResult.enhanceStonesGained);
+    const nextSkillBooks = grantBasicMaterial(save.skillBooks, offlineStageResult.skillBooksGained);
+    const nextGemCounts: GemCounts = { ...save.gemCounts };
+    for (const gemType of GEM_TYPES) {
+      const amount = offlineStageResult.gemsGained[gemType];
+      if (amount) nextGemCounts[gemType] = { ...nextGemCounts[gemType], 0: nextGemCounts[gemType][0] + amount };
+    }
+
     set({
       level,
       trigger: save.trigger,
@@ -882,9 +898,9 @@ export const useGameState = create<GameState>((set, get) => ({
       dungeon: applyDungeonTicketRegen(save.dungeon),
       secondaryJob: save.secondaryJob,
       itemInstances,
-      enhanceStones: save.enhanceStones,
-      gemCounts: save.gemCounts,
-      skillBooks: save.skillBooks,
+      enhanceStones: nextEnhanceStones,
+      gemCounts: nextGemCounts,
+      skillBooks: nextSkillBooks,
       stageProgress: offlineStageResult.stageProgress,
       totalStagesCleared: offlineStageResult.totalStagesCleared,
       ascensionPoints: save.ascensionPoints + offlineStageResult.ascensionPointsGained,
@@ -916,6 +932,9 @@ export const useGameState = create<GameState>((set, get) => ({
       lastOfflineGain: gainedExp,
       lastOfflineKills: offlineStageResult.kills,
       lastOfflineCoins: offlineStageResult.coins,
+      lastOfflineEnhanceStones: offlineStageResult.enhanceStonesGained,
+      lastOfflineSkillBooks: offlineStageResult.skillBooksGained,
+      lastOfflineGems: Object.values(offlineStageResult.gemsGained).reduce((sum, n) => sum + (n ?? 0), 0),
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,
