@@ -1,4 +1,5 @@
-import { Image, ImageSourcePropType, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Image, ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MATERIAL_TIER_LABELS, MATERIAL_TIERS, MaterialTier, TieredMaterialCounts } from '../game/materials';
 import { useGameState } from '../hooks/useGameState';
@@ -23,23 +24,47 @@ const ENHANCE_STONE_TIER_ICONS: Record<MaterialTier, ImageSourcePropType> = {
   5: require('../assets/sprites/materials/enhance_stone_tier5.png'),
 };
 
-interface MaterialRowProps {
-  title: string;
-  counts: TieredMaterialCounts;
-  icons: Record<MaterialTier, ImageSourcePropType>;
-}
+type SubView = 'skillbook' | 'enhanceStone';
 
-function MaterialRow({ title, counts, icons }: MaterialRowProps) {
+const SUB_VIEWS: { id: SubView; label: string }[] = [
+  { id: 'skillbook', label: '技能書' },
+  { id: 'enhanceStone', label: '強化石' },
+];
+
+// 材料分頁改成分頁式(技能書/強化石各自一個子檢視),8欄網格跟裝備分頁的「已擁有」/
+// 鑲嵌石分頁同一套版式規則——材料只有6階,不會真的塞滿8欄,但格子尺寸維持一致寬度,
+// 三個分頁看起來是同一套系統。
+export function MaterialBrowserPanel() {
+  const skillBooks = useGameState((state) => state.skillBooks);
+  const enhanceStones = useGameState((state) => state.enhanceStones);
+
+  const [subView, setSubView] = useState<SubView>('skillbook');
+
+  const counts: TieredMaterialCounts = subView === 'skillbook' ? skillBooks : enhanceStones;
+  const icons = subView === 'skillbook' ? SKILLBOOK_TIER_ICONS : ENHANCE_STONE_TIER_ICONS;
+
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={styles.container}>
+      <Text style={styles.hint}>
+        初階只能靠擊敗怪物掉落或商店購買,更高階要去「工坊」分頁的合成子分頁用兩本前一階換一本。
+      </Text>
+
+      <View style={styles.subNav}>
+        {SUB_VIEWS.map((view) => (
+          <Pressable
+            key={view.id}
+            style={[styles.subNavButton, subView === view.id && styles.subNavButtonActive]}
+            onPress={() => setSubView(view.id)}
+          >
+            <Text style={styles.subNavLabel}>{view.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
       <View style={styles.grid}>
         {MATERIAL_TIERS.map((tier) => (
           <View key={tier} style={styles.tile}>
-            <View style={styles.swatch}>
-              <Image source={icons[tier]} style={styles.icon} resizeMode="contain" />
-            </View>
-            <Text style={styles.tierLabel}>{MATERIAL_TIER_LABELS[tier]}</Text>
+            <Image source={icons[tier]} style={styles.icon} resizeMode="contain" />
             <Text style={styles.countLabel}>{counts[tier]}</Text>
           </View>
         ))}
@@ -48,70 +73,62 @@ function MaterialRow({ title, counts, icons }: MaterialRowProps) {
   );
 }
 
-export function MaterialBrowserPanel() {
-  const skillBooks = useGameState((state) => state.skillBooks);
-  const enhanceStones = useGameState((state) => state.enhanceStones);
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.hint}>
-        初階只能靠擊敗怪物掉落或商店購買,更高階要去「工坊」分頁的合成子分頁用兩本前一階換一本。
-      </Text>
-      <MaterialRow title="技能書" counts={skillBooks} icons={SKILLBOOK_TIER_ICONS} />
-      <MaterialRow title="強化石" counts={enhanceStones} icons={ENHANCE_STONE_TIER_ICONS} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     width: '100%',
     maxWidth: 280,
-    gap: 12,
+    gap: 8,
   },
   hint: {
     color: '#8a8a95',
     fontSize: 11,
     textAlign: 'center',
   },
-  section: {
+  subNav: {
+    flexDirection: 'row',
     gap: 6,
   },
-  sectionTitle: {
-    color: '#c9a94f',
-    fontSize: 13,
-    fontWeight: '700',
+  subNavButton: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
   },
+  subNavButtonActive: {
+    backgroundColor: '#4a4456',
+  },
+  subNavLabel: {
+    color: '#f2f2f2',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  // 8欄密集網格:280寬容器扣掉間距後,每格約30px才塞得下8欄——雖然材料只有6階不會塞滿,
+  // 格子寬度跟裝備分頁的「已擁有」/鑲嵌石分頁的密集網格保持一致。
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    justifyContent: 'flex-start',
+    gap: 4,
   },
   tile: {
+    width: 30,
+    height: 40,
     alignItems: 'center',
-    gap: 2,
-    width: 56,
-  },
-  swatch: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // 兩種材料圖示都已經套好階級色,這裡的深色底框只是維持格子邊界的視覺一致性。
+    gap: 1,
+    paddingTop: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#59462b',
     backgroundColor: '#1c1c24',
   },
   icon: {
-    width: 36,
-    height: 36,
-  },
-  tierLabel: {
-    color: '#f2f2f2',
-    fontSize: 10,
+    width: 22,
+    height: 22,
   },
   countLabel: {
-    color: '#8a8a95',
-    fontSize: 11,
+    color: '#f2f2f2',
+    fontSize: 10,
     fontWeight: '600',
   },
 });
