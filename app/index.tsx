@@ -171,12 +171,10 @@ export default function HomeScreen() {
   // 「技能」併進「職業」分頁、「裝備」併進「背包」分頁當子分頁後(見 panelTabs.tsx),
   // TabBar 的角標只認頂層分頁 id(job/inventory),原本各自獨立的 skill/equipment 提醒條件
   // 用 OR 併到對應的頂層分頁上,子分頁裡有事可做時外層分頁圖示照樣會亮紅點。
-  // 技能子分頁從「職業」搬到「背包」的「狀態」子分頁(見 CharacterStatusPanel.tsx),
-  // skill 角標跟著改餵給 inventory,不再併進 job。
   const topLevelTabAttention = {
     ...tabAttention,
-    job: tabAttention.job,
-    inventory: tabAttention.inventory || tabAttention.equipment || tabAttention.skill,
+    job: tabAttention.job || tabAttention.skill,
+    inventory: tabAttention.inventory || tabAttention.equipment,
   };
 
   return (
