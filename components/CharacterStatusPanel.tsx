@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getArchetypeComposition, getJobTitle } from '../game/combat';
+import { calcCombatMultiplier, getArchetypeComposition, getJobTitle } from '../game/combat';
 import {
   EquipmentSlot,
   getEquipmentBonusTotalsFull,
@@ -9,12 +9,21 @@ import {
   SLOT_Z_ORDER,
 } from '../game/equipment';
 import { heroAttackPower, heroDefensePower, heroMaxHp } from '../game/heroHealth';
+import { getPassiveBonusValue } from '../game/skillTree';
 import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { formatBonus } from './itemFormatting';
 import { ItemIcon } from './ItemIcon';
 import { PixelSprite } from './PixelSprite';
+
+// 數值為0時用暗色淡化,非零維持一般文字色——跟旁邊有意義的數字用同樣視覺權重呈現,
+// 會讓玩家要花力氣從一堆「沒有」裡面找「有」。原本是 JobSelector.tsx 的 HeroStatusPanel
+// 專用元件,整組搬過來時一起帶過來。
+function ZeroDimmed({ value }: { value: number }) {
+  const pct = Math.round(value * 100);
+  return <Text style={pct === 0 && styles.jobStatusValueZero}>{pct}%</Text>;
+}
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   back: '背飾',
@@ -53,17 +62,25 @@ export function CharacterStatusPanel() {
   const equipment = useGameState((state) => state.equipment);
   const itemInstances = useGameState((state) => state.itemInstances);
   const heroHp = useGameState((state) => state.heroHp);
+  const skillTree = useGameState((state) => state.skillTree);
+  const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const showToast = useToast((state) => state.show);
 
   const title = hasChosenJob ? getJobTitle(job.archetype, job.branch, tier) : '學生';
   const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const substatTotals = getSubstatTotals(equipment, itemInstances);
   const heroSchool = getArchetypeComposition(job.archetype).damageType;
+  const isPhysical = heroSchool === 'physical';
   const attackSubstat = heroSchool === 'physical' ? substatTotals.physicalAttack : substatTotals.magicAttack;
   const resistanceSubstat = heroSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
   const maxHp = heroMaxHp(level.level);
   const attackPower = heroAttackPower(level.level, tier, attackSubstat);
   const defensePower = heroDefensePower(level.level, tier, resistanceSubstat);
+  // 吸血/回血:裝備素質+passive3被動加成的完整合併值——原本是 JobSelector.tsx 的
+  // HeroStatusPanel 專用計算,整組搬過來時一起帶過來。
+  const passive3Level = hasChosenJob ? skillTree[job.archetype].passive3 : studentSkillTree.passive3;
+  const totalLifesteal = substatTotals.lifesteal + getPassiveBonusValue(passive3Level);
+  const totalHpRegen = substatTotals.hpRegen + getPassiveBonusValue(passive3Level);
 
   function handleSlotPress(slot: EquipmentSlot) {
     const itemId = equipment[slot];
@@ -148,6 +165,24 @@ export function CharacterStatusPanel() {
             </View>
           );
         })}
+      </View>
+
+      {/* 以下原本是「職業」分頁 JobSelector.tsx 的 HeroStatusPanel,整組搬過來這裡,
+          職業分頁那邊已經移除,不再重複顯示。 */}
+      <Text style={styles.sectionTitle}>職業戰鬥數值</Text>
+      <View style={styles.jobStatusCard}>
+        <Text style={[styles.jobStatusLine, isPhysical && styles.jobStatusLineHighlight]}>
+          物理:爆擊率 <ZeroDimmed value={substatTotals.physicalCritRate} /> / 爆擊傷害 +
+          <ZeroDimmed value={substatTotals.physicalCritDamage} />
+        </Text>
+        <Text style={[styles.jobStatusLine, !isPhysical && styles.jobStatusLineHighlight]}>
+          魔法:爆擊率 <ZeroDimmed value={substatTotals.magicCritRate} /> / 爆擊傷害 +
+          <ZeroDimmed value={substatTotals.magicCritDamage} />
+        </Text>
+        <Text style={styles.jobStatusLine}>
+          吸血 <ZeroDimmed value={totalLifesteal} />　自動回血 <ZeroDimmed value={totalHpRegen} />
+        </Text>
+        <Text style={styles.jobStatusLine}>職業階級倍率 x{calcCombatMultiplier(job.archetype, tier).toFixed(2)}</Text>
       </View>
     </View>
   );
@@ -263,5 +298,26 @@ const styles = StyleSheet.create({
     color: '#8a8a95',
     fontSize: 9,
     textAlign: 'center',
+  },
+  jobStatusCard: {
+    width: '100%',
+    gap: 3,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#1c1c24',
+    borderWidth: 1,
+    borderColor: '#2a2a35',
+  },
+  jobStatusLine: {
+    color: '#c8c8d0',
+    fontSize: 11,
+  },
+  jobStatusLineHighlight: {
+    color: '#c9a94f',
+    fontWeight: '600',
+  },
+  jobStatusValueZero: {
+    color: '#5a5a65',
+    fontWeight: '400',
   },
 });

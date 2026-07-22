@@ -6,17 +6,13 @@ import {
   calcCombatMultiplier,
   canUnlockDualClass,
   DUAL_CLASS_UNLOCK_LEVEL,
-  getArchetypeComposition,
   getJobTitle,
   JobBranch,
   JobTier,
   TIER_UNLOCK_LEVELS,
 } from '../game/combat';
-import { getEquipmentBonusTotalsFull, getSubstatTotals } from '../game/equipment';
-import { heroAttackPower, heroDefensePower, heroMaxHp } from '../game/heroHealth';
 import {
   ACTIVE_SLOT_IDS,
-  getPassiveBonusValue,
   getSkillSlotBonusDescription,
   isPassiveSlot,
   PASSIVE_SLOT_IDS,
@@ -68,77 +64,6 @@ function getSlotFlavor(archetype: Archetype, tier: JobTier, slot: SkillSlotId): 
     return { name: SKILL_SLOT_NAMES[archetype][slot], description: SKILL_SLOT_DESCRIPTIONS[archetype][slot] };
   }
   return getTierSkillFlavor(archetype, tier, slot);
-}
-
-// 數值為0時用暗色淡化,非零維持一般文字色——角色狀態這排素質很多欄位新玩家/沒投資的方向
-// 常年停在0%,跟旁邊有意義的數字用同樣視覺權重呈現,會讓玩家要花力氣從一堆「沒有」裡面
-// 找「有」。只淡化這個數字本身,不影響外層 Text 既有的 highlight 樣式(該金色高亮的整行
-// 還是金色,只是裡面剛好是0的那個數字不會搶戲)。
-function ZeroDimmed({ value }: { value: number }) {
-  const pct = Math.round(value * 100);
-  return <Text style={pct === 0 && styles.statusValueZero}>{pct}%</Text>;
-}
-
-// 角色狀態面板:只在第一層(archetypes)顯示,獨立呼叫 useGameState 抓自己需要的資料——
-// 這一層本來就沒有像 TierList/SkillDetailPanel 那樣被父層挑選/篩選過的資料要傳,
-// 直接在元件內部訂閱比多繞一層 props 更直接,跟 JobSelector() 本體的寫法一致。
-// 物理/魔法爆擊數字兩邊都顯示(不管玩家現在主職是哪邊),只有跟目前職業系別相符的
-// 那個區塊套金色高亮,呼應 archetypeIconWrapPrimary 既有的金框視覺語彙。
-function HeroStatusPanel() {
-  const heroHp = useGameState((state) => state.heroHp);
-  const equipment = useGameState((state) => state.equipment);
-  const itemInstances = useGameState((state) => state.itemInstances);
-  const level = useGameState((state) => state.level);
-  const job = useGameState((state) => state.job);
-  const skillTree = useGameState((state) => state.skillTree);
-  const studentSkillTree = useGameState((state) => state.studentSkillTree);
-  const hasChosenJob = useGameState((state) => state.hasChosenJob);
-  const currentTier = useGameState((state) => state.jobTier);
-
-  const substatTotals = getSubstatTotals(equipment, itemInstances);
-  const bonusTotals = getEquipmentBonusTotalsFull(equipment, itemInstances);
-  const heroSchool = getArchetypeComposition(job.archetype).damageType;
-  const isPhysical = heroSchool === 'physical';
-  // 吸血/回血:裝備素質+passive3 被動加成的完整合併值(不是只顯示裝備那份),
-  // 跟攻擊力/爆擊等既有幾行一樣顯示「已經算完全部加成」的最終數字。
-  const passive3Level = hasChosenJob ? skillTree[job.archetype].passive3 : studentSkillTree.passive3;
-  const totalLifesteal = substatTotals.lifesteal + getPassiveBonusValue(passive3Level);
-  const totalHpRegen = substatTotals.hpRegen + getPassiveBonusValue(passive3Level);
-
-  return (
-    <View style={styles.statusCard}>
-      <Text style={styles.statusTitle}>角色狀態</Text>
-      <Text style={styles.statusLine}>
-        Lv{level.level} · HP {heroHp}/{heroMaxHp(level.level)}
-      </Text>
-      <Text style={styles.statusLine}>
-        物理防禦 {Math.round(heroDefensePower(level.level, currentTier, substatTotals.physicalResistance))}　魔法防禦{' '}
-        {Math.round(heroDefensePower(level.level, currentTier, substatTotals.magicResistance))}
-      </Text>
-      <Text style={[styles.statusLine, isPhysical && styles.statusLineHighlight]}>
-        物理攻擊力 {Math.round(heroAttackPower(level.level, currentTier, substatTotals.physicalAttack))}
-      </Text>
-      <Text style={[styles.statusLine, !isPhysical && styles.statusLineHighlight]}>
-        魔法攻擊力 {Math.round(heroAttackPower(level.level, currentTier, substatTotals.magicAttack))}
-      </Text>
-      <Text style={[styles.statusLine, isPhysical && styles.statusLineHighlight]}>
-        物理:爆擊率 <ZeroDimmed value={substatTotals.physicalCritRate} /> / 爆擊傷害 +
-        <ZeroDimmed value={substatTotals.physicalCritDamage} />
-      </Text>
-      <Text style={[styles.statusLine, !isPhysical && styles.statusLineHighlight]}>
-        魔法:爆擊率 <ZeroDimmed value={substatTotals.magicCritRate} /> / 爆擊傷害 +
-        <ZeroDimmed value={substatTotals.magicCritDamage} />
-      </Text>
-      <Text style={styles.statusLine}>
-        吸血 <ZeroDimmed value={totalLifesteal} />　自動回血 <ZeroDimmed value={totalHpRegen} />
-      </Text>
-      <Text style={styles.statusLine}>
-        總加成:經驗+<ZeroDimmed value={bonusTotals.exp} /> / 金幣+<ZeroDimmed value={bonusTotals.coins} /> / 速度+
-        <ZeroDimmed value={bonusTotals.speed} />
-      </Text>
-      <Text style={styles.statusLine}>職業階級倍率 x{calcCombatMultiplier(job.archetype, currentTier).toFixed(2)}</Text>
-    </View>
-  );
 }
 
 // 第一層:6個職業各自一個icon,不再用「物理/魔法 x 近戰/遠程/輔助」的文字分組樹狀圖——
@@ -482,7 +407,6 @@ export function JobSelector() {
 
       {view === 'archetypes' && (
         <>
-          <HeroStatusPanel />
           <ArchetypeGrid
             job={job.archetype}
             secondaryJob={secondaryJob}
@@ -548,33 +472,6 @@ const styles = StyleSheet.create({
     color: '#c9a94f',
     fontSize: 14,
     fontWeight: '600',
-  },
-  statusCard: {
-    width: '100%',
-    gap: 3,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: '#1c1c24',
-    borderWidth: 1,
-    borderColor: '#2a2a35',
-  },
-  statusTitle: {
-    color: '#f2f2f2',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  statusLine: {
-    color: '#c8c8d0',
-    fontSize: 11,
-  },
-  statusLineHighlight: {
-    color: '#c9a94f',
-    fontWeight: '600',
-  },
-  statusValueZero: {
-    color: '#5a5a65',
-    fontWeight: '400',
   },
   archetypeGrid: {
     flexDirection: 'row',
