@@ -3,20 +3,23 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CharacterStatusPanel } from './CharacterStatusPanel';
 import { EquipmentPanel } from './EquipmentPanel';
+import { GemBrowsePanel } from './GemBrowsePanel';
 import { MaterialBrowserPanel } from './MaterialBrowserPanel';
 import { ResourceBar } from './ResourceBar';
 
-type HostView = 'status' | 'equipment' | 'materials';
+type HostView = 'status' | 'equipment' | 'materials' | 'gems';
 
 const HOST_VIEWS: { id: HostView; label: string }[] = [
   { id: 'status', label: '狀態' },
   { id: 'equipment', label: '裝備' },
   { id: 'materials', label: '材料' },
+  { id: 'gems', label: '鑲嵌石' },
 ];
 
-// 分頁順序改成 狀態/裝備/材料(原本的「背包」分頁併進「裝備」,見 EquipmentPanel.tsx 的
-// 「已擁有」子檢視)。ResourceBar(強化石/寶石總量)原本放在「背包」分頁裡,那個分頁拆掉後
-// 移到這裡當四個子分頁共用的常駐列,不管切到哪個子分頁都看得到。
+// 分頁順序:狀態/裝備/材料/鑲嵌石(原本的「背包」分頁併進「裝備」,見 EquipmentPanel.tsx 的
+// 「已擁有」子檢視;鑲嵌石是新增的唯讀瀏覽分頁,操作維持在工坊的鑲嵌子分頁)。ResourceBar
+// (強化石/寶石總量)原本放在「背包」分頁裡,那個分頁拆掉後移到這裡當四個子分頁共用的
+// 常駐列,不管切到哪個子分頁都看得到。
 export function InventoryTab() {
   const [hostView, setHostView] = useState<HostView>('status');
 
@@ -37,6 +40,7 @@ export function InventoryTab() {
       {hostView === 'status' && <CharacterStatusPanel />}
       {hostView === 'equipment' && <EquipmentPanel />}
       {hostView === 'materials' && <MaterialBrowserPanel />}
+      {hostView === 'gems' && <GemBrowsePanel />}
     </View>
   );
 }
