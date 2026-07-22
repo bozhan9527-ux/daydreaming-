@@ -1,33 +1,28 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { EquipmentSlot } from '../game/equipment';
 import { CharacterStatusPanel } from './CharacterStatusPanel';
 import { EquipmentPanel } from './EquipmentPanel';
-import { InventoryPanel } from './InventoryPanel';
 import { MaterialBrowserPanel } from './MaterialBrowserPanel';
+import { ResourceBar } from './ResourceBar';
 
-type HostView = 'bag' | 'equipment' | 'materials' | 'status';
+type HostView = 'status' | 'equipment' | 'materials';
 
 const HOST_VIEWS: { id: HostView; label: string }[] = [
-  { id: 'bag', label: '背包' },
+  { id: 'status', label: '狀態' },
   { id: 'equipment', label: '裝備' },
   { id: 'materials', label: '材料' },
-  { id: 'status', label: '狀態' },
 ];
 
-// 「裝備」原本是獨立頂層分頁,併進「背包」分頁當子分頁——兩邊原本各自維護一份「目前選擇
-// 部位」的狀態,玩家在裝備分頁選了頭飾、切去背包分頁看到的還是上次選的主手武器,等於同一個
-// 決策要在兩個地方各做一次。selectedSlot 提到這裡共用,兩個子分頁看到的永遠是同一個選取
-// 結果,子分頁各自的插槽選擇列(裝備:紙娃娃式左右插槽 / 背包:單排篩選列)UI 維持原樣不變
-// (用途不同,一個是「你身上穿什麼」總覽、一個是「這個部位還有哪些沒穿的款式」清單),只是
-// 底層狀態同步。
+// 分頁順序改成 狀態/裝備/材料(原本的「背包」分頁併進「裝備」,見 EquipmentPanel.tsx 的
+// 「已擁有」子檢視)。ResourceBar(強化石/寶石總量)原本放在「背包」分頁裡,那個分頁拆掉後
+// 移到這裡當四個子分頁共用的常駐列,不管切到哪個子分頁都看得到。
 export function InventoryTab() {
-  const [hostView, setHostView] = useState<HostView>('bag');
-  const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
+  const [hostView, setHostView] = useState<HostView>('status');
 
   return (
     <View style={styles.container}>
+      <ResourceBar />
       <View style={styles.hostNav}>
         {HOST_VIEWS.map((view) => (
           <Pressable
@@ -39,10 +34,9 @@ export function InventoryTab() {
           </Pressable>
         ))}
       </View>
-      {hostView === 'bag' && <InventoryPanel selectedSlot={selectedSlot} onSelectSlot={setSelectedSlot} />}
-      {hostView === 'equipment' && <EquipmentPanel selectedSlot={selectedSlot} onSelectSlot={setSelectedSlot} />}
-      {hostView === 'materials' && <MaterialBrowserPanel />}
       {hostView === 'status' && <CharacterStatusPanel />}
+      {hostView === 'equipment' && <EquipmentPanel />}
+      {hostView === 'materials' && <MaterialBrowserPanel />}
     </View>
   );
 }

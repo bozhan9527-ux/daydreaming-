@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   EquipmentBonusStat,
@@ -14,6 +14,7 @@ import {
   getRerollCost,
   getSubstatTotals,
   isItemUnlocked,
+  SLOT_Z_ORDER,
 } from '../game/equipment';
 import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
@@ -83,23 +84,33 @@ const EMPTY_ICON_COLOR = '#4a4456';
 // 圖示來源(equipmentIcons.ts/weapons.ts)配合勇者本體密度提升,整張放大了3倍,
 // 這裡用 2/3 抵銷回來,維持清單/選槽按鈕原本的物理尺寸不變。
 const ICON_PIXEL_SIZE = 2 / 3;
+// 8欄密集網格用的縮小版圖示尺寸——「已擁有」瀏覽格數多,縮小到能一行塞8格。
+const DENSE_ICON_PIXEL_SIZE = 0.4;
+const DENSE_AI_HEIGHT = 22;
 // 插槽按鈕是長方形(圖示+文字標籤,不是正方形),9宮格外框角落尺寸要比單純的正方形插槽小,
 // 邊框段才有足夠空間撐開,不會角落花紋直接連在一起。
 const SLOT_FRAME_CORNER = 14;
 const SLOT_FRAME_EDGE = 5;
 
-// 背包已經拆成獨立頂層分頁(見 components/InventoryPanel.tsx),這裡收納鑲嵌——
-// 圍繞「身上穿的這件裝備」在操作,收在裝備分頁底下比較好找。強化跟鑲嵌都已經移到
-// 「工坊」分頁(見 WorkshopTab.tsx),跟合成分頁放在一起,不再收在這裡。
-type SubView = 'worn' | 'shop';
+// 「已擁有」瀏覽的部位篩選,比裝備部位多一個「全部」——原本獨立的「背包」分頁(瀏覽已擁有
+// 款式)併進這裡當第二個子檢視,「全部」是新增的(背包分頁原本沒有跨部位總覽)。
+type OwnedSlotFilter = 'all' | EquipmentSlot;
+const OWNED_SLOT_FILTERS: OwnedSlotFilter[] = ['all', ...SLOT_Z_ORDER];
+const OWNED_SLOT_FILTER_LABELS: Record<OwnedSlotFilter, string> = {
+  all: '全部',
+  ...SLOT_LABELS,
+};
+
+type SubView = 'worn' | 'owned' | 'shop';
 
 const SUB_VIEWS: { id: SubView; label: string }[] = [
   { id: 'worn', label: '穿戴' },
+  { id: 'owned', label: '已擁有' },
   { id: 'shop', label: '商店' },
 ];
 
 // 篩選:生成式目錄一個部位最多50個等級檔,商店清單(還沒買的款式)常常一次塞滿一長串——
-// 跟 InventoryPanel.tsx 背包分頁同一套篩選維度(主加成類型),排序沿用既有的依需求等級規則
+// 跟「已擁有」子檢視同一套篩選維度(主加成類型),排序沿用既有的依需求等級規則
 // (見下面 items 的 .sort),不重複加一顆排序切換鈕。
 type StatFilter = 'all' | EquipmentBonusStat;
 
@@ -124,15 +135,10 @@ function SubstatCell({ label, value }: { label: string; value: number }) {
   );
 }
 
-interface EquipmentPanelProps {
-  selectedSlot: EquipmentSlot;
-  onSelectSlot: (slot: EquipmentSlot) => void;
-}
-
-// selectedSlot 改由外層(InventoryTab.tsx)控制、透過 props 傳入——裝備分頁併進背包分頁
-// 底下當子分頁後,「背包」子分頁的部位篩選列要跟這裡的插槽選取共用同一份狀態,不然玩家在
-// 「背包」選了頭飾、切去「裝備」子分頁看到的還是上次的主手武器,兩邊各自為政。
-export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelProps) {
+// 「裝備」分頁:紙娃娃穿戴(worn)+已擁有款式瀏覽(owned,原「背包」分頁併過來)+商店
+// (shop)三個子檢視。selectedSlot 不再由外層(InventoryTab.tsx)控制——「背包」分頁拆掉
+// 之後不需要再跨分頁同步選取狀態,改回這個元件自己管理。
+export function EquipmentPanel() {
   const equipment = useGameState((state) => state.equipment);
   const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
   const itemInstances = useGameState((state) => state.itemInstances);
@@ -146,11 +152,14 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
   const rerollEquipmentSubstats = useGameState((state) => state.rerollEquipmentSubstats);
   const showToast = useToast((state) => state.show);
 
+  const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
   const [subView, setSubView] = useState<SubView>('worn');
   const [shopStatFilter, setShopStatFilter] = useState<StatFilter>('all');
-  // 點商店清單裡的道具原本會直接買/裝上去,只靠事後跳出的 toast 通知——玩家點下去前完全
-  // 看不到屬性,等於盲猜。改成先跳出預覽卡片顯示完整屬性,玩家自己按「裝備」或「卸下」才會
-  // 真的改動裝備狀態,pickItem 的購買/裝備邏輯不變,只是延後到按鈕按下才觸發。
+  const [ownedSlotFilter, setOwnedSlotFilter] = useState<OwnedSlotFilter>('all');
+  const [ownedStatFilter, setOwnedStatFilter] = useState<StatFilter>('all');
+  // 點商店/已擁有清單裡的道具原本會直接買/裝上去,只靠事後跳出的 toast 通知——玩家點下去前
+  // 完全看不到屬性,等於盲猜。改成先跳出預覽卡片顯示完整屬性,玩家自己按「裝備」或「卸下」
+  // 才會真的改動裝備狀態,pickItem 的購買/裝備邏輯不變,只是延後到按鈕按下才觸發。
   const [previewItem, setPreviewItem] = useState<EquipmentItem | null>(null);
 
   const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
@@ -161,14 +170,22 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
   const items = [...getEquippableItemsForSlot(selectedSlot, job.archetype, job.branch)].sort(
     (a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0)
   );
-  // 商店:還沒擁有(不管有沒有等級鎖)的款式;已擁有但沒穿的背包款式改到獨立的
-  // 「背包」分頁(components/InventoryPanel.tsx)去挑,「穿戴」畫面只顯示目前穿著的那一件。
-  // shopItems 維持「全部未擁有款式」不受篩選影響,子分頁按鈕上的數字才是「這個部位總共還有
+  // 商店:還沒擁有(不管有沒有等級鎖)的款式;已擁有但沒穿的款式改到「已擁有」子檢視挑。
+  // shopItems 維持「全部未擁有款式」不受篩選影響,子檢視按鈕上的數字才是「這個部位總共還有
   // 幾款沒收集」;篩選只影響下面實際渲染的清單(filteredShopItems)。
   const shopItems = items.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
   const filteredShopItems = shopItems.filter(
     (item) => shopStatFilter === 'all' || item.bonus.stat === shopStatFilter
   );
+
+  // 已擁有:依 ownedSlotFilter 決定要看單一部位還是全部部位合併,'all' 時把9個部位的
+  // 已擁有款式串起來,依需求等級排序——跨部位混排時光靠等級排序足夠找到想穿的那件。
+  const ownedSlots = ownedSlotFilter === 'all' ? SLOT_Z_ORDER : [ownedSlotFilter];
+  const ownedItems = ownedSlots
+    .flatMap((slot) => getEquippableItemsForSlot(slot, job.archetype, job.branch))
+    .filter((item) => isItemUnlocked(unlockedItemIds, item.id))
+    .filter((item) => ownedStatFilter === 'all' || item.bonus.stat === ownedStatFilter)
+    .sort((a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0));
 
   function pickItem(item: EquipmentItem) {
     // equip()/purchaseItem() 是第一次擁有這件裝備時擲隨機/隱藏素質的地方(同步 set),
@@ -220,7 +237,7 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
       <Pressable
         key={slot}
         style={[styles.slotButton, slotItem && styles.slotButtonFilled, active && styles.slotButtonActive]}
-        onPress={() => onSelectSlot(slot)}
+        onPress={() => setSelectedSlot(slot)}
       >
         {slotItem && (
           <NineSliceFrame
@@ -245,10 +262,8 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
     );
   }
 
-  // 背包分頁拆出去之後,這裡只剩「商店」會用到這個渲染,不用再分 bag/shop 兩種模式
-  // (背包款式的鑑定/點擊裝備邏輯搬到 components/InventoryPanel.tsx 去了)。改成1:1方框icon
-  // 方格,點擊只開預覽(ItemPreviewModal),不再直接顯示文字名稱/價格——跟背包分頁的
-  // 道具方格共用同一套「先看icon,點了才看到完整資訊」的瀏覽習慣。
+  // 改成1:1方框icon方格,點擊只開預覽(ItemPreviewModal),不再直接顯示文字名稱/價格——
+  // 商店/已擁有共用同一套「先看icon,點了才看到完整資訊」的瀏覽習慣。
   function renderShopItemTile(item: EquipmentItem) {
     const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
     return (
@@ -260,6 +275,21 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
       >
         <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={30} />
         {locked && <Text style={styles.itemTileLockLabel}>Lv{item.requiredLevel}</Text>}
+      </Pressable>
+    );
+  }
+
+  // 已擁有清單用8欄密集網格(見 DENSE_ICON_PIXEL_SIZE/DENSE_AI_HEIGHT),款式數量多、
+  // 一次能看到更多格比大圖示重要;目前裝備的那件加一圈亮框標示。
+  function renderOwnedItemTile(item: EquipmentItem) {
+    const equipped = equipment[item.slot] === item.id;
+    return (
+      <Pressable
+        key={item.id}
+        style={[styles.denseTile, equipped && styles.denseTileEquipped]}
+        onPress={() => setPreviewItem(item)}
+      >
+        <ItemIcon item={item} color={item.color} pixelSize={DENSE_ICON_PIXEL_SIZE} aiHeight={DENSE_AI_HEIGHT} />
       </Pressable>
     );
   }
@@ -349,9 +379,43 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
               </Pressable>
             </>
           ) : (
-            <Text style={styles.wornEmptyText}>這個部位還沒有裝備,去「背包」或「商店」挑一件</Text>
+            <Text style={styles.wornEmptyText}>這個部位還沒有裝備,去「已擁有」或「商店」挑一件</Text>
           )}
         </View>
+      )}
+
+      {subView === 'owned' && (
+        <>
+          <View style={styles.slotFilterRow}>
+            {OWNED_SLOT_FILTERS.map((filter) => (
+              <Pressable
+                key={filter}
+                style={[styles.slotFilterChip, ownedSlotFilter === filter && styles.filterChipActive]}
+                onPress={() => setOwnedSlotFilter(filter)}
+              >
+                <Text style={styles.filterChipLabel}>{OWNED_SLOT_FILTER_LABELS[filter]}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.filterRow}>
+            {STAT_FILTERS.map((filter) => (
+              <Pressable
+                key={filter}
+                style={[styles.filterChip, ownedStatFilter === filter && styles.filterChipActive]}
+                onPress={() => setOwnedStatFilter(filter)}
+              >
+                <Text style={styles.filterChipLabel}>{STAT_FILTER_LABELS[filter]}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.denseGrid}>
+            {ownedItems.length === 0 ? (
+              <Text style={styles.wornEmptyText}>還沒有擁有符合這個篩選條件的款式</Text>
+            ) : (
+              ownedItems.map(renderOwnedItemTile)
+            )}
+          </View>
+        </>
       )}
 
       {subView === 'shop' && (
@@ -384,7 +448,7 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
           item={previewItem}
           instance={itemInstances[previewItem.id]}
           coins={coins}
-          isEquipped={equipment[selectedSlot] === previewItem.id}
+          isEquipped={equipment[previewItem.slot] === previewItem.id}
           owned={isItemUnlocked(unlockedItemIds, previewItem.id)}
           onClose={() => setPreviewItem(null)}
           onEquipOrBuy={() => {
@@ -392,7 +456,7 @@ export function EquipmentPanel({ selectedSlot, onSelectSlot }: EquipmentPanelPro
             setPreviewItem(null);
           }}
           onUnequip={() => {
-            unequip(selectedSlot);
+            unequip(previewItem.slot);
             setPreviewItem(null);
           }}
           onIdentify={() => handleIdentify(previewItem)}
@@ -441,8 +505,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     textAlign: 'center',
   },
-  // 選取中狀態統一用藍色(#6ab0e0)當「互動中/選取中」訊號色,金色專門留給裝飾性外框——
-  // 跟背包分頁的插槽選取樣式對齊,不要兩個分頁各用一套顏色語言。
+  // 選取中狀態統一用藍色(#6ab0e0)當「互動中/選取中」訊號色,金色專門留給裝飾性外框。
   slotButtonActive: {
     backgroundColor: '#3d3450',
     shadowColor: '#6ab0e0',
@@ -581,6 +644,42 @@ const styles = StyleSheet.create({
     bottom: 2,
     color: '#8a8a95',
     fontSize: 9,
+  },
+  // 「已擁有」8欄密集網格:280寬容器扣掉間距後,每格約30px才塞得下8欄。
+  denseGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    gap: 4,
+  },
+  denseTile: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#59462b',
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  denseTileEquipped: {
+    borderColor: '#5fa563',
+    backgroundColor: '#243424',
+  },
+  slotFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  slotFilterChip: {
+    paddingVertical: 3,
+    paddingHorizontal: 7,
+    borderRadius: 10,
+    backgroundColor: '#1c1c24',
+    borderWidth: 1,
+    borderColor: '#2a2a35',
   },
   filterRow: {
     flexDirection: 'row',
