@@ -9,12 +9,14 @@ import {
   SLOT_Z_ORDER,
 } from '../game/equipment';
 import { heroAttackPower, heroDefensePower, heroMaxHp } from '../game/heroHealth';
+import { isTabUnlocked, tabUnlockLevel } from '../game/onboarding';
 import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 import { formatBonus } from './itemFormatting';
 import { ItemIcon } from './ItemIcon';
 import { PixelSprite } from './PixelSprite';
+import { SkillPanel } from './SkillPanel';
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   back: '背飾',
@@ -42,9 +44,12 @@ function StatCell({ label, value }: { label: string; value: number }) {
 }
 
 // 角色狀態總覽:數值全部從既有的裝備/等級公式即算即用(getEquipmentBonusTotalsFull/
-// getSubstatTotals/heroAttackPower...),不新增任何追蹤欄位——跟「裝備」子分頁頂部的
+// getSubstatTotals/heroAttackPower...),不新增任何追蹤欄位——跟「裝備」分頁頂部的
 // 總加成/素質格是同一份計算,只是這裡額外加上戰鬥力數字(攻擊/防禦/血量)跟已裝備物品
 // 總覽,獨立成一個不用先選插槽就能看的總覽頁。
+// 技能面板(見 SkillPanel.tsx)整組從「職業」分頁搬過來接在下方:技能升級按鈕需要先在
+// 面板裡點選一個技能格才知道要升哪個,選格跟按鈕綁在同一個元件裡,不能只搬「等級顯示」
+// 過來、按鈕留在原地(兩邊會斷開),所以連同選格互動一起搬,「職業」分頁只剩選職業本身。
 export function CharacterStatusPanel() {
   const level = useGameState((state) => state.level);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
@@ -54,6 +59,9 @@ export function CharacterStatusPanel() {
   const itemInstances = useGameState((state) => state.itemInstances);
   const heroHp = useGameState((state) => state.heroHp);
   const showToast = useToast((state) => state.show);
+
+  const skillUnlocked = isTabUnlocked('skill', level.level, hasChosenJob);
+  const skillUnlockLevel = tabUnlockLevel('skill');
 
   const title = hasChosenJob ? getJobTitle(job.archetype, job.branch, tier) : '學生';
   const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
@@ -149,6 +157,13 @@ export function CharacterStatusPanel() {
           );
         })}
       </View>
+
+      <Text style={styles.sectionTitle}>技能</Text>
+      {skillUnlocked ? (
+        <SkillPanel />
+      ) : (
+        <Text style={styles.skillLockedHint}>Lv{skillUnlockLevel} 解鎖技能</Text>
+      )}
     </View>
   );
 }
@@ -263,5 +278,11 @@ const styles = StyleSheet.create({
     color: '#8a8a95',
     fontSize: 9,
     textAlign: 'center',
+  },
+  skillLockedHint: {
+    color: '#8a8a95',
+    fontSize: 11,
+    textAlign: 'center',
+    paddingVertical: 8,
   },
 });
