@@ -1,14 +1,17 @@
 // 離線期間讓「關卡進度」也真的推進,不是只補經驗值——沿用即時戰鬥(hooks/useGameState.ts的
 // tickBattle)同一套規則(每小關5殺、魔王小關1殺晉級、大魔王觸發轉生點數),但簡化成不擲稀有度
-// 亂數(直接用平均值)、不觸發裝備/寵物/轉職碎片這類「一次性、有意義內容」的掉落/技能/爆擊/成就,
-// 維持「離線是簡化版」的既有定位。強化石/寶石/技能書這三種純數量材料是例外——用擊殺數×掉落機率
-// 算期望值(無條件四捨五入),不逐次擲亂數,一樣不違背「離線=期望值計算、不加RNG」的精神。
+// 亂數(直接用平均值)、不觸發寵物/轉職碎片這類看運氣的稀有掉落/技能/爆擊/成就,維持「離線是
+// 簡化版」的既有定位。強化石/寶石/技能書/裝備這四種掉落是例外——用擊殺數×掉落機率算期望次數
+// (無條件四捨五入),不逐次擲「有沒有掉」的亂數,一樣不違背「離線=期望值計算、不加RNG」的精神;
+// 裝備因為每次掉落還要決定「掉到哪一件」,這裡只回傳期望掉落次數(equipmentDropCount),實際
+// 選件邏輯留在 game/equipment.ts 的 rollOfflineEquipmentDrops,呼叫端(useGameState.ts的load())
+// 自己組裝,offlineProgress.ts 不需要認識 archetype/branch/unlockedItemIds 這些細節。
 // 獨立成一個檔案而不是塞進 game/battle.ts,是因為 battle.ts 的既有設計刻意不認識關卡系統的
 // StageProgress 結構(見 battle.ts 的 generateEncounter 說明);這裡是兩邊規則的交會點,
 // 跟 tickBattle 本身是同樣定位,只是拆出來成純函式方便離線結算重用/測試。
 import { getCycleCount } from './ascension';
 import { coinsForRarity } from './currency';
-import { ENHANCE_STONE_DROP_CHANCE, GEM_DROP_CHANCE, GEM_TYPES, GemType } from './equipment';
+import { ENHANCE_STONE_DROP_CHANCE, EQUIPMENT_DROP_CHANCE, GEM_DROP_CHANCE, GEM_TYPES, GemType } from './equipment';
 import { monsterHp } from './heroHealth';
 import { SKILL_BOOK_DROP_CHANCE } from './skillTree';
 import {
@@ -46,6 +49,7 @@ export interface OfflineStageProgressResult {
   enhanceStonesGained: number;
   skillBooksGained: number;
   gemsGained: Partial<Record<GemType, number>>;
+  equipmentDropCount: number;
 }
 
 export function simulateOfflineStageProgress(
@@ -91,6 +95,7 @@ export function simulateOfflineStageProgress(
   if (perGemTypeGained > 0) {
     for (const gemType of GEM_TYPES) gemsGained[gemType] = perGemTypeGained;
   }
+  const equipmentDropCount = Math.round(killsThisPeriod * EQUIPMENT_DROP_CHANCE);
 
   return {
     stageProgress: progress,
@@ -102,5 +107,6 @@ export function simulateOfflineStageProgress(
     enhanceStonesGained,
     skillBooksGained,
     gemsGained,
+    equipmentDropCount,
   };
 }

@@ -72,6 +72,7 @@ import {
   rollEnhanceOutcome,
   rollEnhanceStoneDrop,
   rollEquipmentDrop,
+  rollOfflineEquipmentDrops,
   rollGemDrop,
   rollItemInstance,
   SocketedGem,
@@ -456,6 +457,7 @@ interface GameState {
   lastOfflineEnhanceStones: number;
   lastOfflineSkillBooks: number;
   lastOfflineGems: number;
+  lastOfflineEquipmentCount: number;
   currentEncounter: Encounter | null;
   fightStartedAt: number | null;
   fightElapsedMs: number;
@@ -776,6 +778,7 @@ export const useGameState = create<GameState>((set, get) => ({
   lastOfflineEnhanceStones: 0,
   lastOfflineSkillBooks: 0,
   lastOfflineGems: 0,
+  lastOfflineEquipmentCount: 0,
   currentEncounter: null,
   fightStartedAt: null,
   fightElapsedMs: 0,
@@ -875,6 +878,23 @@ export const useGameState = create<GameState>((set, get) => ({
       if (amount) nextGemCounts[gemType] = { ...nextGemCounts[gemType], 0: nextGemCounts[gemType][0] + amount };
     }
 
+    // 離線期間的裝備掉落:offlineStageResult 只給期望掉落次數,實際「掉到哪一件」交給
+    // rollOfflineEquipmentDrops(見 game/equipment.ts)逐次挑選,跟前景 tickBattle 掉落
+    // 同一套「優先掉還沒解鎖過的款式」邏輯,用離線前的職業/等級快照(跟 offlineAttackPower 同一份)。
+    const offlineEquipmentDrops = rollOfflineEquipmentDrops(
+      offlineStageResult.equipmentDropCount,
+      save.job.archetype,
+      save.job.branch,
+      save.level.level,
+      save.unlockedItemIds
+    );
+    let nextUnlockedItemIds = save.unlockedItemIds;
+    let nextItemInstances = itemInstances;
+    for (const drop of offlineEquipmentDrops) {
+      nextUnlockedItemIds = unlockItem(nextUnlockedItemIds, drop.id);
+      nextItemInstances = ensureItemInstance(drop.id, nextItemInstances);
+    }
+
     set({
       level,
       trigger: save.trigger,
@@ -890,14 +910,14 @@ export const useGameState = create<GameState>((set, get) => ({
       studentSkillTree: save.studentSkillTree,
       gender: save.gender,
       coins,
-      unlockedItemIds: save.unlockedItemIds,
+      unlockedItemIds: nextUnlockedItemIds,
       companions: save.companions,
       companionGear: save.companionGear,
       // 入場券回補跟離線收益同一套精神:玩家關掉遊戲一段時間回來,票要照經過的時間回補,
       // 不能等到玩家手動點進副本分頁才觸發。
       dungeon: applyDungeonTicketRegen(save.dungeon),
       secondaryJob: save.secondaryJob,
-      itemInstances,
+      itemInstances: nextItemInstances,
       enhanceStones: nextEnhanceStones,
       gemCounts: nextGemCounts,
       skillBooks: nextSkillBooks,
@@ -935,6 +955,7 @@ export const useGameState = create<GameState>((set, get) => ({
       lastOfflineEnhanceStones: offlineStageResult.enhanceStonesGained,
       lastOfflineSkillBooks: offlineStageResult.skillBooksGained,
       lastOfflineGems: Object.values(offlineStageResult.gemsGained).reduce((sum, n) => sum + (n ?? 0), 0),
+      lastOfflineEquipmentCount: offlineEquipmentDrops.length,
       currentEncounter: null,
       fightStartedAt: null,
       fightElapsedMs: 0,

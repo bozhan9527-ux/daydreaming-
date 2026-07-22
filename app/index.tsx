@@ -42,6 +42,7 @@ export default function HomeScreen() {
   const lastOfflineEnhanceStones = useGameState((state) => state.lastOfflineEnhanceStones);
   const lastOfflineSkillBooks = useGameState((state) => state.lastOfflineSkillBooks);
   const lastOfflineGems = useGameState((state) => state.lastOfflineGems);
+  const lastOfflineEquipmentCount = useGameState((state) => state.lastOfflineEquipmentCount);
   const stageProgress = useGameState((state) => state.stageProgress);
   const hasSeenWelcome = useGameState((state) => state.hasSeenWelcome);
   const coins = useGameState((state) => state.coins);
@@ -147,6 +148,7 @@ export default function HomeScreen() {
     lastOfflineEnhanceStones > 0 ? `${lastOfflineEnhanceStones} 個強化石` : null,
     lastOfflineSkillBooks > 0 ? `${lastOfflineSkillBooks} 本技能書` : null,
     lastOfflineGems > 0 ? `${lastOfflineGems} 顆寶石` : null,
+    lastOfflineEquipmentCount > 0 ? `${lastOfflineEquipmentCount} 件裝備` : null,
   ].filter((part): part is string => part !== null);
   const showDailyBonusModal = hasSeenWelcome && lastDailyLoginBonus !== null && !dailyBonusModalDismissed;
 

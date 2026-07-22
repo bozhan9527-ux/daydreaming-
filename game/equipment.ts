@@ -2277,7 +2277,22 @@ export function rollGemDrop(rng: () => number = Math.random): GemType | null {
 // 裝備掉落:跟上面幾種掉落同一套獨立判定模式,中了直接免費解鎖一件目前職業/等級穿得下的
 // 付費款(不含 price=0 的起始款,那些本來就已解鎖),優先掉還沒解鎖過的款式讓抽到的東西
 // 對玩家有意義;真的全部解鎖完了(邊緣情況)才會允許重複掉落,純粹避免回傳 null。
-const EQUIPMENT_DROP_CHANCE = 0.05;
+// export 出去給 game/offlineProgress.ts 算離線期間的期望值掉落次數用,單一真相來源。
+export const EQUIPMENT_DROP_CHANCE = 0.05;
+
+function pickEquipmentDrop(
+  archetype: Archetype,
+  branch: JobBranch,
+  level: number,
+  unlockedItemIds: UnlockedItemIds,
+  rng: () => number
+): EquipmentItem | null {
+  const eligible = EQUIPMENT_ITEMS.filter((item) => item.price > 0 && canEquipItem(item, archetype, branch, level));
+  if (eligible.length === 0) return null;
+  const notYetUnlocked = eligible.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
+  const pool = notYetUnlocked.length > 0 ? notYetUnlocked : eligible;
+  return pool[Math.floor(rng() * pool.length)];
+}
 
 export function rollEquipmentDrop(
   archetype: Archetype,
@@ -2287,11 +2302,29 @@ export function rollEquipmentDrop(
   rng: () => number = Math.random
 ): EquipmentItem | null {
   if (rng() >= EQUIPMENT_DROP_CHANCE) return null;
-  const eligible = EQUIPMENT_ITEMS.filter((item) => item.price > 0 && canEquipItem(item, archetype, branch, level));
-  if (eligible.length === 0) return null;
-  const notYetUnlocked = eligible.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
-  const pool = notYetUnlocked.length > 0 ? notYetUnlocked : eligible;
-  return pool[Math.floor(rng() * pool.length)];
+  return pickEquipmentDrop(archetype, branch, level, unlockedItemIds, rng);
+}
+
+// 離線期間用:呼叫端已經用「擊殺數×EQUIPMENT_DROP_CHANCE」算好期望掉落次數(dropCount),
+// 這裡不用再擲一次「有沒有掉」的亂數,只需要逐次決定「掉到哪一件」——每次都用當下最新的
+// unlockedItemIds 判斷優先度,模擬連續多次掉落時「優先掉還沒解鎖過的」跟即時戰鬥同樣的體感。
+export function rollOfflineEquipmentDrops(
+  dropCount: number,
+  archetype: Archetype,
+  branch: JobBranch,
+  level: number,
+  unlockedItemIds: UnlockedItemIds,
+  rng: () => number = Math.random
+): EquipmentItem[] {
+  const drops: EquipmentItem[] = [];
+  let currentUnlocked = unlockedItemIds;
+  for (let i = 0; i < dropCount; i++) {
+    const picked = pickEquipmentDrop(archetype, branch, level, currentUnlocked, rng);
+    if (!picked) break;
+    drops.push(picked);
+    currentUnlocked = unlockItem(currentUnlocked, picked.id);
+  }
+  return drops;
 }
 
 export function getSocketCount(item: EquipmentItem): number {
