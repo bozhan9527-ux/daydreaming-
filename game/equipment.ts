@@ -89,7 +89,7 @@ const LEGACY_EQUIPMENT_ITEMS: EquipmentItem[] = [
 // 目錄的一員)。加成比 LEGACY_EQUIPMENT_ITEMS 的 -02 付費款(0.05)高一點,體現「升級了」的
 // 成長感,但明顯低於職業鎖裝 bracket1(Lv30)的成長曲線起點(見 bracketBonusValue),
 // 避免學生期裝備蓋過畢業後職業裝的定位。命名走「國高中生」口吻,不是 -02 那套上班族語彙。
-const STUDENT_TIER2_LEVEL = 10;
+export const STUDENT_TIER2_LEVEL = 10;
 const STUDENT_TIER2_BONUS_VALUE = 0.06;
 
 const STUDENT_TIER2_EQUIPMENT_ITEMS: EquipmentItem[] = [
