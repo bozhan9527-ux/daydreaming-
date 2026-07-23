@@ -14,6 +14,7 @@ import {
   SKILL_SLOT_NAMES,
   SkillSlotId,
 } from '../game/skillTree';
+import { getTierSkillFlavor } from '../game/skillTreeFlavor';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import {
   canUpgradeStudentSkillSlot,
@@ -32,6 +33,7 @@ const TILE_SIZE = 56;
 export function SkillPanel() {
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const archetype = useGameState((state) => state.job.archetype);
+  const branch = useGameState((state) => state.job.branch);
   const skillTree = useGameState((state) => state.skillTree);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const level = useGameState((state) => state.level);
@@ -64,8 +66,15 @@ export function SkillPanel() {
   const selectedAtCap = selectedLevel >= cap;
 
   const selectedFlavor = getStudentSkillFlavor(level.level, selectedSlot);
-  const selectedName = showJobTree ? SKILL_SLOT_NAMES[archetype][selectedSlot] : selectedFlavor.name;
-  const selectedDesc = showJobTree ? SKILL_SLOT_DESCRIPTIONS[archetype][selectedSlot] : selectedFlavor.description;
+  // 職業技能格的名稱/敘述要依實際職業階級(tier)換套文案——tier1沿用game/skillTree.ts
+  // 既有內容,tier2~5改吃game/skillTreeFlavor.ts依階級+分支寫的專屬文案(見getTierSkillFlavor),
+  // 不能像舊版那樣不管幾階都固定顯示tier1的內容。
+  const jobFlavor =
+    tier === 1
+      ? { name: SKILL_SLOT_NAMES[archetype][selectedSlot], description: SKILL_SLOT_DESCRIPTIONS[archetype][selectedSlot] }
+      : getTierSkillFlavor(archetype, branch, tier, selectedSlot);
+  const selectedName = showJobTree ? jobFlavor.name : selectedFlavor.name;
+  const selectedDesc = showJobTree ? jobFlavor.description : selectedFlavor.description;
   const selectedBonusDesc = showJobTree
     ? getSkillSlotBonusDescription(archetype, selectedSlot, selectedLevel)
     : getStudentSkillSlotBonusDescription(selectedSlot, selectedLevel);

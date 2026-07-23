@@ -59,11 +59,11 @@ const BRANCHES: JobBranch[] = ['A', 'B'];
 // 依 tier 拿該格的名稱/敘述:tier1 沿用 game/skillTree.ts 既有內容(職業樹最初階本來就是這套),
 // tier2~5 是新增的「職業樹分支」內容(game/skillTreeFlavor.ts),兩邊資料來源不同但介面統一,
 // 呼叫端(SkillDetailPanel)不用管背後是哪個檔案在供應資料。
-function getSlotFlavor(archetype: Archetype, tier: JobTier, slot: SkillSlotId): { name: string; description: string } {
+function getSlotFlavor(archetype: Archetype, branch: JobBranch, tier: JobTier, slot: SkillSlotId): { name: string; description: string } {
   if (tier === 1) {
     return { name: SKILL_SLOT_NAMES[archetype][slot], description: SKILL_SLOT_DESCRIPTIONS[archetype][slot] };
   }
-  return getTierSkillFlavor(archetype, tier, slot);
+  return getTierSkillFlavor(archetype, branch, tier, slot);
 }
 
 // 第一層:6個職業各自一個icon,不再用「物理/魔法 x 近戰/遠程/輔助」的文字分組樹狀圖——
@@ -321,7 +321,7 @@ function SkillDetailPanel({
 }) {
   const [previewSlot, setPreviewSlot] = useState<SkillSlotId>('active1');
   const previewLevel = skillLevels[previewSlot];
-  const flavor = getSlotFlavor(archetype, tier, previewSlot);
+  const flavor = getSlotFlavor(archetype, branch, tier, previewSlot);
   const tierTitle = getJobTitle(archetype, branch, tier);
 
   return (

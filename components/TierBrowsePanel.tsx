@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype, JobTier, TIER_UNLOCK_LEVELS } from '../game/combat';
 import {
+  SKILL_SLOT_DESCRIPTIONS,
+  SKILL_SLOT_NAMES,
   SkillSlotId,
   TIER2_BONUS_COIN_MULT,
   TIER3_BONUS_EXP_MULT,
@@ -10,6 +12,7 @@ import {
   TIER5_EXTRA_DAMAGE_CHANCE,
   TIER5_EXTRA_DAMAGE_CUT_RATIO,
 } from '../game/skillTree';
+import { getTierSkillFlavor } from '../game/skillTreeFlavor';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
@@ -37,10 +40,15 @@ interface TierBrowsePanelProps {
 // 是同一種「先看後選」精神,只是這裡看的是已經投資中的技能,不是還沒選的職業。
 export function TierBrowsePanel({ archetype, slot }: TierBrowsePanelProps) {
   const currentTier = useGameState((state) => state.jobTier);
+  const branch = useGameState((state) => state.job.branch);
   const [viewingTier, setViewingTier] = useState<JobTier>(currentTier);
 
   const icon = getSkillIcon(archetype, slot, viewingTier);
   const bonusText = TIER_BONUS_TEXT[viewingTier];
+  const flavor =
+    viewingTier === 1
+      ? { name: SKILL_SLOT_NAMES[archetype][slot], description: SKILL_SLOT_DESCRIPTIONS[archetype][slot] }
+      : getTierSkillFlavor(archetype, branch, viewingTier, slot);
 
   return (
     <View style={styles.container}>
@@ -67,6 +75,8 @@ export function TierBrowsePanel({ archetype, slot }: TierBrowsePanelProps) {
           <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={3} />
         </View>
         <View style={styles.previewText}>
+          <Text style={styles.previewName}>{flavor.name}</Text>
+          <Text style={styles.previewDesc}>{flavor.description}</Text>
           <Text style={styles.previewLevelReq}>Lv.{TIER_UNLOCK_LEVELS[viewingTier]} 解鎖資格</Text>
           <Text style={styles.previewBonus}>{bonusText ?? '轉職起點,尚無額外加成'}</Text>
         </View>
@@ -131,6 +141,15 @@ const styles = StyleSheet.create({
   previewText: {
     flex: 1,
     gap: 2,
+  },
+  previewName: {
+    color: '#f2f2f2',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  previewDesc: {
+    color: '#a8a8b2',
+    fontSize: 11,
   },
   previewLevelReq: {
     color: '#8a8a95',
