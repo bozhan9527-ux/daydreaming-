@@ -1,19 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype } from '../game/combat';
 import {
   availableGemDungeonTypes,
   DUNGEON_ARCHETYPES,
+  DUNGEON_DAILY_CAP,
   DUNGEON_TAB_LABELS,
   DUNGEON_TABS,
-  DUNGEON_TICKET_CAP,
   DungeonTab,
   dungeonCoinDropAmount,
   dungeonExpDropAmount,
   ENHANCE_STONE_DUNGEON_REWARD_AMOUNT,
   GEM_DUNGEON_REWARD_AMOUNT,
-  msUntilNextDungeonTicket,
+  remainingDungeonChallenges,
   SKILL_BOOK_DUNGEON_REWARD_AMOUNT,
   unlockedSkillBookDungeonTiers,
 } from '../game/dungeon';
@@ -32,22 +32,10 @@ const ARCHETYPE_LABELS: Record<Archetype, string> = {
   magicSupport: '魔法輔助',
 };
 
-const TICKET_CLOCK_TICK_MS = 1000;
-
-function formatCountdown(ms: number): string {
-  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
-
 // 六分頁副本(見 game/dungeon.ts 的 DUNGEON_TABS):職業試煉之外,技能書/強化石/鑲嵌石/經驗/
-// 金錢各自獨立一頁,全部共用同一組入場券池,只是分頁瀏覽,不是分開計票。
+// 金錢各自獨立一頁,每個分頁各自獨立每日次數(不共用同一組計數)——職業副本一天2次,
+// 其餘5個分頁各自3次。
 export function DungeonPanel() {
-  // 入場券倒數要即時讀 Date.now(),跟 HeroHealthBar.tsx/SkillTracker.tsx 同一個坑——
-  // 這個 component 要跳出 React Compiler 的自動記憶化,不然倒數會凍結在第一次渲染的結果。
-  'use no memo';
-
   const dungeon = useGameState((state) => state.dungeon);
   const level = useGameState((state) => state.level);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
@@ -69,14 +57,10 @@ export function DungeonPanel() {
   // 各分頁實際量到的高度(見下面隱形量測分身),key 是分頁 id,值只會越量越大不會縮小。
   const [tabHeights, setTabHeights] = useState<Partial<Record<DungeonTab, number>>>({});
 
-  const [, forceTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => forceTick((t) => t + 1), TICKET_CLOCK_TICK_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  const msUntilNext = msUntilNextDungeonTicket(dungeon);
-  const canChallenge = dungeon.tickets > 0;
+  // 每個分頁各自獨立每日次數(見 game/dungeon.ts 的 DUNGEON_DAILY_CAP),按鈕能不能按只看
+  // 「目前分頁」今天還剩幾次,不是全部6個分頁共用一個數字。
+  const remainingForActiveTab = remainingDungeonChallenges(dungeon, activeTab);
+  const canChallenge = remainingForActiveTab > 0;
 
   const handleChallenge = (archetype: Archetype) => {
     // 用「碎片+證明*10」的合計判定輸贏,不能只比碎片數本身——湊滿10片會自動兌換成1個證明、
@@ -266,11 +250,10 @@ export function DungeonPanel() {
   return (
     <View style={styles.container}>
       <View style={styles.ticketRow}>
-        <Text style={styles.ticketLabel}>入場券</Text>
+        <Text style={styles.ticketLabel}>{DUNGEON_TAB_LABELS[activeTab]}今日次數</Text>
         <Text style={styles.ticketValue}>
-          {dungeon.tickets}/{DUNGEON_TICKET_CAP}
+          {remainingForActiveTab}/{DUNGEON_DAILY_CAP[activeTab]}
         </Text>
-        {msUntilNext !== null && <Text style={styles.ticketCountdown}>下一張 {formatCountdown(msUntilNext)}</Text>}
       </View>
 
       <View style={styles.tabRow}>
@@ -339,10 +322,6 @@ const styles = StyleSheet.create({
     color: '#f2f2f2',
     fontSize: 13,
     fontWeight: '600',
-  },
-  ticketCountdown: {
-    color: '#8a8a95',
-    fontSize: 11,
   },
   // 固定寬度3欄網格:6個分頁不管文字長短都排成整齊的2排,呼應 EquipmentPanel.tsx
   // 部位篩選列的同一種排版邏輯。

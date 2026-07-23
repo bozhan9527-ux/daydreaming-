@@ -83,7 +83,7 @@ import {
 } from '../game/equipment';
 import { rollCoinWindfall } from '../game/currency';
 import {
-  applyDungeonTicketRegen,
+  applyDungeonDailyReset,
   COIN_DUNGEON_SCHOOL,
   createInitialDungeonState,
   dungeonCoinDropAmount,
@@ -98,7 +98,7 @@ import {
   GEM_DUNGEON_SCHOOL,
   SKILL_BOOK_DUNGEON_REWARD_AMOUNT,
   SKILL_BOOK_DUNGEON_SCHOOL,
-  spendDungeonTicket,
+  spendDungeonChallenge,
 } from '../game/dungeon';
 import { applyTransferFragmentGain, rollTransferFragmentDrop, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import {
@@ -401,7 +401,7 @@ interface GameState {
   companions: CompanionState;
   // 寵物/坐騎專屬裝備(見 game/companions.ts):綁在 pet/mount 身分上,不是綁在特定寵物身上。
   companionGear: CompanionGearState;
-  // 轉職試煉副本(見 game/dungeon.ts):6 個職業共用同一份入場券池,打贏保證掉指定職業的轉職碎片。
+  // 轉職試煉副本(見 game/dungeon.ts):6分頁各自獨立每日次數,打贏保證掉指定職業的轉職碎片。
   dungeon: DungeonState;
   secondaryJob: Archetype | null;
   itemInstances: ItemInstances;
@@ -927,9 +927,9 @@ export const useGameState = create<GameState>((set, get) => ({
       unlockedItemIds: nextUnlockedItemIds,
       companions: save.companions,
       companionGear: save.companionGear,
-      // 入場券回補跟離線收益同一套精神:玩家關掉遊戲一段時間回來,票要照經過的時間回補,
-      // 不能等到玩家手動點進副本分頁才觸發。
-      dungeon: applyDungeonTicketRegen(save.dungeon),
+      // 每日次數重置跟每日任務同一套精神(見 game/dungeon.ts 的 applyDungeonDailyReset):
+      // 跨日才歸零,不能等到玩家手動點進副本分頁才觸發。
+      dungeon: applyDungeonDailyReset(save.dungeon),
       secondaryJob: save.secondaryJob,
       itemInstances: nextItemInstances,
       enhanceStones: nextEnhanceStones,
@@ -1387,7 +1387,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // 轉職碎片(不是隨機抽),不是每隻小怪都能觸發,而是玩家主動選職業來打。
   challengeDungeon: (archetype) => {
     const state = get();
-    const spent = spendDungeonTicket(state.dungeon);
+    const spent = spendDungeonChallenge(state.dungeon, 'job');
     if (spent === null) return; // 沒票,UI 按鈕本來就該 disabled,這裡是防呆。
 
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
@@ -1456,7 +1456,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // (各自固定用自己的 xxx_DUNGEON_SCHOOL),打贏發的是固定數量的資源,不是轉職碎片。
   challengeEnhanceStoneDungeon: () => {
     const state = get();
-    const spent = spendDungeonTicket(state.dungeon);
+    const spent = spendDungeonChallenge(state.dungeon, 'enhanceStone');
     if (spent === null) return;
 
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
@@ -1509,7 +1509,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // 打贏直接發到指定的那一階,不像怪物掉落還要另外判斷「技能是否已封頂」。
   challengeSkillBookDungeon: (tier) => {
     const state = get();
-    const spent = spendDungeonTicket(state.dungeon);
+    const spent = spendDungeonChallenge(state.dungeon, 'skillBook');
     if (spent === null) return;
 
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
@@ -1561,7 +1561,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // 種類),打贏發固定數量的該種寶石,固定初階(呼應既有寶石掉落一律初階的慣例)。
   challengeGemDungeon: (gemType) => {
     const state = get();
-    const spent = spendDungeonTicket(state.dungeon);
+    const spent = spendDungeonChallenge(state.dungeon, 'gem');
     if (spent === null) return;
 
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
@@ -1617,7 +1617,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // autoLevelUp——跟成就/每日登入獎勵的經驗發放同一套模式。
   challengeExpDungeon: () => {
     const state = get();
-    const spent = spendDungeonTicket(state.dungeon);
+    const spent = spendDungeonChallenge(state.dungeon, 'exp');
     if (spent === null) return;
 
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
@@ -1668,7 +1668,7 @@ export const useGameState = create<GameState>((set, get) => ({
   // 每場都有的附帶金幣獎勵(dungeonWinCoinReward),不會兩份一起疊加。
   challengeCoinDungeon: () => {
     const state = get();
-    const spent = spendDungeonTicket(state.dungeon);
+    const spent = spendDungeonChallenge(state.dungeon, 'coin');
     if (spent === null) return;
 
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
@@ -1730,7 +1730,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const materialTier = nextTier as MaterialTier;
     if (state.skillBooks[materialTier] < cost.skillBooks || state.enhanceStones[materialTier] < cost.enhanceStones) return;
 
-    const spent = spendDungeonTicket(state.dungeon);
+    const spent = spendDungeonChallenge(state.dungeon, 'job');
     if (spent === null) return;
 
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);

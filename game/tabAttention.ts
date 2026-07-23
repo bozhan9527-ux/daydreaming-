@@ -1,6 +1,6 @@
 import { Archetype, DUAL_CLASS_UNLOCK_LEVEL, JobTier, TIER_UNLOCK_LEVELS } from './combat';
 import { canUpgradeCompanionGearSlot, CompanionGearState } from './companions';
-import { applyDungeonTicketRegen, DungeonState } from './dungeon';
+import { DUNGEON_TABS, DungeonState, remainingDungeonChallenges } from './dungeon';
 import { EquipmentLoadout, GemCounts, SLOT_Z_ORDER } from './equipment';
 import { currentMaterialTier, sumTieredMaterialCounts, TieredMaterialCounts } from './materials';
 import { canUpgradeSkillSlot, SkillSlotId, SKILL_SLOT_IDS } from './skillTree';
@@ -81,6 +81,6 @@ export function computeTabAttentionFlags(input: TabAttentionInput): TabAttention
     inventory: hasAnyEmptySlot(input.equipment),
     skill: hasAnySkillUpgrade(input.hasChosenJob, input.jobTier, input.activeSkillLevels, input.skillBooks),
     companion: hasAnyCompanionGearUpgrade(input.companionGear, input.level, input.coins),
-    dungeon: applyDungeonTicketRegen(input.dungeon).tickets > 0,
+    dungeon: DUNGEON_TABS.some((tab) => remainingDungeonChallenges(input.dungeon, tab) > 0),
   };
 }

@@ -29,8 +29,8 @@ import {
   unlockItem,
   upgradeItemInstancesToV13,
 } from '../game/equipment';
-import { DailyTaskId } from '../game/daily';
-import { createInitialDungeonState, DungeonState } from '../game/dungeon';
+import { DailyTaskId, todayDateString } from '../game/daily';
+import { createInitialDungeonState, DUNGEON_DAILY_CAP, DUNGEON_TABS, DungeonState, DungeonTab } from '../game/dungeon';
 import { createInitialLevelState, LevelState } from '../game/leveling';
 import { createEmptyTieredMaterialCounts, MaterialTier, migrateFlatMaterialToTiered, TieredMaterialCounts } from '../game/materials';
 import { SkillLevels, SKILL_IDS } from '../game/skills';
@@ -51,7 +51,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 39;
+export const SCHEMA_VERSION = 40;
 
 // v39 之前(v27~v38)skillTree 是「每個職業6格欄位各一個不分階級的數字」的舊制(見
 // game/skillTree.ts 目前 SkillTreeLevels 的分階說明,那個型別現在已經改成三維)。這裡凍結一份
@@ -71,6 +71,17 @@ function createEmptyLegacySkillTreeLevels(): LegacySkillTreeLevels {
   };
 }
 
+// v40 之前(v23~v39)dungeon 是「單一共用入場券池,時間回補」的舊制(見 game/dungeon.ts
+// 目前 DungeonState 的每日分頁次數說明,那個型別現在已經改成 6 分頁各自獨立每日次數)。
+// 這裡凍結一份舊制的形狀,專門給歷史版本的 interface/驗證函式/遷移函式用,不能讓它們跟著
+// 現行 DungeonState 的定義一起變動——道理跟 LegacySkillTreeLevels 完全一樣。
+type LegacyDungeonState = { tickets: number; lastTicketRegenAt: number };
+const LEGACY_DUNGEON_TICKET_CAP = 5;
+
+function createEmptyLegacyDungeonState(now: number = Date.now()): LegacyDungeonState {
+  return { tickets: LEGACY_DUNGEON_TICKET_CAP, lastTicketRegenAt: now };
+}
+
 // v39:skillTree 改成每個職業階級(1~5)各自獨立一組0-10級(見 game/skillTree.ts 的
 // SkillTreeLevels/effectiveSkillLevel 說明)——玩家原本那個不分階級的單一數字,直接搬進
 // 「目前職業階級」那一格,其餘階級補0。這是玩家用目前階級的書練出來的等級,只是換個位置
@@ -87,6 +98,19 @@ function migrateFlatSkillTreeLevelsToTiered(flat: LegacySkillTreeLevels, current
 
 function createEmptySkillSlotsForMigration(): Record<SkillSlotId, number> {
   return { passive1: 0, passive2: 0, passive3: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
+}
+
+// v40:dungeon 從「單一共用入場券池」改成「6分頁各自獨立每日次數」——玩家目前手上剩的票數
+// 直接視為今天各分頁「還剩幾次可以打」的起點(取 min(舊票數, 新分頁的每日上限),不會讓
+// 剛好持有較少張數的玩家一登入就被扣掉比舊制更多的可用次數),視為「今天剛重置」。
+function migrateLegacyDungeonStateToDaily(legacy: LegacyDungeonState, now: number = Date.now()): DungeonState {
+  const usedToday = {} as Record<DungeonTab, number>;
+  DUNGEON_TABS.forEach((tab) => {
+    const cap = DUNGEON_DAILY_CAP[tab];
+    const remaining = Math.min(legacy.tickets, cap);
+    usedToday[tab] = cap - remaining;
+  });
+  return { lastResetAt: todayDateString(now), usedToday };
 }
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
@@ -217,8 +241,8 @@ export interface SaveData {
   // 寵物/坐騎專屬裝備(見 game/companions.ts 的「升級格子」模式):裝備綁在 pet/mount 這兩個
   // 身分上,不是綁在某一隻特定寵物身上,5 槽位(top/bottom/helmet/shoes/weapon)各自 0-10 級。
   companionGear: CompanionGearState;
-  // 轉職試煉副本(見 game/dungeon.ts):tickets/lastTicketRegenAt 是入場券張數與回補計時基準,
-  // 6 個職業各自的副本共用同一份入場券池,不分職業各自計次。
+  // 轉職試煉副本(見 game/dungeon.ts):lastResetAt/usedToday 是每日次數計數與重置基準,
+  // 6個分頁(職業/技能書/強化石/鑲嵌石/經驗/金錢)各自獨立每日次數,不共用同一個計數。
   dungeon: DungeonState;
   // 回血(hpRegen,見 game/heroHealth.ts 的 applyHpRegenTick):時間制被動回血機制上次「往前推進」
   // 的計時基準時間戳,跟 heroHp 一樣要存檔——不存檔的話每次重開 App 都會被當成新的起算點,
@@ -1487,10 +1511,20 @@ function isSaveDataV22(value: unknown): value is SaveDataV22 {
   );
 }
 
-function isDungeonState(value: unknown): value is DungeonState {
+function isLegacyDungeonState(value: unknown): value is LegacyDungeonState {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return typeof record.tickets === 'number' && typeof record.lastTicketRegenAt === 'number';
+}
+
+function isDungeonDailyState(value: unknown): value is DungeonState {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.lastResetAt !== 'string' || typeof record.usedToday !== 'object' || record.usedToday === null) {
+    return false;
+  }
+  const usedToday = record.usedToday as Record<string, unknown>;
+  return DUNGEON_TABS.every((tab) => typeof usedToday[tab] === 'number');
 }
 
 interface SaveDataV23 {
@@ -1599,7 +1633,7 @@ interface SaveDataV24 {
   defeatRecoveryUntil: number | null;
   studentSkillTree: Record<SkillSlotId, number>;
   companionGear: CompanionGearState;
-  dungeon: DungeonState;
+  dungeon: LegacyDungeonState;
   lastActiveAt: number;
 }
 
@@ -1638,7 +1672,7 @@ function isSaveDataV24(value: unknown): value is SaveDataV24 {
     (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
     isStudentSkillTreeLevels(record.studentSkillTree) &&
     isCompanionGearState(record.companionGear) &&
-    isDungeonState(record.dungeon)
+    isLegacyDungeonState(record.dungeon)
   );
 }
 
@@ -1677,7 +1711,7 @@ interface SaveDataV25 {
   defeatRecoveryUntil: number | null;
   studentSkillTree: Record<SkillSlotId, number>;
   companionGear: CompanionGearState;
-  dungeon: DungeonState;
+  dungeon: LegacyDungeonState;
   lastActiveAt: number;
 }
 
@@ -1717,7 +1751,7 @@ function isSaveDataV25(value: unknown): value is SaveDataV25 {
     (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
     isStudentSkillTreeLevels(record.studentSkillTree) &&
     isCompanionGearState(record.companionGear) &&
-    isDungeonState(record.dungeon)
+    isLegacyDungeonState(record.dungeon)
   );
 }
 
@@ -1759,7 +1793,7 @@ interface SaveDataV26 {
   defeatRecoveryUntil: number | null;
   studentSkillTree: Record<SkillSlotId, number>;
   companionGear: CompanionGearState;
-  dungeon: DungeonState;
+  dungeon: LegacyDungeonState;
   lastActiveAt: number;
 }
 
@@ -1800,7 +1834,7 @@ function isSaveDataV26(value: unknown): value is SaveDataV26 {
     (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
     isStudentSkillTreeLevels(record.studentSkillTree) &&
     isCompanionGearState(record.companionGear) &&
-    isDungeonState(record.dungeon)
+    isLegacyDungeonState(record.dungeon)
   );
 }
 
@@ -1841,7 +1875,7 @@ interface SaveDataV27 {
   defeatRecoveryUntil: number | null;
   studentSkillTree: Record<SkillSlotId, number>;
   companionGear: CompanionGearState;
-  dungeon: DungeonState;
+  dungeon: LegacyDungeonState;
   lastHpRegenTickAt: number;
   lastActiveAt: number;
 }
@@ -1883,7 +1917,7 @@ function isSaveDataV27(value: unknown): value is SaveDataV27 {
     (record.defeatRecoveryUntil === null || typeof record.defeatRecoveryUntil === 'number') &&
     isCurrentStudentSkillTreeLevels(record.studentSkillTree) &&
     isCompanionGearState(record.companionGear) &&
-    isDungeonState(record.dungeon) &&
+    isLegacyDungeonState(record.dungeon) &&
     typeof record.lastHpRegenTickAt === 'number'
   );
 }
@@ -2077,11 +2111,12 @@ function isSaveDataV35(value: unknown): value is SaveDataV35 {
 // v36(職業階級晉升機制上線):比 v35 多了 jobTier(見 game/combat.ts 的 JobTier)。凍結成
 // 明確獨立的 interface+literal版本號檢查,itemInstances/gemCounts 沿用鑲嵌石加素質類+分階制
 // 上線前的舊形狀(LegacyItemInstances/LegacyGemCounts)——這是這兩個欄位最後一個舊形狀版本。
-interface SaveDataV36 extends Omit<SaveData, 'version' | 'itemInstances' | 'gemCounts' | 'skillTree'> {
+interface SaveDataV36 extends Omit<SaveData, 'version' | 'itemInstances' | 'gemCounts' | 'skillTree' | 'dungeon'> {
   version: 36;
   itemInstances: LegacyItemInstances;
   gemCounts: LegacyGemCounts;
   skillTree: LegacySkillTreeLevels;
+  dungeon: LegacyDungeonState;
 }
 
 function isSaveDataV36(value: unknown): value is SaveDataV36 {
@@ -2136,9 +2171,10 @@ function isGemCountsV2(value: unknown): value is GemCounts {
 
 // v37(鑲嵌石加入素質類+分階制):比 v36 多了鑲嵌石種類(13種)+分階(見 game/equipment.ts
 // 的鑲嵌系統),itemInstances.socketedGems/gemCounts 兩個欄位形狀跟著改變。
-interface SaveDataV38 extends Omit<SaveData, 'version' | 'skillTree'> {
+interface SaveDataV38 extends Omit<SaveData, 'version' | 'skillTree' | 'dungeon'> {
   version: 38;
   skillTree: LegacySkillTreeLevels;
+  dungeon: LegacyDungeonState;
 }
 
 function isSaveDataV37(value: unknown): value is SaveDataV38 {
@@ -2169,17 +2205,40 @@ function isSaveDataV38(value: unknown): value is SaveDataV38 {
 
 // v39(技能等級改成每個職業階級1~5各自獨立一組0-10級,見 game/skillTree.ts 的 SkillTreeLevels/
 // effectiveSkillLevel):skillTree 從「每職業一組扁平數字」變成「每職業每階級各自一組數字」,
-// 其餘欄位形狀不變。這是 migrate() 的第一道 passthrough 檢查——已經是分階形狀的存檔直接原樣回傳。
-function isSaveDataV39(value: unknown): value is SaveData {
+// dungeon 這時候還是 v40 之前的舊制(單一共用入場券池)。凍結成明確獨立的 interface+literal
+// 版本號檢查(不再動態比對 SCHEMA_VERSION,SCHEMA_VERSION 現在已經是40),跟 isSaveDataV38
+// 當初凍結的做法一樣。
+interface SaveDataV39 extends Omit<SaveData, 'version' | 'dungeon'> {
+  version: 39;
+  dungeon: LegacyDungeonState;
+}
+
+function isSaveDataV39(value: unknown): value is SaveDataV39 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   // isSaveDataV38 要求 skillTree 是舊的扁平形狀,這裡驗證的是已經分階的真正形狀——用空的
-  // legacy 佔位值蓋掉這個欄位餵給 isSaveDataV38,只借用它對「其餘欄位」的檢查,新形狀本身
-  // 另外用 isCurrentSkillTreeLevels 獨立驗證。
+  // legacy 佔位值蓋掉這個欄位餵給 isSaveDataV38,只借用它對「其餘欄位」的檢查(dungeon 舊制
+  // 形狀的驗證也包含在這條鏈路裡),新的 skillTree 形狀本身另外用 isCurrentSkillTreeLevels 獨立驗證。
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 39 &&
     isSaveDataV38({ ...record, version: 38, skillTree: createEmptyLegacySkillTreeLevels() }) &&
     isCurrentSkillTreeLevels(record.skillTree)
+  );
+}
+
+// v40(副本票券改版,見 game/dungeon.ts 的 DungeonState:從單一共用入場券池改成6分頁各自
+// 獨立每日次數):dungeon 從 {tickets, lastTicketRegenAt} 變成 {lastResetAt, usedToday},
+// 其餘欄位形狀不變。這是 migrate() 的第一道 passthrough 檢查——已經是新制形狀的存檔直接原樣回傳。
+function isSaveDataV40(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  // isSaveDataV39 要求 dungeon 是舊的單一票池形狀,這裡驗證的是已經改成每日次數的真正形狀——
+  // 用空的 legacy 佔位值蓋掉這個欄位餵給 isSaveDataV39,只借用它對「其餘欄位」的檢查,新形狀
+  // 本身另外用 isDungeonDailyState 獨立驗證。
+  return (
+    record.version === SCHEMA_VERSION &&
+    isSaveDataV39({ ...record, version: 39, dungeon: createEmptyLegacyDungeonState() }) &&
+    isDungeonDailyState(record.dungeon)
   );
 }
 
@@ -2270,11 +2329,17 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // 不會平白消失,只是換了個容器裝,之後要升到更高階要透過新的合成機制(兩本前一階換一本
 // 下一階)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
-// 這個函式內部的每一條分支都還是舊制「skillTree 扁平不分階級」的形狀(道理跟原本 migrateShape
-// 一樣,沿用歷史上每個版本各自的欄位轉換邏輯,不逐一改寫),最後由外層 migrateShape() 統一做
-// 「扁平→分階獨立」這一步轉換(見 migrateFlatSkillTreeLevelsToTiered),不用在下面 ~30 條分支
+// 這個函式內部的每一條分支都還是舊制「skillTree 扁平不分階級」+「dungeon 單一票池」的形狀
+// (道理跟原本 migrateShape 一樣,沿用歷史上每個版本各自的欄位轉換邏輯,不逐一改寫),最後由
+// 外層 migrateShape() 統一做「扁平→分階獨立」(見 migrateFlatSkillTreeLevelsToTiered)+
+// 「票池→每日次數」(見 migrateLegacyDungeonStateToDaily)這兩步轉換,不用在下面 ~30 條分支
 // 裡各自手動改一次(容易漏改,風險遠高於統一在最後轉一次)。
-function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTree'> & { skillTree: LegacySkillTreeLevels } {
+// 注意:isSaveDataV39 不在這裡處理——v39 存檔的 skillTree 已經是現行分階形狀(只有 dungeon
+// 還是舊制單一票池),跟這個函式其餘分支「skillTree 扁平+dungeon 舊制」雙重舊形狀的回傳型別
+// 對不上,改在外層 migrateShape() 獨立分支處理(見那裡的說明)。
+function migrateShapeToLegacyTiers(
+  value: unknown
+): Omit<SaveData, 'skillTree' | 'dungeon'> & { skillTree: LegacySkillTreeLevels; dungeon: LegacyDungeonState } {
   if (isSaveDataV38(value)) return { ...value, version: SCHEMA_VERSION };
   if (isSaveDataV37(value)) return { ...value, version: SCHEMA_VERSION };
   // 舊存檔遷移到鑲嵌石加素質類+分階制:itemInstances.socketedGems/gemCounts 兩個欄位從舊形狀
@@ -2527,7 +2592,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: createEmptyTieredMaterialCounts(),
@@ -2556,7 +2621,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
       skillBooks: createEmptyTieredMaterialCounts(),
@@ -2586,7 +2651,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: createEmptyTieredMaterialCounts(),
       claimedAchievementIds: [...value.unlockedAchievementIds],
@@ -2617,7 +2682,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: createEmptyTieredMaterialCounts(),
       claimedAchievementIds: [...value.unlockedAchievementIds],
@@ -2649,7 +2714,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: createEmptyTieredMaterialCounts(),
       claimedAchievementIds: [...value.unlockedAchievementIds],
@@ -2685,7 +2750,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: createEmptyTieredMaterialCounts(),
       totalStagesCleared: 0,
@@ -2721,7 +2786,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       skillBooks: createEmptyTieredMaterialCounts(),
       totalStagesCleared: 0,
@@ -2774,7 +2839,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -2826,7 +2891,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -2878,7 +2943,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -2930,7 +2995,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -2982,7 +3047,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3034,7 +3099,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3086,7 +3151,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3138,7 +3203,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3190,7 +3255,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3242,7 +3307,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3294,7 +3359,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3346,7 +3411,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3398,7 +3463,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3450,7 +3515,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3502,7 +3567,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3554,7 +3619,7 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       defeatRecoveryUntil: null,
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
-      dungeon: createInitialDungeonState(),
+      dungeon: createEmptyLegacyDungeonState(),
       totalStagesCleared: 0,
       dailyTaskProgress: {},
       dailyTaskClaimedIds: [],
@@ -3567,15 +3632,29 @@ function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTre
       lastActiveAt: value.lastActiveAt,
     };
   }
-  return { ...createInitialSaveData(), skillTree: createEmptyLegacySkillTreeLevels() };
+  return {
+    ...createInitialSaveData(),
+    skillTree: createEmptyLegacySkillTreeLevels(),
+    dungeon: createEmptyLegacyDungeonState(),
+  };
 }
 
-// 承接 migrateShapeToLegacySkillTree() 產出的「其餘欄位都已經是最新形狀、只有 skillTree
-// 還是扁平」中間結果,在這裡統一做最後一步「扁平→分階獨立」轉換(見
-// migrateFlatSkillTreeLevelsToTiered),回傳真正完整的最新 SaveData。
+// 承接 migrateShapeToLegacyTiers() 產出的「其餘欄位都已經是最新形狀、只有 skillTree/dungeon
+// 還是舊制」中間結果,在這裡統一做最後兩步轉換:「扁平→分階獨立」(見
+// migrateFlatSkillTreeLevelsToTiered)+「單一票池→每日次數」(見
+// migrateLegacyDungeonStateToDaily),回傳真正完整的最新 SaveData。v39 存檔的 skillTree
+// 已經是分階形狀,不需要也不能走 migrateShapeToLegacyTiers(見那裡的說明),獨立一支只做
+// dungeon 轉換。
 function migrateShape(value: unknown): SaveData {
-  const legacy = migrateShapeToLegacySkillTree(value);
-  return { ...legacy, skillTree: migrateFlatSkillTreeLevelsToTiered(legacy.skillTree, legacy.jobTier) };
+  if (isSaveDataV39(value)) {
+    return { ...value, version: SCHEMA_VERSION, dungeon: migrateLegacyDungeonStateToDaily(value.dungeon) };
+  }
+  const legacy = migrateShapeToLegacyTiers(value);
+  return {
+    ...legacy,
+    skillTree: migrateFlatSkillTreeLevelsToTiered(legacy.skillTree, legacy.jobTier),
+    dungeon: migrateLegacyDungeonStateToDaily(legacy.dungeon),
+  };
 }
 
 // 舊格式(無 branch 區段)的 tier2-5 生成式裝備 id,例如 top-physicalMelee-20、
@@ -3625,7 +3704,7 @@ function remapLegacyEquipmentBranchIds(save: SaveData): SaveData {
 // v38:裝備分支 id 轉換獨立成最後一道統一步驟(見上面兩個 helper 的說明),不用像先前每個
 // schema 版本那樣在 migrateShape 的每一條分支裡各自插入轉換呼叫。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV39(value)) return value;
+  if (isSaveDataV40(value)) return value;
   return remapLegacyEquipmentBranchIds(migrateShape(value));
 }
 

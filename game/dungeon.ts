@@ -1,52 +1,69 @@
 import { Archetype, DamageType, JobTier } from './combat';
+import { isNewDay, todayDateString } from './daily';
 import { GEM_SPECS, GEM_TYPES, GemType } from './equipment';
 import { expPerMin } from './leveling';
 import { MATERIAL_TIERS, MaterialTier } from './materials';
 
 // 轉職試煉副本系統:6 個職業各自獨立的副本,打贏保證掉落該職業的轉職碎片(見 game/transfer.ts),
 // 把過去唯一取得碎片的方式(打大魔王 3% 隨機機率、不分職業亂抽)補上一條主動、有目標的路線。
-// 入場券是節奏閥門(避免無限刷),戰鬥勝負判定直接複用 game/heroHealth.ts 的 resolveFightHealth,
+// 挑戰次數是節奏閥門(避免無限刷),戰鬥勝負判定直接複用 game/heroHealth.ts 的 resolveFightHealth,
 // 不另外發明一套。
 
-export const DUNGEON_TICKET_CAP = 5;
-export const DUNGEON_TICKET_REGEN_MS = 30 * 60 * 1000; // 30分鐘回1張
+// 副本六分頁(見 components/DungeonPanel.tsx):職業試煉之外再拆五種各自獨立的材料/資源副本。
+// 每個分頁各自獨立每日次數(不共用同一組計數),日期基準沿用 game/daily.ts 的
+// todayDateString/isNewDay——轉職試煉(job)一天只能打2次(晉升試煉也算在這個計數裡,見
+// hooks/useGameState.ts 的 promoteJobTier),其餘5種各自獨立3次/日,彼此不互相排擠。
+export type DungeonTab = 'job' | 'skillBook' | 'enhanceStone' | 'gem' | 'exp' | 'coin';
+export const DUNGEON_TABS: DungeonTab[] = ['job', 'skillBook', 'enhanceStone', 'gem', 'exp', 'coin'];
+export const DUNGEON_TAB_LABELS: Record<DungeonTab, string> = {
+  job: '職業副本',
+  skillBook: '技能書副本',
+  enhanceStone: '強化石副本',
+  gem: '鑲嵌石副本',
+  exp: '經驗副本',
+  coin: '金錢副本',
+};
+
+export const DUNGEON_DAILY_CAP: Record<DungeonTab, number> = {
+  job: 2,
+  skillBook: 3,
+  enhanceStone: 3,
+  gem: 3,
+  exp: 3,
+  coin: 3,
+};
 
 export interface DungeonState {
-  tickets: number;
-  lastTicketRegenAt: number; // timestamp,回滿(=DUNGEON_TICKET_CAP)時這個值語意上是「上次算到哪」
+  lastResetAt: string; // 日期字串(見 game/daily.ts todayDateString),跨日才重置 usedToday
+  usedToday: Record<DungeonTab, number>;
 }
 
-// 新玩家/新分頁一開始就是滿的,不用等,呼應其他「解鎖當下就能馬上用」的既有設計慣例。
+function createEmptyUsedToday(): Record<DungeonTab, number> {
+  return { job: 0, skillBook: 0, enhanceStone: 0, gem: 0, exp: 0, coin: 0 };
+}
+
+// 新玩家/新分頁一開始今天都還沒打過,6個分頁次數全滿,呼應其他「解鎖當下就能馬上用」的
+// 既有設計慣例。
 export function createInitialDungeonState(now: number = Date.now()): DungeonState {
-  return { tickets: DUNGEON_TICKET_CAP, lastTicketRegenAt: now };
+  return { lastResetAt: todayDateString(now), usedToday: createEmptyUsedToday() };
 }
 
-// 純函式:依經過時間回補入場券,回滿就停(不會超過上限),沒用完的零頭時間保留到下次
-// (用「往前推進整數個 DUNGEON_TICKET_REGEN_MS」的方式更新 lastTicketRegenAt,不要直接設成 now,
-// 不然玩家在快回滿前一秒點進來看一眼,會把已經累積的零頭時間全部歸零,等於變相拉長回復時間)。
-export function applyDungeonTicketRegen(state: DungeonState, now: number = Date.now()): DungeonState {
-  if (state.tickets >= DUNGEON_TICKET_CAP) return state;
-  const elapsed = now - state.lastTicketRegenAt;
-  if (elapsed < DUNGEON_TICKET_REGEN_MS) return state;
-  const regenerated = Math.floor(elapsed / DUNGEON_TICKET_REGEN_MS);
-  const nextTickets = Math.min(DUNGEON_TICKET_CAP, state.tickets + regenerated);
-  const consumedMs = regenerated * DUNGEON_TICKET_REGEN_MS;
-  return { tickets: nextTickets, lastTicketRegenAt: state.lastTicketRegenAt + consumedMs };
+// 純函式:跨日才把6個分頁的今日已用次數一起歸零,不用等玩家手動點進副本分頁才觸發
+// (見 hooks/useGameState.ts 的 load(),跟每日任務/登入獎勵同一套「跨日重置」精神)。
+export function applyDungeonDailyReset(state: DungeonState, now: number = Date.now()): DungeonState {
+  if (!isNewDay(state.lastResetAt, now)) return state;
+  return { lastResetAt: todayDateString(now), usedToday: createEmptyUsedToday() };
 }
 
-// UI 顯示用:回滿了回傳 null(不用倒數),沒回滿回傳距離下一張還剩幾毫秒。
-export function msUntilNextDungeonTicket(state: DungeonState, now: number = Date.now()): number | null {
-  const regened = applyDungeonTicketRegen(state, now);
-  if (regened.tickets >= DUNGEON_TICKET_CAP) return null;
-  return DUNGEON_TICKET_REGEN_MS - (now - regened.lastTicketRegenAt);
+export function remainingDungeonChallenges(state: DungeonState, tab: DungeonTab): number {
+  return Math.max(0, DUNGEON_DAILY_CAP[tab] - state.usedToday[tab]);
 }
 
-// 消耗一張入場券(呼叫前後都會先套用回補,確保拿到的是當下最新可用張數)。
-// 沒有票可用回傳 null,呼叫端要處理這個 null(不能挑戰、UI 按鈕本來就該 disabled)。
-export function spendDungeonTicket(state: DungeonState, now: number = Date.now()): DungeonState | null {
-  const regened = applyDungeonTicketRegen(state, now);
-  if (regened.tickets <= 0) return null;
-  return { tickets: regened.tickets - 1, lastTicketRegenAt: regened.lastTicketRegenAt };
+// 消耗一次指定分頁的每日挑戰次數。沒有剩餘次數回傳 null,呼叫端要處理這個 null
+// (不能挑戰、UI 按鈕本來就該 disabled)。
+export function spendDungeonChallenge(state: DungeonState, tab: DungeonTab): DungeonState | null {
+  if (remainingDungeonChallenges(state, tab) <= 0) return null;
+  return { ...state, usedToday: { ...state.usedToday, [tab]: state.usedToday[tab] + 1 } };
 }
 
 // 副本難度倍率:吃玩家等級(不是關卡進度),讓副本是一個穩定的「build夠不夠強」檢驗,
@@ -71,28 +88,15 @@ export const DUNGEON_ARCHETYPES: Archetype[] = [
   'magicSupport',
 ];
 
-// 副本六分頁(見 components/DungeonPanel.tsx):職業試煉之外再拆五種各自獨立的材料/資源副本,
-// 全部共用同一組入場券池,不分頁另外開票。
-export type DungeonTab = 'job' | 'skillBook' | 'enhanceStone' | 'gem' | 'exp' | 'coin';
-export const DUNGEON_TABS: DungeonTab[] = ['job', 'skillBook', 'enhanceStone', 'gem', 'exp', 'coin'];
-export const DUNGEON_TAB_LABELS: Record<DungeonTab, string> = {
-  job: '職業副本',
-  skillBook: '技能書副本',
-  enhanceStone: '強化石副本',
-  gem: '鑲嵌石副本',
-  exp: '經驗副本',
-  coin: '金錢副本',
-};
-
-// 強化石副本:固定初階,打贏保證掉落固定數量,維持既有份量不變(這次改版只提高技能書副本的量)。
-export const ENHANCE_STONE_DUNGEON_REWARD_AMOUNT = 2;
+// 強化石副本:固定初階,打贏保證掉落固定數量。獎勵改版(+50%):2→3。
+export const ENHANCE_STONE_DUNGEON_REWARD_AMOUNT = 3;
 export const ENHANCE_STONE_DUNGEON_SCHOOL: DamageType = 'physical';
 
-// 技能書副本:保底10本(舊制2本的5倍),且依職業階級開放對應階的副本——玩家目前的 jobTier
-// 開到哪,0階(初階,學生期也能挑戰)到 jobTier 之間的每一階都各自是一個獨立副本卡片,
+// 技能書副本:保底15本(獎勵改版,原10本+50%),且依職業階級開放對應階的副本——玩家目前的
+// jobTier 開到哪,0階(初階,學生期也能挑戰)到 jobTier 之間的每一階都各自是一個獨立副本卡片,
 // 一旦開放就不會因為之後繼續轉職而關閉(jobTier 只會往上升、不會倒退,所以「開過的階級
 // 永久可玩」自然成立,不需要額外的「最高曾達到階級」欄位)。
-export const SKILL_BOOK_DUNGEON_REWARD_AMOUNT = 10;
+export const SKILL_BOOK_DUNGEON_REWARD_AMOUNT = 15;
 export const SKILL_BOOK_DUNGEON_SCHOOL: DamageType = 'magic';
 
 export function unlockedSkillBookDungeonTiers(hasChosenJob: boolean, jobTier: JobTier): MaterialTier[] {
@@ -112,7 +116,8 @@ const WEEKDAY_GEM_DUNGEON_PAIRS: Partial<Record<number, [GemType, GemType]>> = {
   4: ['physicalAttackGem', 'magicAttackGem'],
   5: ['lifestealGem', 'hpRegenGem'],
 };
-export const GEM_DUNGEON_REWARD_AMOUNT = 3;
+// 獎勵改版:3→5(原提案4~5,取上限)。
+export const GEM_DUNGEON_REWARD_AMOUNT = 5;
 export const GEM_DUNGEON_SCHOOL: DamageType = 'magic';
 
 // weekday:JS Date.getDay() 的 0(日)~6(六)。
@@ -122,15 +127,16 @@ export function availableGemDungeonTypes(weekday: number): GemType[] {
 
 // 經驗/金錢副本:跟現有離線經驗公式(expPerMin)同樣邏輯隨等級成長——經驗直接借
 // expPerMin 換算成「打贏=N分鐘份離線經驗」;金錢延續 dungeonWinCoinReward 同一組線性
-// 成長參數放大,兩者都不吃隨機,打贏一次就是固定這個數。
-const DUNGEON_EXP_REWARD_MINUTES = 45;
+// 成長參數放大,兩者都不吃隨機,打贏一次就是固定這個數。獎勵改版(+50%上下):
+// 45分鐘→68分鐘、基礎值/等級係數同比例放大。
+const DUNGEON_EXP_REWARD_MINUTES = 68;
 export function dungeonExpDropAmount(level: number): number {
   return Math.floor(expPerMin(level) * DUNGEON_EXP_REWARD_MINUTES);
 }
 export const EXP_DUNGEON_SCHOOL: DamageType = 'physical';
 
-const DUNGEON_COIN_DROP_BASE = 300;
-const DUNGEON_COIN_DROP_LEVEL_FACTOR = 20;
+const DUNGEON_COIN_DROP_BASE = 450;
+const DUNGEON_COIN_DROP_LEVEL_FACTOR = 30;
 export function dungeonCoinDropAmount(level: number): number {
   return Math.round(DUNGEON_COIN_DROP_BASE + level * DUNGEON_COIN_DROP_LEVEL_FACTOR);
 }

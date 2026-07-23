@@ -1,15 +1,16 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { TIER_UNLOCK_LEVELS } from '../game/combat';
-import { DUNGEON_TICKET_CAP } from '../game/dungeon';
+import { DUNGEON_DAILY_CAP, remainingDungeonChallenges } from '../game/dungeon';
 import { nextJobTier, promotionMaterialCost } from '../game/jobPromotion';
 import { MATERIAL_TIER_LABELS, MaterialTier } from '../game/materials';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
 
 // 職業階級晉升卡片:轉職不再是等級到門檻就自動套用,改成玩家在這裡主動觸發一次晉升試煉——
-// 試煉沿用轉職副本同一組入場券池(見 hooks/useGameState.ts 的 promoteJobTier),材料門檻
-// 對應晉升目標階級,三個條件(等級/材料/入場券)都要當下滿足才能出手,打贏才會真的升階。
+// 試煉沿用「職業副本」同一組每日次數(見 hooks/useGameState.ts 的 promoteJobTier、
+// game/dungeon.ts 的 DUNGEON_DAILY_CAP.job),材料門檻對應晉升目標階級,三個條件
+// (等級/材料/今日次數)都要當下滿足才能出手,打贏才會真的升階。
 export function JobPromotionCard() {
   const jobTier = useGameState((state) => state.jobTier);
   const level = useGameState((state) => state.level);
@@ -37,7 +38,8 @@ export function JobPromotionCard() {
   const heldBooks = skillBooks[materialTier];
   const heldStones = enhanceStones[materialTier];
   const materialsReady = heldBooks >= cost.skillBooks && heldStones >= cost.enhanceStones;
-  const ticketReady = dungeon.tickets > 0;
+  const remainingChallenges = remainingDungeonChallenges(dungeon, 'job');
+  const ticketReady = remainingChallenges > 0;
   const canPromote = levelReady && materialsReady && ticketReady;
 
   function handlePromote() {
@@ -64,7 +66,7 @@ export function JobPromotionCard() {
         {MATERIAL_TIER_LABELS[materialTier]}強化石(持有 {heldStones})
       </Text>
       <Text style={[styles.reqLine, !ticketReady && styles.reqLineFail]}>
-        入場券 {dungeon.tickets}/{DUNGEON_TICKET_CAP}
+        今日職業副本次數 {remainingChallenges}/{DUNGEON_DAILY_CAP.job}
       </Text>
       <Pressable style={[styles.button, !canPromote && styles.buttonDisabled]} onPress={handlePromote} disabled={!canPromote}>
         <Text style={styles.buttonLabel}>挑戰晉升試煉</Text>
