@@ -2,12 +2,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   ACHIEVEMENTS,
+  ACHIEVEMENTS_BY_GROWTH,
   AchievementCategory,
   AchievementDef,
   getAchievementBonusMultiplier,
   getAchievementProgressDisplay,
 } from '../game/achievements';
 import { GEM_SPECS, GemType } from '../game/equipment';
+import { MATERIAL_TIER_COLORS, MATERIAL_TIER_LABELS, MaterialTier } from '../game/materials';
 import { computeAchievementProgress, useGameState } from '../hooks/useGameState';
 
 const CATEGORY_LABELS: Record<AchievementCategory, string> = {
@@ -20,18 +22,10 @@ const CATEGORY_LABELS: Record<AchievementCategory, string> = {
   stage: '關卡里程碑',
 };
 
-const CATEGORY_ORDER: AchievementCategory[] = [
-  'kills',
-  'level',
-  'equipment',
-  'enhance',
-  'companion',
-  'transfer',
-  'stage',
-];
-
 function formatReward(def: AchievementDef): string {
   const parts = [`${def.reward.coins} 金幣`];
+  if (def.reward.exp) parts.push(`經驗 x${def.reward.exp}`);
+  if (def.reward.skillBooks) parts.push(`技能書 x${def.reward.skillBooks}`);
   if (def.reward.enhanceStones) parts.push(`強化石 x${def.reward.enhanceStones}`);
   if (def.reward.gems) {
     for (const [gemType, amount] of Object.entries(def.reward.gems) as [GemType, number][]) {
@@ -86,12 +80,20 @@ export function AchievementPanel() {
         </Pressable>
       )}
 
-      {CATEGORY_ORDER.map((category) => {
-        const defs = Object.values(ACHIEVEMENTS).filter((def) => def.category === category);
-        return (
-          <View key={category} style={styles.categorySection}>
-            <Text style={styles.categoryTitle}>{CATEGORY_LABELS[category]}</Text>
-            {defs.map((def) => {
+      {/* 依成長排序(見 game/achievements.ts 的 ACHIEVEMENTS_BY_GROWTH):同一個 tier 內的成就
+          分在同一段,段落標題用材料階級名稱(呼應獎勵發放的階級),不再依成就分類獨立分段——
+          跨分類但同階的成就會排在一起,反映「大概同時期會達成」的成長曲線。 */}
+      {(Object.keys(MATERIAL_TIER_LABELS) as unknown as MaterialTier[])
+        .map(Number)
+        .map((tier) => {
+          const defs = ACHIEVEMENTS_BY_GROWTH.filter((def) => def.tier === tier);
+          if (defs.length === 0) return null;
+          return (
+            <View key={tier} style={styles.categorySection}>
+              <Text style={[styles.categoryTitle, { color: MATERIAL_TIER_COLORS[tier as MaterialTier] }]}>
+                {MATERIAL_TIER_LABELS[tier as MaterialTier]}
+              </Text>
+              {defs.map((def) => {
               // 三態:未達成(unlocked=false)/已達成未領取(unlocked但!claimed)/已領取(claimed)。
               const unlocked = unlockedAchievementIds.includes(def.id);
               const claimed = claimedAchievementIds.includes(def.id);
@@ -108,6 +110,7 @@ export function AchievementPanel() {
                     </Text>
                     {claimed && <Text style={styles.unlockedBadge}>已解鎖</Text>}
                   </View>
+                  <Text style={styles.categoryBadge}>{CATEGORY_LABELS[def.category]}</Text>
                   <Text style={styles.description}>{def.description}</Text>
                   {claimed ? (
                     <Text style={styles.rewardText}>獎勵:{formatReward(def)}</Text>
@@ -205,6 +208,10 @@ const styles = StyleSheet.create({
   unlockedBadge: {
     color: '#c9a94f',
     fontSize: 11,
+  },
+  categoryBadge: {
+    color: '#6a7078',
+    fontSize: 10,
   },
   description: {
     color: '#8a8a95',

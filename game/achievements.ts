@@ -1,4 +1,5 @@
 import { ENHANCE_MAX_LEVEL, GemType } from './equipment';
+import { MaterialTier } from './materials';
 
 // 成就系統:純函式,不依賴 React/RN,可在 Node 環境單獨測試(見 CLAUDE.md 分層鐵律)。
 // 26 個手刻成就分 6 類(擊殺數/等級里程碑/裝備收集/強化鑲嵌/寵物坐騎/轉職)+ 76 個
@@ -10,13 +11,20 @@ export type AchievementCategory = 'kills' | 'level' | 'equipment' | 'enhance' | 
 
 export interface AchievementReward {
   coins: number;
+  exp?: number;
   enhanceStones?: number;
+  skillBooks?: number;
   gems?: Partial<Record<GemType, number>>;
 }
 
+// tier(見 game/materials.ts 的 MaterialTier):這個成就大概對應玩家「成長到哪個階段」才會
+// 達成,不是裝備/技能書本身的階級——用來決定 (1) 獎勵裡的強化石/技能書要發到哪一階
+// (呼應「依對應等級提供同階素材」的需求,不再一律發初階),(2) 成就列表要依成長排序時的
+// 主要排序鍵(見 components/AchievementPanel.tsx 的 sortAchievementsByGrowth)。
 export interface AchievementDef {
   id: string;
   category: AchievementCategory;
+  tier: MaterialTier;
   title: string;
   description: string;
   reward: AchievementReward;
@@ -129,12 +137,20 @@ const STAGE_MILESTONES: StageMilestoneDef[] = [
   { threshold: 300, title: '宇宙盡頭的發呆冠軍', description: '抵達第3000關,把整個宇宙的發呆額度用完,正式封頂' },
 ];
 
-// 獎勵公式(不逐筆手刻):金幣跟門檻(=大關數)成正比;強化石從第10大關起才開始給,
-// 每10大關份量+1;每滿50大關(=每500關)額外給一批三色寶石,份量隨門檻線性成長——
+// 關卡里程碑對應的成長階級:每50大關一階(threshold 1~300 分成6階),跟職業轉職階級
+// (JobTier 1~5,見 game/materials.ts 的 currentMaterialTier)大致同步成長速度。
+function stageMilestoneTier(threshold: number): MaterialTier {
+  return Math.min(5, Math.floor((threshold - 1) / 50)) as MaterialTier;
+}
+
+// 獎勵公式(不逐筆手刻):金幣/經驗跟門檻(=大關數)成正比;強化石從第10大關起才開始給,
+// 每10大關份量+1;技能書從第5大關起就開始給、份量是強化石的2倍(呼應「技能書掉率提高」的
+// 整體經濟方向);每滿50大關(=每500關)額外給一批三色寶石,份量隨門檻線性成長——
 // 呼應既有成就系統「越晚越稀有」的獎勵曲線(參照 KILL_THRESHOLDS 系列)。
 function stageMilestoneReward(threshold: number): AchievementReward {
-  const reward: AchievementReward = { coins: threshold * 100 };
+  const reward: AchievementReward = { coins: threshold * 100, exp: threshold * 50 };
   if (threshold >= 10) reward.enhanceStones = Math.floor(threshold / 10);
+  if (threshold >= 5) reward.skillBooks = Math.floor(threshold / 5);
   if (threshold % 50 === 0) {
     const amount = threshold / 50;
     reward.gems = { expGem: amount, coinGem: amount, speedGem: amount };
@@ -149,6 +165,7 @@ function buildStageAchievements(): Record<string, AchievementDef> {
     result[id] = {
       id,
       category: 'stage',
+      tier: stageMilestoneTier(milestone.threshold),
       title: milestone.title,
       description: milestone.description,
       reward: stageMilestoneReward(milestone.threshold),
@@ -161,195 +178,246 @@ export const ACHIEVEMENTS: Record<string, AchievementDef> = {
   kills_1: {
     id: 'kills_1',
     category: 'kills',
+    tier: 0,
     title: '初次交手',
     description: '擊敗第一隻怪物',
-    reward: { coins: 20 },
+    reward: { coins: 20, exp: 50 },
   },
   kills_10: {
     id: 'kills_10',
     category: 'kills',
+    tier: 0,
     title: '小試身手',
     description: '累計擊敗10隻怪物',
-    reward: { coins: 50 },
+    reward: { coins: 50, exp: 150 },
   },
   kills_100: {
     id: 'kills_100',
     category: 'kills',
+    tier: 1,
     title: '熟能生巧',
     description: '累計擊敗100隻怪物',
-    reward: { coins: 300 },
+    reward: { coins: 300, exp: 800, skillBooks: 1 },
   },
   kills_500: {
     id: 'kills_500',
     category: 'kills',
+    tier: 2,
     title: '身經百戰',
     description: '累計擊敗500隻怪物',
-    reward: { coins: 500, enhanceStones: 1 },
+    reward: { coins: 500, exp: 2000, enhanceStones: 1, skillBooks: 2 },
   },
   kills_1000: {
     id: 'kills_1000',
     category: 'kills',
+    tier: 3,
     title: '千人斬',
     description: '累計擊敗1000隻怪物',
-    reward: { coins: 1000, enhanceStones: 2 },
+    reward: { coins: 1000, exp: 4000, enhanceStones: 2, skillBooks: 3 },
   },
   kills_5000: {
     id: 'kills_5000',
     category: 'kills',
+    tier: 4,
     title: '屠戮無數',
     description: '累計擊敗5000隻怪物',
-    reward: { coins: 3000, enhanceStones: 5, gems: { expGem: 1, coinGem: 1, speedGem: 1 } },
+    reward: { coins: 3000, exp: 10000, enhanceStones: 5, skillBooks: 5, gems: { expGem: 1, coinGem: 1, speedGem: 1 } },
   },
   kills_10000: {
     id: 'kills_10000',
     category: 'kills',
+    tier: 5,
     title: '傳說獵人',
     description: '累計擊敗10000隻怪物',
-    reward: { coins: 6000, enhanceStones: 10, gems: { expGem: 3, coinGem: 3, speedGem: 3 } },
+    reward: {
+      coins: 6000,
+      exp: 20000,
+      enhanceStones: 10,
+      skillBooks: 10,
+      gems: { expGem: 3, coinGem: 3, speedGem: 3 },
+    },
   },
 
   level_30: {
     id: 'level_30',
     category: 'level',
+    tier: 1,
     title: '學生畢業',
     description: '等級達到30級,選定第一個主職',
-    reward: { coins: 500 },
+    reward: { coins: 500, skillBooks: 2 },
   },
   level_80: {
     id: 'level_80',
     category: 'level',
+    tier: 2,
     title: '三轉在望',
     description: '等級達到80級,解鎖雙職兼修',
-    reward: { coins: 800, enhanceStones: 1 },
+    reward: { coins: 800, enhanceStones: 1, skillBooks: 3 },
   },
   level_120: {
     id: 'level_120',
     category: 'level',
+    tier: 3,
     title: '資深冒險者',
     description: '等級達到120級',
-    reward: { coins: 1500, enhanceStones: 2 },
+    reward: { coins: 1500, enhanceStones: 2, skillBooks: 4 },
   },
   level_200: {
     id: 'level_200',
     category: 'level',
+    tier: 4,
     title: '四轉高手',
     description: '等級達到200級',
-    reward: { coins: 2500, enhanceStones: 3, gems: { expGem: 1, coinGem: 1, speedGem: 1 } },
+    reward: { coins: 2500, enhanceStones: 3, skillBooks: 6, gems: { expGem: 1, coinGem: 1, speedGem: 1 } },
   },
   level_350: {
     id: 'level_350',
     category: 'level',
+    tier: 5,
     title: '五轉大師',
     description: '等級達到350級,五階轉職全開',
-    reward: { coins: 4000, enhanceStones: 5, gems: { expGem: 2, coinGem: 2, speedGem: 2 } },
+    reward: { coins: 4000, enhanceStones: 5, skillBooks: 8, gems: { expGem: 2, coinGem: 2, speedGem: 2 } },
   },
   level_500: {
     id: 'level_500',
     category: 'level',
+    tier: 5,
     title: '封頂',
     description: '等級達到最高等級500級',
-    reward: { coins: 8000, enhanceStones: 10, gems: { expGem: 5, coinGem: 5, speedGem: 5 } },
+    reward: { coins: 8000, enhanceStones: 10, skillBooks: 12, gems: { expGem: 5, coinGem: 5, speedGem: 5 } },
   },
 
   equip_10pct: {
     id: 'equip_10pct',
     category: 'equipment',
+    tier: 0,
     title: '初嚐裝備',
     description: '解鎖10%的收費裝備款式',
-    reward: { coins: 200 },
+    reward: { coins: 200, exp: 300 },
   },
   equip_25pct: {
     id: 'equip_25pct',
     category: 'equipment',
+    tier: 1,
     title: '小小收藏家',
     description: '解鎖25%的收費裝備款式',
-    reward: { coins: 500, enhanceStones: 1 },
+    reward: { coins: 500, exp: 800, enhanceStones: 1, skillBooks: 1 },
   },
   equip_50pct: {
     id: 'equip_50pct',
     category: 'equipment',
+    tier: 2,
     title: '裝備半藏',
     description: '解鎖50%的收費裝備款式',
-    reward: { coins: 1200, enhanceStones: 3 },
+    reward: { coins: 1200, exp: 1800, enhanceStones: 3, skillBooks: 2 },
   },
   equip_75pct: {
     id: 'equip_75pct',
     category: 'equipment',
+    tier: 3,
     title: '裝備收藏家',
     description: '解鎖75%的收費裝備款式',
-    reward: { coins: 2500, enhanceStones: 5, gems: { expGem: 2, coinGem: 2, speedGem: 2 } },
+    reward: {
+      coins: 2500,
+      exp: 3500,
+      enhanceStones: 5,
+      skillBooks: 4,
+      gems: { expGem: 2, coinGem: 2, speedGem: 2 },
+    },
   },
   equip_100pct: {
     id: 'equip_100pct',
     category: 'equipment',
+    tier: 4,
     title: '裝備圖鑑大師',
     description: '解鎖100%的收費裝備款式',
-    reward: { coins: 6000, enhanceStones: 10, gems: { expGem: 5, coinGem: 5, speedGem: 5 } },
+    reward: {
+      coins: 6000,
+      exp: 8000,
+      enhanceStones: 10,
+      skillBooks: 6,
+      gems: { expGem: 5, coinGem: 5, speedGem: 5 },
+    },
   },
 
   enhance_first: {
     id: 'enhance_first',
     category: 'enhance',
+    tier: 0,
     title: '初次強化',
     description: '第一次強化成功',
-    reward: { coins: 100 },
+    reward: { coins: 100, exp: 150 },
   },
   enhance_max: {
     id: 'enhance_max',
     category: 'enhance',
+    tier: 3,
     title: '強化極限',
     description: '任一件裝備強化到+10封頂',
-    reward: { coins: 1000, enhanceStones: 3 },
+    reward: { coins: 1000, exp: 2500, enhanceStones: 3, skillBooks: 3 },
   },
   socket_full: {
     id: 'socket_full',
     category: 'enhance',
+    tier: 2,
     title: '寶石鑲滿',
     description: '任一件裝備所有插槽都鑲上寶石',
-    reward: { coins: 300, gems: { expGem: 1, coinGem: 1, speedGem: 1 } },
+    reward: { coins: 300, exp: 800, skillBooks: 1, gems: { expGem: 1, coinGem: 1, speedGem: 1 } },
   },
 
   companion_first: {
     id: 'companion_first',
     category: 'companion',
+    tier: 0,
     title: '初次相遇',
     description: '取得第一隻寵物或坐騎',
-    reward: { coins: 200 },
+    reward: { coins: 200, exp: 300 },
   },
   companion_50pct: {
     id: 'companion_50pct',
     category: 'companion',
+    tier: 2,
     title: '動物朋友',
     description: '收集50%的寵物坐騎圖鑑',
-    reward: { coins: 800 },
+    reward: { coins: 800, exp: 1500, skillBooks: 2 },
   },
   companion_100pct: {
     id: 'companion_100pct',
     category: 'companion',
+    tier: 4,
     title: '馴獸大師',
     description: '收集100%的寵物坐騎圖鑑',
-    reward: { coins: 2000, enhanceStones: 5 },
+    reward: { coins: 2000, exp: 4000, enhanceStones: 5, skillBooks: 5 },
   },
 
   transfer_first_proof: {
     id: 'transfer_first_proof',
     category: 'transfer',
+    tier: 1,
     title: '轉職資格',
     description: '第一次集滿10個碎片、合成1個轉職證明',
-    reward: { coins: 300 },
+    reward: { coins: 300, exp: 500, skillBooks: 1 },
   },
   transfer_first_switch: {
     id: 'transfer_first_switch',
     category: 'transfer',
+    tier: 1,
     title: '改頭換面',
     description: '第一次真正換過不同的主職職業',
-    reward: { coins: 500 },
+    reward: { coins: 500, exp: 700, skillBooks: 1 },
   },
 
   ...buildStageAchievements(),
 };
 
 export const ACHIEVEMENT_IDS: string[] = Object.keys(ACHIEVEMENTS);
+
+// 依成長排序:主要排序鍵是 tier(對應玩家大概成長到哪個階段),同階內用獎勵金幣當次要排序鍵
+// (同階裡通常越晚達成的門檻獎勵金幣也越高)——給 AchievementPanel 用單一連續清單取代
+// 「先分類再列表」的舊排法,呼應「依照成長排列」的需求。純函式,排序穩定不修改輸入陣列。
+export const ACHIEVEMENTS_BY_GROWTH: AchievementDef[] = Object.values(ACHIEVEMENTS).sort(
+  (a, b) => a.tier - b.tier || a.reward.coins - b.reward.coins
+);
 
 // killCount 系門檻:達到即解鎖,單純門檻比較。
 const KILL_THRESHOLDS: { id: string; threshold: number }[] = [
