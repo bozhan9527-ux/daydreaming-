@@ -146,9 +146,13 @@ import {
   createInitialActiveSkillLoadout,
   createInitialPassiveSkillLoadout,
   createInitialSkillTreeLevels,
+  dedupeActiveLoadout,
+  dedupePassiveLoadout,
   effectiveSkillLevel,
   enforceLoadoutIdentityCap,
   enforcePassiveLoadoutIdentityCap,
+  isActiveRefEquippedElsewhere,
+  isPassiveRefEquippedElsewhere,
   MAX_BORROWED_ACTIVE_SLOTS,
   MAX_BORROWED_PASSIVE_SLOTS,
   getPassiveBonusValue,
@@ -949,11 +953,13 @@ export const useGameState = create<GameState>((set, get) => ({
       skillTree: save.skillTree,
       // 職業認同上限(見 game/skillTree.ts 的 enforceLoadoutIdentityCap)是這次新加的規則,
       // 舊存檔可能存著「4格全借別的職業」這種現在不合法的配置——讀檔時清一次,超標的借用格
-      // 直接清空,不需要為此多加一版存檔遷移(loadout 本身的資料結構沒有變)。
-      activeSkillLoadout: enforceLoadoutIdentityCap(save.activeSkillLoadout, save.job.archetype),
-      // 3個被動欄位比照辦理(見 game/skillTree.ts 的 enforcePassiveLoadoutIdentityCap),
-      // 上限是1格而不是2格,超標的借用格一樣直接清空。
-      passiveSkillLoadout: enforcePassiveLoadoutIdentityCap(save.passiveSkillLoadout, save.job.archetype),
+      // 直接清空,不需要為此多加一版存檔遷移(loadout 本身的資料結構沒有變)。同一顆技能
+      // 裝在兩格以上的規則也是這次新加(見 dedupeActiveLoadout),同樣讀檔時保險清一次,
+      // 只保留先出現的那一格。
+      activeSkillLoadout: dedupeActiveLoadout(enforceLoadoutIdentityCap(save.activeSkillLoadout, save.job.archetype)),
+      // 3個被動欄位比照辦理(見 game/skillTree.ts 的 enforcePassiveLoadoutIdentityCap/
+      // dedupePassiveLoadout),上限是1格而不是2格,超標的借用格一樣直接清空。
+      passiveSkillLoadout: dedupePassiveLoadout(enforcePassiveLoadoutIdentityCap(save.passiveSkillLoadout, save.job.archetype)),
       studentSkillTree: save.studentSkillTree,
       gender: save.gender,
       coins,
@@ -2434,6 +2440,12 @@ export const useGameState = create<GameState>((set, get) => ({
     // 呼應「從已學過的技能(職業任一階或學生)中選擇」的需求,UI 本來就只會列出已學過的
     // 選項,這裡再擋一次純防呆(避免透過非正規管道塞進一個等級 0、還沒點過的技能)。
     if (ref !== null && resolveSkillLevel(ref, state.skillTree, state.studentSkillTree) <= 0) return;
+    // 同一顆技能不能同時裝在兩格(見 game/skillTree.ts 的 isActiveRefEquippedElsewhere),
+    // 這個檢查放在職業認同上限之前——重複裝備的問題比借用格數更根本,先擋。
+    if (ref !== null && isActiveRefEquippedElsewhere(state.activeSkillLoadout, position, ref)) {
+      useToast.getState().show('這個技能已經裝備在別的欄位了,同一顆技能不能重複裝備');
+      return;
+    }
     // 職業認同上限(見 game/skillTree.ts 的 canSetLoadoutSlot):4格最多2格能借別的來源
     // (別的職業任一階,或學生技能),超過就擋下這次設定並跳提示,不會靜默失敗。
     if (!canSetLoadoutSlot(state.activeSkillLoadout, state.job.archetype, position, ref)) {
@@ -2447,6 +2459,10 @@ export const useGameState = create<GameState>((set, get) => ({
   setPassiveSkillLoadout: (position, ref) => {
     const state = get();
     if (ref !== null && resolveSkillLevel(ref, state.skillTree, state.studentSkillTree) <= 0) return;
+    if (ref !== null && isPassiveRefEquippedElsewhere(state.passiveSkillLoadout, position, ref)) {
+      useToast.getState().show('這個技能已經裝備在別的欄位了,同一顆技能不能重複裝備');
+      return;
+    }
     if (!canSetPassiveLoadoutSlot(state.passiveSkillLoadout, state.job.archetype, position, ref)) {
       useToast.getState().show(`最多只能有${MAX_BORROWED_PASSIVE_SLOTS}格塞別的來源技能,至少要留給目前職業自己的招式`);
       return;

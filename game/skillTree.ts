@@ -193,6 +193,70 @@ export function enforcePassiveLoadoutIdentityCap(loadout: PassiveSkillLoadout, a
   return next;
 }
 
+// 同一顆技能(同一個 source+tier+sourceSlot)不能同時裝進兩個以上的欄位——精確比對三個
+// 欄位,「自己職業目前這一階的 active1」跟「自己職業目前這一階的 active2」雖然都是同一個
+// archetype+tier,但 sourceSlot 不同,不算重複;真正重複的是同一格技能被放進兩個不同的
+// 裝備位置。
+function isSameSkillRef(
+  a: { source: SkillSource; tier: number; sourceSlot: SkillSlotId },
+  b: { source: SkillSource; tier: number; sourceSlot: SkillSlotId }
+): boolean {
+  return a.source === b.source && a.tier === b.tier && a.sourceSlot === b.sourceSlot;
+}
+
+// setActiveSkillLoadout/setPassiveSkillLoadout action 呼叫這個判斷「這顆技能是不是已經裝在
+// 別的欄位」,position 是正要設定的那一格,不跟自己比較。UI(SkillLoadoutEditor.tsx)也呼叫
+// 這個把選單裡「已經裝備在別格」的選項鎖住,不用等玩家點了才被 store 擋下來、只留一句 toast。
+export function isActiveRefEquippedElsewhere(loadout: ActiveSkillLoadout, position: ActiveSkillSlotId, ref: ActiveSkillRef): boolean {
+  return ACTIVE_SLOT_IDS.some((slot) => {
+    if (slot === position) return false;
+    const other = loadout[slot];
+    return other !== null && isSameSkillRef(other, ref);
+  });
+}
+
+export function isPassiveRefEquippedElsewhere(loadout: PassiveSkillLoadout, position: PassiveSlotId, ref: PassiveSkillRef): boolean {
+  return (PASSIVE_SLOT_IDS as PassiveSlotId[]).some((slot) => {
+    if (slot === position) return false;
+    const other = loadout[slot];
+    return other !== null && isSameSkillRef(other, ref);
+  });
+}
+
+// 讀舊存檔用的保險絲:萬一玩家在這條規則上線前就已經把同一顆技能塞進兩格(理論上不會發生,
+// 但求穩），從後面的欄位往前依序清掉重複的那一份,只保留先出現(較前面)的那一格——跟
+// enforceLoadoutIdentityCap「從後往前清超標」的既有慣例一致。
+export function dedupeActiveLoadout(loadout: ActiveSkillLoadout): ActiveSkillLoadout {
+  const next = { ...loadout };
+  const seen: ActiveSkillRef[] = [];
+  ACTIVE_SLOT_IDS.forEach((slot) => {
+    const ref = next[slot];
+    if (ref === null) return;
+    if (seen.some((seenRef) => isSameSkillRef(seenRef, ref))) {
+      next[slot] = null;
+    } else {
+      seen.push(ref);
+    }
+  });
+  return next;
+}
+
+export function dedupePassiveLoadout(loadout: PassiveSkillLoadout): PassiveSkillLoadout {
+  const slots = PASSIVE_SLOT_IDS as PassiveSlotId[];
+  const next = { ...loadout };
+  const seen: PassiveSkillRef[] = [];
+  slots.forEach((slot) => {
+    const ref = next[slot];
+    if (ref === null) return;
+    if (seen.some((seenRef) => isSameSkillRef(seenRef, ref))) {
+      next[slot] = null;
+    } else {
+      seen.push(ref);
+    }
+  });
+  return next;
+}
+
 // 每一階自己的技能等級上限都是10級(見 SkillTreeLevels 的分階說明),5個階級各自一條
 // 獨立的0-10軌道——這裡回傳的是「單一階級自己」的封頂值,不是累加後的有效等級(那個見
 // effectiveSkillLevel/MAX_EFFECTIVE_SKILL_LEVEL)。tier 參數保留是因為每一階都封頂在

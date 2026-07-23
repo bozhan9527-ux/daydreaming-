@@ -11,6 +11,8 @@ import {
   countBorrowedActiveSlots,
   countBorrowedPassiveSlots,
   getPassiveBonusValue,
+  isActiveRefEquippedElsewhere,
+  isPassiveRefEquippedElsewhere,
   MAX_BORROWED_ACTIVE_SLOTS,
   MAX_BORROWED_PASSIVE_SLOTS,
   PASSIVE_SLOT_IDS,
@@ -225,11 +227,15 @@ export function SkillLoadoutEditor({ archetype, branch }: SkillLoadoutEditorProp
             <Text style={styles.emptyHint}>還沒有已經投資過等級的主動技能,先花技能書升級任一招式再回來配置。</Text>
           ) : (
             activeOptions.map((option) => {
-              // 已經借滿上限時,別的來源選項直接鎖住不能點——自己職業任一階的技能不受影響,
-              // 那些永遠能選。避免玩家點了才被 store 的 setActiveSkillLoadout 靜默擋下。
-              const isForeign = option.source !== archetype;
-              const locked = isForeign && activeBorrowCapReached;
               const ref: ActiveSkillRef = { source: option.source, tier: option.tier, sourceSlot: option.sourceSlot };
+              // 同一顆技能已經裝在別的欄位:直接鎖住,不管是不是自己職業的技能都一樣不能
+              // 重複裝備。已經借滿上限時,別的來源選項也一樣鎖住——自己職業任一階的技能
+              // 不受借用上限影響,那些永遠能選(除非重複裝備)。避免玩家點了才被 store 的
+              // setActiveSkillLoadout 靜默擋下。
+              const alreadyEquippedElsewhere = isActiveRefEquippedElsewhere(activeSkillLoadout, editing.position, ref);
+              const isForeign = option.source !== archetype;
+              const lockedByBorrowCap = isForeign && activeBorrowCapReached;
+              const locked = alreadyEquippedElsewhere || lockedByBorrowCap;
               return (
                 <Pressable
                   key={`${option.source}-${option.tier}-${option.sourceSlot}`}
@@ -247,7 +253,7 @@ export function SkillLoadoutEditor({ archetype, branch }: SkillLoadoutEditorProp
                   <Text style={styles.pickerRowSub}>
                     {sourceLabel(option.source)}
                     {option.source !== 'student' ? `${option.tier}階` : ''}
-                    {locked ? `(已借滿${MAX_BORROWED_ACTIVE_SLOTS}格)` : ''}
+                    {alreadyEquippedElsewhere ? '(已裝備在別格)' : lockedByBorrowCap ? `(已借滿${MAX_BORROWED_ACTIVE_SLOTS}格)` : ''}
                   </Text>
                 </Pressable>
               );
@@ -304,9 +310,11 @@ export function SkillLoadoutEditor({ archetype, branch }: SkillLoadoutEditorProp
             <Text style={styles.emptyHint}>還沒有已經投資過等級的被動技能,先花技能書升級任一項再回來配置。</Text>
           ) : (
             passiveOptions.map((option) => {
-              const isForeign = option.source !== archetype;
-              const locked = isForeign && passiveBorrowCapReached;
               const ref: PassiveSkillRef = { source: option.source, tier: option.tier, sourceSlot: option.sourceSlot };
+              const alreadyEquippedElsewhere = isPassiveRefEquippedElsewhere(passiveSkillLoadout, editing.position, ref);
+              const isForeign = option.source !== archetype;
+              const lockedByBorrowCap = isForeign && passiveBorrowCapReached;
+              const locked = alreadyEquippedElsewhere || lockedByBorrowCap;
               return (
                 <Pressable
                   key={`${option.source}-${option.tier}-${option.sourceSlot}`}
@@ -324,7 +332,7 @@ export function SkillLoadoutEditor({ archetype, branch }: SkillLoadoutEditorProp
                   <Text style={styles.pickerRowSub}>
                     {sourceLabel(option.source)}
                     {option.source !== 'student' ? `${option.tier}階` : ''}
-                    {locked ? `(已借滿${MAX_BORROWED_PASSIVE_SLOTS}格)` : ''}
+                    {alreadyEquippedElsewhere ? '(已裝備在別格)' : lockedByBorrowCap ? `(已借滿${MAX_BORROWED_PASSIVE_SLOTS}格)` : ''}
                   </Text>
                 </Pressable>
               );
