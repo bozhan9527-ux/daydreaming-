@@ -156,10 +156,10 @@ function TierList({
   const icon = getSkillIcon(archetype, 'active1', 1);
   const combatBonusPct = Math.round((calcCombatMultiplier(archetype, currentTier) - 1) * 100);
   const canGraduate = currentLevel >= graduateLevel;
-  // 畢業前(!hasChosenJob)分支還沒真的選定,branch 傳進來的是玩家目前預選的分支——
-  // 跟畢業後「已經是主職、可以直接切換分支」共用同一個 branch prop 語意一致,
-  // 差別只在畢業前選了還不會立刻生效,要等按下「設為主職(畢業)」才連同分支一起套用。
-  const showBranchPicker = !hasChosenJob || isPrimary;
+  // 分支選擇器一律顯示,不管畢業前後、也不管瀏覽的是不是目前主職——修正舊版「畢業後轉職到
+  // 別的職業時,分支選擇器會被藏起來、送出轉職時還錯誤帶入舊職業目前分支」的問題。branch prop
+  // 語意:瀏覽自己目前主職(isPrimary)時是真正生效中的分支,其餘情況(畢業前的預選/畢業後
+  // 準備轉去的新職業)都是「還沒套用、按下對應按鈕才生效」的暫存選擇。
 
   return (
     <View style={styles.panelCard}>
@@ -220,10 +220,7 @@ function TierList({
       <View style={styles.tierRow}>
         {TIERS.map((tier) => {
           const unlocked = currentLevel >= TIER_UNLOCK_LEVELS[tier];
-          // 畢業前用玩家目前預選的分支(branch)當預覽,已經是主職也是用真正的 branch;
-          // 只有「已經畢業、但瀏覽的不是自己主職」這種情況(轉職途中看別的職業)分支還沒意義,
-          // 才退回分支A當佔位預覽。
-          const tierTitle = getJobTitle(archetype, showBranchPicker ? branch : 'A', tier);
+          const tierTitle = getJobTitle(archetype, branch, tier);
           return (
             <Pressable key={tier} style={[styles.tierButton, !unlocked && styles.tierButtonLocked]} onPress={() => onSelectTier(tier)}>
               <Text style={styles.tierButtonLabel}>{tier}階</Text>
@@ -236,19 +233,17 @@ function TierList({
         })}
       </View>
 
-      {showBranchPicker && (
-        <View style={styles.branchRow}>
-          {BRANCHES.map((b) => (
-            <Pressable
-              key={b}
-              style={[styles.branchButton, branch === b && styles.branchButtonActive]}
-              onPress={() => onSetBranch(b)}
-            >
-              <Text style={styles.branchLabel}>分支 {b}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
+      <View style={styles.branchRow}>
+        {BRANCHES.map((b) => (
+          <Pressable
+            key={b}
+            style={[styles.branchButton, branch === b && styles.branchButtonActive]}
+            onPress={() => onSetBranch(b)}
+          >
+            <Text style={styles.branchLabel}>分支 {b}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       {!hasChosenJob ? (
         <View style={styles.detailActions}>
@@ -424,7 +419,7 @@ export function JobSelector() {
           archetype={viewingArchetype}
           isPrimary={isViewingPrimary}
           isSecondary={isViewingSecondary}
-          branch={hasChosenJob ? job.branch : selectedBranch}
+          branch={isViewingPrimary ? job.branch : selectedBranch}
           currentTier={currentTier}
           hasChosenJob={hasChosenJob}
           graduateLevel={TIER_UNLOCK_LEVELS[1]}
@@ -434,8 +429,8 @@ export function JobSelector() {
           transferProofCount={transferProofs[viewingArchetype] ?? 0}
           studentSkillTree={studentSkillTree}
           onBack={() => setView('archetypes')}
-          onSetPrimary={() => setJob(viewingArchetype, hasChosenJob ? job.branch : selectedBranch)}
-          onSetBranch={(b) => (hasChosenJob ? setJob(job.archetype, b) : setSelectedBranch(b))}
+          onSetPrimary={() => setJob(viewingArchetype, isViewingPrimary ? job.branch : selectedBranch)}
+          onSetBranch={(b) => (isViewingPrimary ? setJob(job.archetype, b) : setSelectedBranch(b))}
           onToggleSecondary={() => setSecondaryJob(isViewingSecondary ? null : viewingArchetype)}
           onSelectTier={(tier) => {
             setViewingTier(tier);
@@ -452,7 +447,7 @@ export function JobSelector() {
         <SkillDetailPanel
           archetype={viewingArchetype}
           tier={viewingTier}
-          branch={isViewingPrimary ? job.branch : 'A'}
+          branch={isViewingPrimary ? job.branch : selectedBranch}
           skillLevels={skillTree[viewingArchetype]}
           onBack={() => setView('tiers')}
         />
