@@ -1,68 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   EquipmentBonusStat,
   EquipmentItem,
   EquipmentSlot,
-  getEnhancedBonusValue,
-  getEquipmentBonusTotalsFull,
   getEquippableItemsForSlot,
   getIdentifyCost,
-  getItemById,
-  getItemRarity,
   getRerollCost,
-  getSubstatTotals,
   isItemUnlocked,
   SLOT_Z_ORDER,
 } from '../game/equipment';
-import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
-import { RARITY_FRAME_PARTS } from './equipmentFrames';
-import { useHeroArt } from './HeroWalkSprite';
-import { formatBonus, formatItemStats } from './itemFormatting';
+import { formatItemStats } from './itemFormatting';
 import { ItemIcon } from './ItemIcon';
 import { ItemPreviewModal } from './ItemPreviewModal';
-import { NineSliceFrame } from './NineSliceFrame';
-import { OrnateFrame } from './OrnateFrame';
-import { PixelSprite } from './PixelSprite';
-
-// 裝備分頁的角色預覽:跟戰鬥畫面共用同一份 AI 美術(useHeroArt),平常顯示 open,點一下
-// 短暫換成 middle(來源三聯圖中間那張動作格)再彈回來——跟 HeroWalkSprite 點擊顯示 click
-// (最右格)是同一個「點一下看另一張」手感,只是這裡看的是中間那張。這個預覽不會疊裝備
-// 圖層(AI 美術不是逐插槽疊圖系統),純粹替換掉原本 HeroSprite 的程式產生疊圖角色。
-const HERO_PREVIEW_HEIGHT = 130;
-const HERO_PREVIEW_CLICK_MS = 500;
-
-function EquipmentHeroPreview() {
-  const art = useHeroArt();
-  const [showMiddle, setShowMiddle] = useState(false);
-  const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(() => {
-    return () => clearTimeout(timeout.current);
-  }, []);
-
-  function handlePress() {
-    setShowMiddle(true);
-    clearTimeout(timeout.current);
-    timeout.current = setTimeout(() => setShowMiddle(false), HERO_PREVIEW_CLICK_MS);
-  }
-
-  const source = showMiddle ? art.middle : art.open;
-  const aspectRatio = showMiddle ? art.middleAspectRatio : art.openAspectRatio;
-
-  return (
-    <Pressable onPress={handlePress}>
-      <Image
-        source={source}
-        style={{ height: HERO_PREVIEW_HEIGHT, width: HERO_PREVIEW_HEIGHT * aspectRatio }}
-        resizeMode="contain"
-      />
-    </Pressable>
-  );
-}
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
   back: '背飾',
@@ -76,46 +29,31 @@ const SLOT_LABELS: Record<EquipmentSlot, string> = {
   mainhand: '主手武器',
 };
 
-// 角色紙娃娃兩側各一欄圖示按鈕:武器(主手/副手)對放最上排,其餘裝備往下排。
-const LEFT_COLUMN: EquipmentSlot[] = ['offhand', 'headwear', 'top', 'belt', 'bottom'];
-const RIGHT_COLUMN: EquipmentSlot[] = ['mainhand', 'face', 'back', 'gloves'];
-
-const EMPTY_ICON_COLOR = '#4a4456';
-// 圖示來源(equipmentIcons.ts/weapons.ts)配合勇者本體密度提升,整張放大了3倍,
-// 這裡用 2/3 抵銷回來,維持清單/選槽按鈕原本的物理尺寸不變。
-const ICON_PIXEL_SIZE = 2 / 3;
-// 8欄密集網格用的縮小版圖示尺寸——「已擁有」瀏覽格數多,縮小到能一行塞8格。
+// 8欄密集網格用的圖示尺寸——瀏覽格數多,縮小到能一行塞8格。
 const DENSE_ICON_PIXEL_SIZE = 0.4;
 const DENSE_AI_HEIGHT = 22;
-// 插槽按鈕是長方形(圖示+文字標籤,不是正方形),9宮格外框角落尺寸要比單純的正方形插槽小,
-// 邊框段才有足夠空間撐開,不會角落花紋直接連在一起。
-const SLOT_FRAME_CORNER = 14;
-const SLOT_FRAME_EDGE = 5;
 
-// 「已擁有」瀏覽的部位篩選,比裝備部位多一個「全部」——原本獨立的「背包」分頁(瀏覽已擁有
-// 款式)併進這裡當第二個子檢視,「全部」是新增的(背包分頁原本沒有跨部位總覽)。
-type OwnedSlotFilter = 'all' | EquipmentSlot;
-const OWNED_SLOT_FILTERS: OwnedSlotFilter[] = ['all', ...SLOT_Z_ORDER];
-const OWNED_SLOT_FILTER_LABELS: Record<OwnedSlotFilter, string> = {
+// 部位篩選,比裝備部位多一個「全部」——紙娃娃(角色預覽+穿戴總覽)搬到「狀態」分頁後
+// (見 CharacterStatusPanel.tsx),這裡不再需要靠點紙娃娃插槽選部位,改成頂部的部位分頁列
+// 直接切換,「已擁有」「商店」兩個子檢視共用同一組部位篩選。
+type SlotFilter = 'all' | EquipmentSlot;
+const SLOT_FILTERS: SlotFilter[] = ['all', ...SLOT_Z_ORDER];
+const SLOT_FILTER_LABELS: Record<SlotFilter, string> = {
   all: '全部',
   ...SLOT_LABELS,
 };
 
-type SubView = 'worn' | 'owned' | 'shop';
+type SubView = 'owned' | 'shop';
 
 const SUB_VIEWS: { id: SubView; label: string }[] = [
-  { id: 'worn', label: '穿戴' },
   { id: 'owned', label: '已擁有' },
   { id: 'shop', label: '商店' },
 ];
 
-// 篩選:生成式目錄一個部位最多50個等級檔,商店清單(還沒買的款式)常常一次塞滿一長串——
-// 跟「已擁有」子檢視同一套篩選維度(主加成類型),排序沿用既有的依需求等級規則
-// (見下面 items 的 .sort),不重複加一顆排序切換鈕。
+// 篩選:生成式目錄一個部位最多50個等級檔,商店/已擁有清單常常一次塞滿一長串——
+// 篩主加成類型,排序沿用既有的依需求等級規則。
 type StatFilter = 'all' | EquipmentBonusStat;
-
 const STAT_FILTERS: StatFilter[] = ['all', 'exp', 'coins', 'speed'];
-
 const STAT_FILTER_LABELS: Record<StatFilter, string> = {
   all: '全部',
   exp: '經驗',
@@ -123,21 +61,10 @@ const STAT_FILTER_LABELS: Record<StatFilter, string> = {
   speed: '速度',
 };
 
-// 素質格數值為0(+0%)時用暗色淡化,取代跟旁邊真正有投資的欄位一樣的視覺權重——這個格子
-// 集中了8+2個素質,新玩家/沒點的方向常年停在+0%,不淡化的話很難一眼看出「哪些欄位真的有加成」。
-function SubstatCell({ label, value }: { label: string; value: number }) {
-  const pct = Math.round(value * 100);
-  return (
-    <View style={styles.substatCell}>
-      <Text style={styles.substatCellLabel}>{label}</Text>
-      <Text style={[styles.substatCellValue, pct === 0 && styles.substatCellValueZero]}>+{pct}%</Text>
-    </View>
-  );
-}
-
-// 「裝備」分頁:紙娃娃穿戴(worn)+已擁有款式瀏覽(owned,原「背包」分頁併過來)+商店
-// (shop)三個子檢視。selectedSlot 不再由外層(InventoryTab.tsx)控制——「背包」分頁拆掉
-// 之後不需要再跨分頁同步選取狀態,改回這個元件自己管理。
+// 「裝備」分頁:已擁有款式瀏覽(owned)+商店(shop)兩個子檢視,共用同一組部位/加成篩選列,
+// 8欄密集網格。紙娃娃(角色預覽+穿戴總覽)搬到「狀態」分頁(CharacterStatusPanel.tsx)
+// 取代那裡原本的「已裝備物品」格子,不在這裡重複顯示;原本的「穿戴」子檢視也一併拿掉——
+// 「已擁有」清單裡點開已裝備的那件,預覽卡片一樣有卸下/鑑定/重擲功能,不需要另開一頁。
 export function EquipmentPanel() {
   const equipment = useGameState((state) => state.equipment);
   const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
@@ -152,40 +79,26 @@ export function EquipmentPanel() {
   const rerollEquipmentSubstats = useGameState((state) => state.rerollEquipmentSubstats);
   const showToast = useToast((state) => state.show);
 
-  const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot>('mainhand');
-  const [subView, setSubView] = useState<SubView>('worn');
-  const [shopStatFilter, setShopStatFilter] = useState<StatFilter>('all');
-  const [ownedSlotFilter, setOwnedSlotFilter] = useState<OwnedSlotFilter>('all');
-  const [ownedStatFilter, setOwnedStatFilter] = useState<StatFilter>('all');
-  // 點商店/已擁有清單裡的道具原本會直接買/裝上去,只靠事後跳出的 toast 通知——玩家點下去前
-  // 完全看不到屬性,等於盲猜。改成先跳出預覽卡片顯示完整屬性,玩家自己按「裝備」或「卸下」
-  // 才會真的改動裝備狀態,pickItem 的購買/裝備邏輯不變,只是延後到按鈕按下才觸發。
+  const [subView, setSubView] = useState<SubView>('owned');
+  const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
+  const [statFilter, setStatFilter] = useState<StatFilter>('all');
+  // 點清單裡的道具先跳出預覽卡片(見 ItemPreviewModal.tsx)顯示完整屬性,玩家自己按按鈕
+  // 才會真的改動裝備狀態,不是點下去就直接買/裝上去。
   const [previewItem, setPreviewItem] = useState<EquipmentItem | null>(null);
 
-  const totals = getEquipmentBonusTotalsFull(equipment, itemInstances);
-  const substatTotals = getSubstatTotals(equipment, itemInstances);
-
-  const currentId = equipment[selectedSlot];
-  const currentItem = currentId !== undefined ? getItemById(currentId) : undefined;
-  const items = [...getEquippableItemsForSlot(selectedSlot, job.archetype, job.branch)].sort(
-    (a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0)
-  );
-  // 商店:還沒擁有(不管有沒有等級鎖)的款式;已擁有但沒穿的款式改到「已擁有」子檢視挑。
-  // shopItems 維持「全部未擁有款式」不受篩選影響,子檢視按鈕上的數字才是「這個部位總共還有
-  // 幾款沒收集」;篩選只影響下面實際渲染的清單(filteredShopItems)。
-  const shopItems = items.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
-  const filteredShopItems = shopItems.filter(
-    (item) => shopStatFilter === 'all' || item.bonus.stat === shopStatFilter
-  );
-
-  // 已擁有:依 ownedSlotFilter 決定要看單一部位還是全部部位合併,'all' 時把9個部位的
-  // 已擁有款式串起來,依需求等級排序——跨部位混排時光靠等級排序足夠找到想穿的那件。
-  const ownedSlots = ownedSlotFilter === 'all' ? SLOT_Z_ORDER : [ownedSlotFilter];
-  const ownedItems = ownedSlots
+  const filterSlots = slotFilter === 'all' ? SLOT_Z_ORDER : [slotFilter];
+  const candidateItems = filterSlots
     .flatMap((slot) => getEquippableItemsForSlot(slot, job.archetype, job.branch))
-    .filter((item) => isItemUnlocked(unlockedItemIds, item.id))
-    .filter((item) => ownedStatFilter === 'all' || item.bonus.stat === ownedStatFilter)
+    .filter((item) => statFilter === 'all' || item.bonus.stat === statFilter)
     .sort((a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0));
+
+  const ownedItems = candidateItems.filter((item) => isItemUnlocked(unlockedItemIds, item.id));
+  const shopItems = candidateItems.filter((item) => !isItemUnlocked(unlockedItemIds, item.id));
+  // 商店分頁標籤上的數字是「全部部位總共還有幾款沒收集」,不受部位/加成篩選影響,
+  // 篩選只影響下面實際渲染的清單。
+  const totalShopCount = SLOT_Z_ORDER.flatMap((slot) => getEquippableItemsForSlot(slot, job.archetype, job.branch)).filter(
+    (item) => !isItemUnlocked(unlockedItemIds, item.id)
+  ).length;
 
   function pickItem(item: EquipmentItem) {
     // equip()/purchaseItem() 是第一次擁有這件裝備時擲隨機/隱藏素質的地方(同步 set),
@@ -202,8 +115,6 @@ export function EquipmentPanel() {
     showToast(formatItemStats(item, useGameState.getState().itemInstances[item.id]));
   }
 
-  // 鑑定/重擲原本在背包分頁,搬過來跟「穿戴」卡片放一起——這兩個操作只對身上這件裝備有意義
-  // (背包裡沒穿的款式不需要鑑定/重擲),放在正在看的這張卡片旁邊比切去背包分頁再找更直覺。
   function handleIdentify(item: EquipmentItem) {
     const cost = getIdentifyCost(item);
     if (coins < cost) {
@@ -224,115 +135,23 @@ export function EquipmentPanel() {
     showToast(`重擲完成:${item.name}\n${formatItemStats(item, useGameState.getState().itemInstances[item.id])}`);
   }
 
-  function renderSlotButton(slot: EquipmentSlot) {
-    const slotItemId = equipment[slot];
-    const slotItem = slotItemId !== undefined ? getItemById(slotItemId) : undefined;
-    const iconColor = slotItem ? slotItem.color : EMPTY_ICON_COLOR;
-    const emptySlotIcon = getEquipmentSlotIcon(slot);
-    const active = slot === selectedSlot;
-    // 已裝備插槽邊框換成 RARITY_FRAME_PARTS 美術圖的9宮格組合(依 bracket 分四色,見
-    // game/equipment.ts),呼應參考UI設計圖的稀有度框系統;空插槽維持 styles.slotButton
-    // 預設的青銅框。
-    return (
-      <Pressable
-        key={slot}
-        style={[styles.slotButton, slotItem && styles.slotButtonFilled, active && styles.slotButtonActive]}
-        onPress={() => setSelectedSlot(slot)}
-      >
-        {slotItem && (
-          <NineSliceFrame
-            parts={RARITY_FRAME_PARTS[getItemRarity(slotItem.bracket)]}
-            cornerSize={SLOT_FRAME_CORNER}
-            edgeThickness={SLOT_FRAME_EDGE}
-          />
-        )}
-        {slotItem ? (
-          <ItemIcon item={slotItem} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
-        ) : (
-          <>
-            <PixelSprite frame={emptySlotIcon.frame} palette={{ [emptySlotIcon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
-            {/* 文字標籤只在空插槽顯示(告訴玩家這格是什麼部位)——已裝備的插槽靠圖示本身
-                +稀有度外框顏色就能辨識穿了什麼,不需要每格都塞一行重複的部位名稱。 */}
-            <Text style={styles.slotButtonLabel} numberOfLines={1}>
-              {SLOT_LABELS[slot]}
-            </Text>
-          </>
-        )}
-      </Pressable>
-    );
-  }
-
-  // 改成1:1方框icon方格,點擊只開預覽(ItemPreviewModal),不再直接顯示文字名稱/價格——
-  // 商店/已擁有共用同一套「先看icon,點了才看到完整資訊」的瀏覽習慣。
-  function renderShopItemTile(item: EquipmentItem) {
-    const locked = item.requiredLevel !== undefined && level.level < item.requiredLevel;
+  // 8欄密集網格格子:已擁有清單裡目前裝備的那件加一圈亮框標示,商店清單裡等級不夠的鎖住。
+  function renderItemTile(item: EquipmentItem, opts: { equipped?: boolean; locked?: boolean }) {
     return (
       <Pressable
         key={item.id}
-        style={[styles.itemTile, locked && styles.itemTileLocked]}
+        style={[styles.tile, opts.equipped && styles.tileEquipped, opts.locked && styles.tileLocked]}
         onPress={() => setPreviewItem(item)}
-        disabled={locked}
-      >
-        <ItemIcon item={item} color={item.color} pixelSize={ICON_PIXEL_SIZE} aiHeight={30} />
-        {locked && <Text style={styles.itemTileLockLabel}>Lv{item.requiredLevel}</Text>}
-      </Pressable>
-    );
-  }
-
-  // 已擁有清單用8欄密集網格(見 DENSE_ICON_PIXEL_SIZE/DENSE_AI_HEIGHT),款式數量多、
-  // 一次能看到更多格比大圖示重要;目前裝備的那件加一圈亮框標示。
-  function renderOwnedItemTile(item: EquipmentItem) {
-    const equipped = equipment[item.slot] === item.id;
-    return (
-      <Pressable
-        key={item.id}
-        style={[styles.denseTile, equipped && styles.denseTileEquipped]}
-        onPress={() => setPreviewItem(item)}
+        disabled={opts.locked}
       >
         <ItemIcon item={item} color={item.color} pixelSize={DENSE_ICON_PIXEL_SIZE} aiHeight={DENSE_AI_HEIGHT} />
+        {opts.locked && <Text style={styles.tileLockLabel}>Lv{item.requiredLevel}</Text>}
       </Pressable>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.paperdollRow}>
-        <View style={styles.slotColumn}>{LEFT_COLUMN.map(renderSlotButton)}</View>
-        <View style={styles.heroWrap}>
-          <EquipmentHeroPreview />
-        </View>
-        <View style={styles.slotColumn}>{RIGHT_COLUMN.map(renderSlotButton)}</View>
-      </View>
-      <Text style={styles.hint}>目前選擇:{SLOT_LABELS[selectedSlot]}</Text>
-      <Text style={styles.totalsText}>
-        總加成:{formatBonus('exp', totals.exp)} / {formatBonus('coins', totals.coins)} /{' '}
-        {formatBonus('speed', totals.speed)}
-      </Text>
-      {/* 素質總和改成格子,取代原本一整行斜線分隔的長文字——物理/魔法各自4種素質+通用2種
-          已經累積到密到要換行才塞得下,格子讓每個數字獨立佔一塊,掃視速度比逐字讀完一整行快。 */}
-      <View style={styles.substatGrid}>
-        <View style={styles.substatRow}>
-          <Text style={styles.substatRowLabel}>物理</Text>
-          <SubstatCell label="攻擊" value={substatTotals.physicalAttack} />
-          <SubstatCell label="抗性" value={substatTotals.physicalResistance} />
-          <SubstatCell label="爆率" value={substatTotals.physicalCritRate} />
-          <SubstatCell label="爆傷" value={substatTotals.physicalCritDamage} />
-        </View>
-        <View style={styles.substatRow}>
-          <Text style={styles.substatRowLabel}>魔法</Text>
-          <SubstatCell label="攻擊" value={substatTotals.magicAttack} />
-          <SubstatCell label="抗性" value={substatTotals.magicResistance} />
-          <SubstatCell label="爆率" value={substatTotals.magicCritRate} />
-          <SubstatCell label="爆傷" value={substatTotals.magicCritDamage} />
-        </View>
-        {/* 吸血/自動回血是通用素質(不分物理/魔法),只用一行、兩格,格子寬度自然比上面寬一倍。 */}
-        <View style={styles.substatRow}>
-          <Text style={styles.substatRowLabel}>通用</Text>
-          <SubstatCell label="吸血" value={substatTotals.lifesteal} />
-          <SubstatCell label="回血" value={substatTotals.hpRegen} />
-        </View>
-      </View>
-
       <View style={styles.subNav}>
         {SUB_VIEWS.map((view) => (
           <Pressable
@@ -342,106 +161,53 @@ export function EquipmentPanel() {
           >
             <Text style={styles.subNavLabel}>
               {view.label}
-              {view.id === 'shop' ? `(${shopItems.length})` : ''}
+              {view.id === 'shop' ? `(${totalShopCount})` : ''}
             </Text>
           </Pressable>
         ))}
       </View>
 
-      {subView === 'worn' && (
-        <View style={styles.wornCard}>
-          {currentItem ? (
-            <>
-              <Text style={styles.wornItemName}>{currentItem.name}</Text>
-              <Text style={styles.wornItemBonus}>
-                {formatBonus(currentItem.bonus.stat, getEnhancedBonusValue(currentItem, itemInstances[currentItem.id]))}
-              </Text>
-              {(() => {
-                const instance = itemInstances[currentItem.id];
-                const canIdentify = instance !== undefined && !instance.identified;
-                return (
-                  <>
-                    {canIdentify && (
-                      <Pressable style={styles.identifyRow} onPress={() => handleIdentify(currentItem)}>
-                        <Text style={styles.identifyLabel}>🔍 鑑定隱藏素質({getIdentifyCost(currentItem)} 金幣)</Text>
-                      </Pressable>
-                    )}
-                    {instance !== undefined && (
-                      <Pressable style={styles.identifyRow} onPress={() => handleReroll(currentItem)}>
-                        <Text style={styles.identifyLabel}>🎲 重擲隨機/隱藏素質({getRerollCost(currentItem)} 金幣)</Text>
-                      </Pressable>
-                    )}
-                  </>
-                );
-              })()}
-              <Pressable style={styles.unequipButton} onPress={() => unequip(selectedSlot)}>
-                <Text style={styles.unequipLabel}>卸下</Text>
-              </Pressable>
-            </>
+      <View style={styles.slotFilterRow}>
+        {SLOT_FILTERS.map((filter) => (
+          <Pressable
+            key={filter}
+            style={[styles.slotFilterChip, slotFilter === filter && styles.filterChipActive]}
+            onPress={() => setSlotFilter(filter)}
+          >
+            <Text style={styles.filterChipLabel}>{SLOT_FILTER_LABELS[filter]}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.filterRow}>
+        {STAT_FILTERS.map((filter) => (
+          <Pressable
+            key={filter}
+            style={[styles.filterChip, statFilter === filter && styles.filterChipActive]}
+            onPress={() => setStatFilter(filter)}
+          >
+            <Text style={styles.filterChipLabel}>{STAT_FILTER_LABELS[filter]}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <View style={styles.grid}>
+        {subView === 'owned' &&
+          (ownedItems.length === 0 ? (
+            <Text style={styles.emptyText}>還沒有擁有符合這個篩選條件的款式</Text>
           ) : (
-            <Text style={styles.wornEmptyText}>這個部位還沒有裝備,去「已擁有」或「商店」挑一件</Text>
-          )}
-        </View>
-      )}
-
-      {subView === 'owned' && (
-        <>
-          <View style={styles.slotFilterRow}>
-            {OWNED_SLOT_FILTERS.map((filter) => (
-              <Pressable
-                key={filter}
-                style={[styles.slotFilterChip, ownedSlotFilter === filter && styles.filterChipActive]}
-                onPress={() => setOwnedSlotFilter(filter)}
-              >
-                <Text style={styles.filterChipLabel}>{OWNED_SLOT_FILTER_LABELS[filter]}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.filterRow}>
-            {STAT_FILTERS.map((filter) => (
-              <Pressable
-                key={filter}
-                style={[styles.filterChip, ownedStatFilter === filter && styles.filterChipActive]}
-                onPress={() => setOwnedStatFilter(filter)}
-              >
-                <Text style={styles.filterChipLabel}>{STAT_FILTER_LABELS[filter]}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.denseGrid}>
-            {ownedItems.length === 0 ? (
-              <Text style={styles.wornEmptyText}>還沒有擁有符合這個篩選條件的款式</Text>
-            ) : (
-              ownedItems.map(renderOwnedItemTile)
-            )}
-          </View>
-        </>
-      )}
-
-      {subView === 'shop' && (
-        <>
-          <View style={styles.filterRow}>
-            {STAT_FILTERS.map((filter) => (
-              <Pressable
-                key={filter}
-                style={[styles.filterChip, shopStatFilter === filter && styles.filterChipActive]}
-                onPress={() => setShopStatFilter(filter)}
-              >
-                <Text style={styles.filterChipLabel}>{STAT_FILTER_LABELS[filter]}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.itemGrid}>
-            {filteredShopItems.length === 0 ? (
-              <Text style={styles.wornEmptyText}>
-                {shopStatFilter === 'all' ? '這個部位的款式都收集齊了' : '這個篩選條件下沒有符合的款式'}
-              </Text>
-            ) : (
-              filteredShopItems.map(renderShopItemTile)
-            )}
-          </View>
-        </>
-      )}
+            ownedItems.map((item) => renderItemTile(item, { equipped: equipment[item.slot] === item.id }))
+          ))}
+        {subView === 'shop' &&
+          (shopItems.length === 0 ? (
+            <Text style={styles.emptyText}>
+              {slotFilter === 'all' && statFilter === 'all' ? '款式都收集齊了' : '這個篩選條件下沒有符合的款式'}
+            </Text>
+          ) : (
+            shopItems.map((item) =>
+              renderItemTile(item, { locked: item.requiredLevel !== undefined && level.level < item.requiredLevel })
+            )
+          ))}
+      </View>
 
       {previewItem && (
         <ItemPreviewModal
@@ -473,105 +239,10 @@ const styles = StyleSheet.create({
     maxWidth: 280,
     gap: 4,
   },
-  paperdollRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 8,
-  },
-  heroWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  slotColumn: {
-    gap: 6,
-  },
-  // 原本只有圖示、要點下去才知道是哪個部位——彈窗高度已經拉高有空間,直接把部位名稱
-  // 露在圖示下面,不用點了才知道。寬度加大到48才塞得下4字的「主手武器」不截斷。
-  slotButton: {
-    width: 48,
-    paddingVertical: 4,
-    gap: 2,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#59462b',
-    backgroundColor: '#1c1c24',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  slotButtonLabel: {
-    color: '#8a8a95',
-    fontSize: 8,
-    textAlign: 'center',
-  },
-  // 選取中狀態統一用藍色(#6ab0e0)當「互動中/選取中」訊號色,金色專門留給裝飾性外框。
-  slotButtonActive: {
-    backgroundColor: '#3d3450',
-    shadowColor: '#6ab0e0',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  // 已裝備插槽的邊框改用 NineSliceFrame 疊加的美術圖蓋掉,不用 borderWidth 畫框。
-  slotButtonFilled: {
-    borderWidth: 0,
-  },
-  hint: {
-    color: '#8a8a95',
-    fontSize: 11,
-    textAlign: 'center',
-    marginBottom: 2,
-  },
-  totalsText: {
-    color: '#c9a94f',
-    fontSize: 11,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  substatGrid: {
-    width: '100%',
-    gap: 4,
-    marginBottom: 8,
-  },
-  substatRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  substatRowLabel: {
-    width: 28,
-    color: '#8fbfe0',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  substatCell: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#1c1c24',
-    borderWidth: 1,
-    borderColor: '#2a2a35',
-  },
-  substatCellLabel: {
-    color: '#8a8a95',
-    fontSize: 11,
-  },
-  substatCellValue: {
-    color: '#c9a94f',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  substatCellValueZero: {
-    color: '#5a5a65',
-    fontWeight: '400',
-  },
   subNav: {
     flexDirection: 'row',
     gap: 6,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   subNavButton: {
     flex: 1,
@@ -586,85 +257,6 @@ const styles = StyleSheet.create({
   subNavLabel: {
     color: '#f2f2f2',
     fontSize: 11,
-  },
-  wornCard: {
-    gap: 6,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#1c1c24',
-    alignItems: 'center',
-  },
-  wornItemName: {
-    color: '#f2f2f2',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  wornItemBonus: {
-    color: '#c9a94f',
-    fontSize: 12,
-  },
-  wornEmptyText: {
-    color: '#8a8a95',
-    fontSize: 11,
-    textAlign: 'center',
-    paddingVertical: 8,
-  },
-  unequipButton: {
-    marginTop: 2,
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    backgroundColor: '#2a2a35',
-  },
-  unequipLabel: {
-    color: '#f2f2f2',
-    fontSize: 12,
-  },
-  itemGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  itemTile: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#59462b',
-    backgroundColor: '#1c1c24',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  itemTileLocked: {
-    opacity: 0.45,
-  },
-  itemTileLockLabel: {
-    position: 'absolute',
-    bottom: 2,
-    color: '#8a8a95',
-    fontSize: 9,
-  },
-  // 「已擁有」8欄密集網格:280寬容器扣掉間距後,每格約30px才塞得下8欄。
-  denseGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    gap: 4,
-  },
-  denseTile: {
-    width: 30,
-    height: 30,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#59462b',
-    backgroundColor: '#1c1c24',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  denseTileEquipped: {
-    borderColor: '#5fa563',
-    backgroundColor: '#243424',
   },
   slotFilterRow: {
     flexDirection: 'row',
@@ -704,16 +296,41 @@ const styles = StyleSheet.create({
     color: '#c8c8d0',
     fontSize: 11,
   },
-  identifyRow: {
-    marginTop: 2,
-    marginBottom: 2,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    backgroundColor: '#2a2432',
-  },
-  identifyLabel: {
-    color: '#c9a94f',
+  emptyText: {
+    color: '#8a8a95',
     fontSize: 11,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  // 8欄密集網格:280寬容器扣掉間距後,每格約30px才塞得下8欄——比照參考圖的密集多欄排列,
+  // 顏色維持既有深色莫蘭迪調性,不套用參考圖的米色亮色主題。
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    gap: 4,
+  },
+  tile: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#59462b',
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileEquipped: {
+    borderColor: '#5fa563',
+    backgroundColor: '#243424',
+  },
+  tileLocked: {
+    opacity: 0.45,
+  },
+  tileLockLabel: {
+    position: 'absolute',
+    bottom: 1,
+    color: '#8a8a95',
+    fontSize: 7,
   },
 });

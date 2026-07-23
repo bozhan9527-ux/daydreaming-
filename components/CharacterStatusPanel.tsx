@@ -1,21 +1,56 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { calcCombatMultiplier, getArchetypeComposition, getJobTitle } from '../game/combat';
-import {
-  EquipmentSlot,
-  getEquipmentBonusTotalsFull,
-  getItemById,
-  getSubstatTotals,
-  SLOT_Z_ORDER,
-} from '../game/equipment';
+import { EquipmentSlot, getEquipmentBonusTotalsFull, getItemById, getSubstatTotals } from '../game/equipment';
 import { heroAttackPower, heroDefensePower, heroMaxHp } from '../game/heroHealth';
 import { getPassiveBonusValue } from '../game/skillTree';
 import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
+import { useHeroArt } from './HeroWalkSprite';
 import { formatBonus } from './itemFormatting';
 import { ItemIcon } from './ItemIcon';
 import { PixelSprite } from './PixelSprite';
+
+// 角色預覽:原本是「裝備」分頁紙娃娃專用的元件,紙娃娃整組搬過來這裡(取代原本的
+// 「已裝備物品」格子)時一起帶過來。點一下短暫換成 middle(三聯圖中間那張動作格)再彈回來。
+const HERO_PREVIEW_HEIGHT = 130;
+const HERO_PREVIEW_CLICK_MS = 500;
+
+function EquipmentHeroPreview() {
+  const art = useHeroArt();
+  const [showMiddle, setShowMiddle] = useState(false);
+  const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    return () => clearTimeout(timeout.current);
+  }, []);
+
+  function handlePress() {
+    setShowMiddle(true);
+    clearTimeout(timeout.current);
+    timeout.current = setTimeout(() => setShowMiddle(false), HERO_PREVIEW_CLICK_MS);
+  }
+
+  const source = showMiddle ? art.middle : art.open;
+  const aspectRatio = showMiddle ? art.middleAspectRatio : art.openAspectRatio;
+
+  return (
+    <Pressable onPress={handlePress}>
+      <Image
+        source={source}
+        style={{ height: HERO_PREVIEW_HEIGHT, width: HERO_PREVIEW_HEIGHT * aspectRatio }}
+        resizeMode="contain"
+      />
+    </Pressable>
+  );
+}
+
+// 紙娃娃兩側各一欄插槽按鈕:武器(主手/副手)對放最上排,其餘裝備往下排——
+// 跟原本「裝備」分頁的排列一致。
+const LEFT_COLUMN: EquipmentSlot[] = ['offhand', 'headwear', 'top', 'belt', 'bottom'];
+const RIGHT_COLUMN: EquipmentSlot[] = ['mainhand', 'face', 'back', 'gloves'];
 
 // 數值為0時用暗色淡化,非零維持一般文字色——跟旁邊有意義的數字用同樣視覺權重呈現,
 // 會讓玩家要花力氣從一堆「沒有」裡面找「有」。原本是 JobSelector.tsx 的 HeroStatusPanel
@@ -93,6 +128,27 @@ export function CharacterStatusPanel() {
     showToast(`${SLOT_LABELS[slot]}:${item.name}(${formatBonus(item.bonus.stat, item.bonus.value)})`);
   }
 
+  function renderSlotButton(slot: EquipmentSlot) {
+    const itemId = equipment[slot];
+    const item = itemId !== undefined ? getItemById(itemId) : undefined;
+    const iconColor = item ? item.color : EMPTY_ICON_COLOR;
+    const emptySlotIcon = getEquipmentSlotIcon(slot);
+    return (
+      <Pressable key={slot} style={styles.slotButton} onPress={() => handleSlotPress(slot)}>
+        {item ? (
+          <ItemIcon item={item} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={20} />
+        ) : (
+          <>
+            <PixelSprite frame={emptySlotIcon.frame} palette={{ [emptySlotIcon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
+            <Text style={styles.slotButtonLabel} numberOfLines={1}>
+              {SLOT_LABELS[slot]}
+            </Text>
+          </>
+        )}
+      </Pressable>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
@@ -144,27 +200,16 @@ export function CharacterStatusPanel() {
       </View>
 
       <Text style={styles.sectionTitle}>已裝備物品</Text>
-      <View style={styles.slotGrid}>
-        {SLOT_Z_ORDER.map((slot) => {
-          const itemId = equipment[slot];
-          const item = itemId !== undefined ? getItemById(itemId) : undefined;
-          const iconColor = item ? item.color : EMPTY_ICON_COLOR;
-          const emptySlotIcon = getEquipmentSlotIcon(slot);
-          return (
-            <View key={slot} style={styles.slotTileWrap}>
-              <Pressable style={styles.slotTile} onPress={() => handleSlotPress(slot)}>
-                {item ? (
-                  <ItemIcon item={item} color={iconColor} pixelSize={ICON_PIXEL_SIZE} aiHeight={30} />
-                ) : (
-                  <PixelSprite frame={emptySlotIcon.frame} palette={{ [emptySlotIcon.fillKey]: iconColor }} pixelSize={ICON_PIXEL_SIZE} />
-                )}
-              </Pressable>
-              <Text style={styles.slotTileLabel} numberOfLines={1}>
-                {SLOT_LABELS[slot]}
-              </Text>
-            </View>
-          );
-        })}
+      {/* 紙娃娃(角色預覽+兩側插槽按鈕)取代原本的「已裝備物品」格子,從「裝備」分頁搬過來——
+          邊框回復成搬過來之前的樣式(單純銅色邊框),不套用「裝備」分頁曾經用過的稀有度
+          九宮格金框美術,點插槽維持原本的 toast 提示,不是完整的裝備管理介面
+          (裝備管理留在「裝備」分頁做)。 */}
+      <View style={styles.paperdollRow}>
+        <View style={styles.slotColumn}>{LEFT_COLUMN.map(renderSlotButton)}</View>
+        <View style={styles.heroWrap}>
+          <EquipmentHeroPreview />
+        </View>
+        <View style={styles.slotColumn}>{RIGHT_COLUMN.map(renderSlotButton)}</View>
       </View>
 
       {/* 以下原本是「職業」分頁 JobSelector.tsx 的 HeroStatusPanel,整組搬過來這裡,
@@ -273,20 +318,26 @@ const styles = StyleSheet.create({
   statCellValueZero: {
     color: '#5a5a62',
   },
-  slotGrid: {
+  paperdollRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  slotTileWrap: {
     alignItems: 'center',
-    gap: 2,
-    width: 52,
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 4,
   },
-  slotTile: {
+  heroWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotColumn: {
+    gap: 6,
+  },
+  // 邊框回復成搬到這裡之前的樣式:單純銅色邊框,不套用「裝備」分頁曾經用過的
+  // 稀有度九宮格金框美術(NineSliceFrame/RARITY_FRAME_PARTS)。
+  slotButton: {
     width: 48,
-    height: 48,
+    paddingVertical: 4,
+    gap: 2,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#59462b',
@@ -294,9 +345,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  slotTileLabel: {
+  slotButtonLabel: {
     color: '#8a8a95',
-    fontSize: 9,
+    fontSize: 8,
     textAlign: 'center',
   },
   jobStatusCard: {
