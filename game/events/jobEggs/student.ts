@@ -18,8 +18,8 @@ export const STUDENT_JOB_EGGS: StudentGameEvent[] = [
   { id: 'job-student-1-r01', rarity: 'rare', type: 'text', studentTier: 1, payload: '同學主動找我一起吃午餐,緊張到不知道該聊什麼。' },
   { id: 'job-student-1-r02', rarity: 'rare', type: 'text', studentTier: 1, payload: '小考意外考了不錯的分數,自己都嚇了一跳。' },
   { id: 'job-student-1-r03', rarity: 'rare', type: 'text', studentTier: 1, payload: '導師難得記住我的名字,還笑著跟我打招呼。' },
-  { id: 'job-student-1-e01', rarity: 'epic', type: 'text', studentTier: 1, payload: '剛入學手忙腳亂的這幾個月,我才發現,原來連跌跌撞撞的樣子,也可以被人溫柔地接住。' },
-  { id: 'job-student-1-l01', rarity: 'legendary', type: 'text', studentTier: 1, payload: '開學典禮結束那天走出校門,我才明白,新生這個身分雖然生澀,卻是所有故事最珍貴的起點。' },
+  { id: 'job-student-1-e01', rarity: 'epic', type: 'text', studentTier: 1, payload: '剛入學手忙腳亂的這幾個月,我才發現,原來迷路迷到走投無路時,警衛室的阿伯永遠比導師好問路。' },
+  { id: 'job-student-1-l01', rarity: 'legendary', type: 'text', studentTier: 1, payload: '開學典禮結束那天走出校門,我發現書包比想像中重了兩公斤,新生這個身分,大概就是先扛重量再說故事。' },
 
   // ── tier2:風雲人物 ──
   { id: 'job-student-2-c01', rarity: 'common', type: 'text', studentTier: 2, payload: '走在校園被學弟妹認出來,打怪的低調技能完全派不上用場。' },
@@ -35,6 +35,6 @@ export const STUDENT_JOB_EGGS: StudentGameEvent[] = [
   { id: 'job-student-2-r01', rarity: 'rare', type: 'text', studentTier: 2, payload: '低調的學弟妹私下謝謝我當初的一句鼓勵,我都忘了自己說過。' },
   { id: 'job-student-2-r02', rarity: 'rare', type: 'text', studentTier: 2, payload: '意外拿了全校競賽第一名,獎品比想像中還豐盛。' },
   { id: 'job-student-2-r03', rarity: 'rare', type: 'text', studentTier: 2, payload: '導師在班會上特別表揚我,我尷尬得說不出話。' },
-  { id: 'job-student-2-e01', rarity: 'epic', type: 'text', studentTier: 2, payload: '成為眾人矚目的風雲人物之後,我才發現,自己心裡最踏實的時刻,還是那些一個人默默打怪的深夜。' },
-  { id: 'job-student-2-l01', rarity: 'legendary', type: 'text', studentTier: 2, payload: '站上畢業致詞台前回頭望著這幾年走過的路,我才明白,所謂風雲人物,不過是把平凡的日子一天天認真活過。' },
+  { id: 'job-student-2-e01', rarity: 'epic', type: 'text', studentTier: 2, payload: '成為眾人矚目的風雲人物之後,我才發現,自己心裡最踏實的時刻,還是沒人認得出我的那些打怪深夜。' },
+  { id: 'job-student-2-l01', rarity: 'legendary', type: 'text', studentTier: 2, payload: '站上畢業致詞台前,我盯著小抄緊張到手抖,才明白所謂風雲人物,不過是比別人更會假裝不緊張。' },
 ];
