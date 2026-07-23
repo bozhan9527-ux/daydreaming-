@@ -5,6 +5,13 @@
 生成完上傳到這個資料夾,跟開發那邊說一聲檔名,由開發那邊裁切成
 `assets/sprites/events/<id>.png` 正式套用(id 對照下面每張後面括號裡的編號)。
 
+## 圖片尺寸
+
+單張裁切後目標尺寸 **16:9 橫幅、建議 640x360px**(對照現有 `assets/sprites/events/` 已上線的
+彩蛋插圖,實際裁切後大約落在 220~400px 寬、137~185px 高,顯示框用 `resizeMode="cover"`
+鋪滿,只要是橫幅、不要正方形或直幅都能裁得漂亮)。如果一次生成整組5x3網格,建議整張畫布開
+**3200x1080px**(每格640x360),方便等分裁切,不用另外算奇怪的比例。
+
 ## 通用風格前綴(每組生成時都要加在提示詞最前面)
 
 ```
@@ -13,7 +20,8 @@ Semi-realistic anime illustration, muted low-saturation Morandi color palette
 comedy tone. Protagonist: young man, short dark navy hair, tired half-lidded eyes,
 wearing a worn dark jacket over a plain shirt, modern casual clothes (not fantasy
 armor) — he looks like a bored temp worker, not a hero. Portrait/scene composition,
-soft flat lighting, slightly desaturated, no text in image.
+16:9 landscape aspect ratio, soft flat lighting, slightly desaturated, no text in
+image.
 ```
 
 ---
