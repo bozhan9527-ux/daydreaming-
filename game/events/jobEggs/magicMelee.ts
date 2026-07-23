@@ -19,8 +19,8 @@ export const MAGIC_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicMelee-1-r01', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: null, tier: 1, payload: '同學偷偷問我怎麼變強的,我裝作高深莫測地笑了笑。' },
   { id: 'job-magicMelee-1-r02', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: null, tier: 1, payload: '存夠了零用錢買了一件像樣的裝備,興奮了一整晚。' },
   { id: 'job-magicMelee-1-r03', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: null, tier: 1, payload: '導師難得沒念我,只是笑著說我最近變得不太一樣。' },
-  { id: 'job-magicMelee-1-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: null, tier: 1, payload: '在筆記本寫滿中二設定的那些夜晚,我才發現,那其實是我唯一敢做自己的地方。' },
-  { id: 'job-magicMelee-1-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: null, tier: 1, payload: '畢業典禮那天翻開寫滿咒語的筆記本,我才明白,曾經的中二,原來是最真心的自己。' },
+  { id: 'job-magicMelee-1-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: null, tier: 1, payload: '在筆記本寫滿中二設定的那些夜晚,我才發現,那其實是我唯一不會被段考成績打斷的地方。' },
+  { id: 'job-magicMelee-1-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: null, tier: 1, payload: '畢業典禮那天翻開寫滿咒語的筆記本,我盯著那些設定看了很久,慶幸自己沒真的交給導師檢查過。' },
 
   // ── 分支A 2階:阿志 ──
   { id: 'job-magicMelee-A-2-c01', rarity: 'common', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 2, payload: '大家都叫我阿志,連魔王大概都聽過我的名號。' },
@@ -36,8 +36,8 @@ export const MAGIC_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicMelee-A-2-r01', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 2, payload: '幫朋友擋了一次麻煩,對方塞給我一包菸表示感謝。' },
   { id: 'job-magicMelee-A-2-r02', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 2, payload: '意外在夜市贏了一次彈珠台,獎品是件不錯的裝備。' },
   { id: 'job-magicMelee-A-2-r03', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 2, payload: '巷口的兄弟說我最近變穩重了,我自己倒是沒發現。' },
-  { id: 'job-magicMelee-A-2-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 2, payload: '在江湖上混了這麼久之後,我才發現自己最想守護的,其實是那些跟我一樣沒地方去的朋友。' },
-  { id: 'job-magicMelee-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 2, payload: '深夜騎車回家的路上看著整條熟悉的街,我才明白,這裡才是我唯一想守住的地盤。' },
+  { id: 'job-magicMelee-A-2-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 2, payload: '在江湖上混了這麼久之後,我才發現自己最想守護的,是那些跟我一樣還沒繳房租的朋友。' },
+  { id: 'job-magicMelee-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 2, payload: '深夜騎車回家看著整條熟悉的街,我才明白,混江湖混到最後,守住的不過是回家不用看導航這件小事。' },
 
   // ── 分支A 3階:道士/法師 ──
   { id: 'job-magicMelee-A-3-c01', rarity: 'common', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 3, payload: '畫符畫到手痠,魔王攻擊倒是輕鬆多了。' },
@@ -53,8 +53,8 @@ export const MAGIC_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicMelee-A-3-r01', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 3, payload: '幫一戶人家安了心,對方硬是包了紅包塞給我。' },
   { id: 'job-magicMelee-A-3-r02', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 3, payload: '半夜的一場法事意外圓滿落幕,自己也鬆了口氣。' },
   { id: 'job-magicMelee-A-3-r03', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 3, payload: '師父難得誇我這次做得不錯,我愣了一下才反應過來。' },
-  { id: 'job-magicMelee-A-3-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 3, payload: '做了這麼多場法事之後,我才發現,自己真正在安撫的,其實是每個人心裡的不安。' },
-  { id: 'job-magicMelee-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 3, payload: '深夜送走最後一位求助的人之後,我才明白,這條路走到現在,靠的從來不是法力,是一顆願意留下來的心。' },
+  { id: 'job-magicMelee-A-3-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 3, payload: '做了這麼多場法事之後,我才發現,收驚收得最勤的,其實是我自己的荷包。' },
+  { id: 'job-magicMelee-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 3, payload: '深夜送走最後一位求助的人,我盤點今天收的謝禮,發現橘子比紅包多,這條路走到現在,靠的其實是不挑食。' },
 
   // ── 分支A 4階:命理師 ──
   { id: 'job-magicMelee-A-4-c01', rarity: 'common', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 4, payload: '客戶問姻緣,我看著自己的行事曆苦笑。' },
@@ -70,8 +70,8 @@ export const MAGIC_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicMelee-A-4-r01', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 4, payload: '客戶照著我的建議做了決定,後來特地回來道謝。' },
   { id: 'job-magicMelee-A-4-r02', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 4, payload: '一位老客戶介紹了好幾個新客人給我。' },
   { id: 'job-magicMelee-A-4-r03', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 4, payload: '客戶說聽完我的話心裡踏實多了,我也跟著鬆了口氣。' },
-  { id: 'job-magicMelee-A-4-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 4, payload: '幫這麼多人指過路之後,我才發現,自己的人生反而還沒找到真正的方向。' },
-  { id: 'job-magicMelee-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 4, payload: '收攤那晚翻著自己的命盤,我才明白,能陪別人走過迷惘,本身就是一種難得的命格。' },
+  { id: 'job-magicMelee-A-4-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 4, payload: '幫這麼多人指過路之後,我才發現,自己的人生連下一餐吃什麼都算不準。' },
+  { id: 'job-magicMelee-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 4, payload: '收攤那晚翻著自己的命盤,想幫自己也算一卦,結果只算出「宜早點睡」。' },
 
   // ── 分支A 5階:得道仙人 ──
   { id: 'job-magicMelee-A-5-c01', rarity: 'common', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 5, payload: '打坐打到魔王都放棄叫我起來打架。' },
@@ -87,8 +87,8 @@ export const MAGIC_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicMelee-A-5-r01', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 5, payload: '山下的村民特地上山送來新鮮蔬果,說感謝多年來的庇佑。' },
   { id: 'job-magicMelee-A-5-r02', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 5, payload: '弟子終於學會了一直教不會的心法,我比他還開心。' },
   { id: 'job-magicMelee-A-5-r03', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 5, payload: '意外在山中撿到一顆多年前遺落的珍貴丹藥。' },
-  { id: 'job-magicMelee-A-5-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 5, payload: '在山裡修行這麼多年之後,我才發現,得道從來不是遠離塵世,而是學會與自己和平共處。' },
-  { id: 'job-magicMelee-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 5, payload: '望著山下萬家燈火的那個夜晚,我才明白,修了這麼久的道,其實只是為了學會好好活著。' },
+  { id: 'job-magicMelee-A-5-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 5, payload: '在山裡修行這麼多年之後,我才發現,得道最大的好處,是終於沒人再問我什麼時候要穩定下來。' },
+  { id: 'job-magicMelee-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'A', tier: 5, payload: '望著山下萬家燈火的那個夜晚,我摸摸空了很久的米缸,才明白,修了這麼久的道,終究還是要下山買米。' },
 
   // ── 分支B 2階:八家將小將 ──
   { id: 'job-magicMelee-B-2-c01', rarity: 'common', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 2, payload: '臉譜畫得比誰都威風,腳步卻還在練。' },
@@ -104,8 +104,8 @@ export const MAGIC_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicMelee-B-2-r01', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 2, payload: '廟會結束,老一輩的師傅難得誇我步伐有樣子了。' },
   { id: 'job-magicMelee-B-2-r02', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 2, payload: '小朋友看到我扮的神將,興奮地拍手叫好。' },
   { id: 'job-magicMelee-B-2-r03', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 2, payload: '意外被選為這次遶境的主力小將,既緊張又驕傲。' },
-  { id: 'job-magicMelee-B-2-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 2, payload: '練了這麼久的陣法之後,我才發現,自己早就把這身臉譜背後的責任當成了信仰。' },
-  { id: 'job-magicMelee-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 2, payload: '卸下臉譜的那一刻我才明白,扮演神明的威風不難,守住那份莊重的心才難。' },
+  { id: 'job-magicMelee-B-2-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 2, payload: '練了這麼久的陣法之後,我才發現,這身臉譜卸下來要卸半小時,信仰卸不掉,但粉底卸得掉。' },
+  { id: 'job-magicMelee-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 2, payload: '卸下臉譜的那一刻我才明白,扮神明威風五分鐘,卸妝洗臉要花上一小時,這才是真正的修行。' },
 
   // ── 分支B 3階:乩童 ──
   { id: 'job-magicMelee-B-3-c01', rarity: 'common', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 3, payload: '起乩前深呼吸一口氣,魔王倒是等得很有耐心。' },
@@ -121,8 +121,8 @@ export const MAGIC_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicMelee-B-3-r01', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 3, payload: '幫一位信眾解開多年的心結,對方哭著跪謝神明,也謝了我。' },
   { id: 'job-magicMelee-B-3-r02', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 3, payload: '一場法事圓滿落幕,廟公難得對我點頭。' },
   { id: 'job-magicMelee-B-3-r03', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 3, payload: '深夜獨自留守廟裡,卻覺得從沒這麼安心過。' },
-  { id: 'job-magicMelee-B-3-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 3, payload: '幫這麼多信眾傳達過神明的話之後,我才發現,自己早就分不清是神明借我的口,還是我借神明的名說出了心裡話。' },
-  { id: 'job-magicMelee-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 3, payload: '深夜廟埕只剩我一人打掃的那一刻,我才明白,信仰從來不是神明給的,是自己一步步走出來的。' },
+  { id: 'job-magicMelee-B-3-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 3, payload: '幫這麼多信眾傳達過神明的話之後,我才發現,自己嗓子啞的次數,比想通人生道理的次數還多。' },
+  { id: 'job-magicMelee-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 3, payload: '深夜廟埕只剩我一人打掃,才明白信仰這條路,神明負責顯靈,掃地這種苦工還是得靠自己。' },
 
   // ── 分支B 4階:風水師 ──
   { id: 'job-magicMelee-B-4-c01', rarity: 'common', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 4, payload: '客戶家的格局亂七八糟,我拿著羅盤研究半天。' },
@@ -138,8 +138,8 @@ export const MAGIC_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicMelee-B-4-r01', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 4, payload: '客戶照我的建議調整格局後,生意真的變好了,特地回來道謝。' },
   { id: 'job-magicMelee-B-4-r02', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 4, payload: '一位老客戶介紹了好幾個新案子給我。' },
   { id: 'job-magicMelee-B-4-r03', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 4, payload: '客戶說家裡氣氛變好了,連小孩都變得比較安穩。' },
-  { id: 'job-magicMelee-B-4-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 4, payload: '看過這麼多人家的風水之後,我才發現,真正決定一個家好不好的,從來不是方位,是住在裡面的人。' },
-  { id: 'job-magicMelee-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 4, payload: '看著客戶一家人終於和睦地圍坐吃飯,我才明白,我改的不是風水,是他們願意重新靠近彼此的心。' },
+  { id: 'job-magicMelee-B-4-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 4, payload: '看過這麼多人家的風水之後,我才發現,真正決定一個家好不好的不是方位,是有沒有人記得倒垃圾。' },
+  { id: 'job-magicMelee-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 4, payload: '看著客戶一家人終於和睦地圍坐吃飯,我才明白,我改的不是風水,收的倒是一筆貨真價實的諮詢費。' },
 
   // ── 分支B 5階:一代宗師 ──
   { id: 'job-magicMelee-B-5-c01', rarity: 'common', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 5, payload: '被喊一代宗師,銀行存摺還是一樣單薄。' },
@@ -155,6 +155,6 @@ export const MAGIC_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicMelee-B-5-r01', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 5, payload: '一位當年被我度過的信眾,如今帶著孩子回來謝我。' },
   { id: 'job-magicMelee-B-5-r02', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 5, payload: '各廟宇請我去指導,收入終於稍微寬裕一點。' },
   { id: 'job-magicMelee-B-5-r03', rarity: 'rare', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 5, payload: '新弟子拜師時眼神跟當年的自己一模一樣。' },
-  { id: 'job-magicMelee-B-5-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 5, payload: '收了這麼多年的徒弟之後,我才發現,自己傳下去的從來不是招式,是那份不肯放棄的心。' },
-  { id: 'job-magicMelee-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 5, payload: '看著滿堂徒弟齊聲喊師父的那一刻,我才明白,一代宗師從來不是終點,是把當年的自己好好交接下去。' },
+  { id: 'job-magicMelee-B-5-e01', rarity: 'epic', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 5, payload: '收了這麼多年的徒弟之後,我才發現,自己傳下去的不是招式,是那句「阿弟,學費可以晚點繳」。' },
+  { id: 'job-magicMelee-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicMelee', branch: 'B', tier: 5, payload: '看著滿堂徒弟齊聲喊師父,我才明白,一代宗師聽起來很威風,其實就是換了個位置繼續繳房租。' },
 ];
