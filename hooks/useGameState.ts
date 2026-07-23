@@ -2284,8 +2284,17 @@ export const useGameState = create<GameState>((set, get) => ({
   // 要玩家在成就圖示按這個才真的發獎勵並記進 claimedAchievementIds。發獎邏輯照抄舊版
   // checkAndUnlockAchievements 自動發獎年代的那段計算。
   claimAchievement: (id) => {
-    const { unlockedAchievementIds, claimedAchievementIds, coins, enhanceStones, skillBooks, gemCounts, level } =
-      get();
+    const {
+      unlockedAchievementIds,
+      claimedAchievementIds,
+      coins,
+      enhanceStones,
+      skillBooks,
+      gemCounts,
+      level,
+      hasChosenJob,
+      jobTier,
+    } = get();
     if (!unlockedAchievementIds.includes(id) || claimedAchievementIds.includes(id)) return;
     const def = ACHIEVEMENTS[id];
     if (!def) return;
@@ -2300,12 +2309,14 @@ export const useGameState = create<GameState>((set, get) => ({
     }
 
     // 強化石/技能書發到跟成就 tier 對應的階級(見 game/achievements.ts 的 AchievementDef.tier),
-    // 不再一律發初階——呼應「依對應等級提供同階素材」的需求。
+    // 但不能超過玩家目前實際能用的階級(見 game/materials.ts 的 currentMaterialTier)——關卡數
+    // (totalStagesCleared)會無限循環,跟等級/轉職階級脫鉤,不封頂會領到用不到的高階書。
+    const grantTier = Math.min(def.tier, currentMaterialTier(hasChosenJob, jobTier)) as MaterialTier;
     set({
       coins: coins + reward.coins,
       level: reward.exp ? autoLevelUp(accumulateExp(level, reward.exp)).state : level,
-      enhanceStones: grantMaterialAtTier(enhanceStones, def.tier, reward.enhanceStones ?? 0),
-      skillBooks: grantMaterialAtTier(skillBooks, def.tier, reward.skillBooks ?? 0),
+      enhanceStones: grantMaterialAtTier(enhanceStones, grantTier, reward.enhanceStones ?? 0),
+      skillBooks: grantMaterialAtTier(skillBooks, grantTier, reward.skillBooks ?? 0),
       gemCounts: nextGemCounts,
       claimedAchievementIds: [...claimedAchievementIds, id],
     });
@@ -2316,11 +2327,21 @@ export const useGameState = create<GameState>((set, get) => ({
   // 一鍵領取全部:找出「條件達成但還沒領」的全部id,一次性 set()+persist(),不逐筆各自 set()
   // (效能跟reduce邏輯都比較乾淨)。
   claimAllAchievements: () => {
-    const { unlockedAchievementIds, claimedAchievementIds, coins, enhanceStones, skillBooks, gemCounts, level } =
-      get();
+    const {
+      unlockedAchievementIds,
+      claimedAchievementIds,
+      coins,
+      enhanceStones,
+      skillBooks,
+      gemCounts,
+      level,
+      hasChosenJob,
+      jobTier,
+    } = get();
     const claimableIds = unlockedAchievementIds.filter((id) => !claimedAchievementIds.includes(id));
     if (claimableIds.length === 0) return;
 
+    const grantTierCap = currentMaterialTier(hasChosenJob, jobTier);
     let nextCoins = coins;
     let nextLevel = level;
     let nextEnhanceStones = enhanceStones;
@@ -2329,10 +2350,11 @@ export const useGameState = create<GameState>((set, get) => ({
     for (const id of claimableIds) {
       const def = ACHIEVEMENTS[id];
       const reward = def.reward;
+      const grantTier = Math.min(def.tier, grantTierCap) as MaterialTier;
       nextCoins += reward.coins;
       if (reward.exp) nextLevel = autoLevelUp(accumulateExp(nextLevel, reward.exp)).state;
-      nextEnhanceStones = grantMaterialAtTier(nextEnhanceStones, def.tier, reward.enhanceStones ?? 0);
-      nextSkillBooks = grantMaterialAtTier(nextSkillBooks, def.tier, reward.skillBooks ?? 0);
+      nextEnhanceStones = grantMaterialAtTier(nextEnhanceStones, grantTier, reward.enhanceStones ?? 0);
+      nextSkillBooks = grantMaterialAtTier(nextSkillBooks, grantTier, reward.skillBooks ?? 0);
       if (reward.gems) {
         for (const gemType of GEM_TYPES) {
           const amount = reward.gems[gemType];
