@@ -19,8 +19,8 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-1-r01', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: null, tier: 1, payload: '常客記得我的名字,還特地跟我打招呼。' },
   { id: 'job-physicalSupport-1-r02', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: null, tier: 1, payload: '幫一個迷路的老太太找到公車站,她塞給我一顆糖。' },
   { id: 'job-physicalSupport-1-r03', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: null, tier: 1, payload: '打工存的錢,終於湊夠買一件像樣的裝備。' },
-  { id: 'job-physicalSupport-1-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: null, tier: 1, payload: '值了整晚的大夜班,我才發現,原來自己一直是店裡最晚離開的人。' },
-  { id: 'job-physicalSupport-1-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: null, tier: 1, payload: '打烊拉下鐵門的那一刻,我才明白,原來平凡的堅持,也是一種了不起。' },
+  { id: 'job-physicalSupport-1-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: null, tier: 1, payload: '值了整晚的大夜班,我才發現,原來自己一直是店裡最晚離開、也最早被忘記加班費的人。' },
+  { id: 'job-physicalSupport-1-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: null, tier: 1, payload: '打烊拉下鐵門的那一刻,我盯著打卡鐘,才明白今天的了不起,大概只值一個時薪。' },
 
   // ── 分支A 2階:餐廳服務生 ──
   { id: 'job-physicalSupport-A-2-c01', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 2, payload: '端菜端到手抖,魔王攻擊反而穩多了。' },
@@ -36,8 +36,8 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-A-2-r01', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 2, payload: '客人特地留言稱讚我的服務,店長難得笑了。' },
   { id: 'job-physicalSupport-A-2-r02', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 2, payload: '幫一桌吵架的情侶緩頰,最後兩人反而請我喝飲料。' },
   { id: 'job-physicalSupport-A-2-r03', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 2, payload: '意外拿到整月最高小費,終於敢買想要的裝備。' },
-  { id: 'job-physicalSupport-A-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 2, payload: '跑了一整晚的桌,我才發現自己記得住每桌客人的笑臉,卻記不住自己多久沒好好吃過一頓飯。' },
-  { id: 'job-physicalSupport-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 2, payload: '打烊後獨自擦著空蕩蕩的桌子,我才明白,服務別人的溫柔,也該留一點給自己。' },
+  { id: 'job-physicalSupport-A-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 2, payload: '跑了一整晚的桌,我記得住每桌客人的笑臉,卻連自己上一餐吃了什麼都想不起來。' },
+  { id: 'job-physicalSupport-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 2, payload: '打烊後獨自擦著空蕩蕩的桌子,我對著空氣練習下班後要說的第一句話,結果只想到「累」。' },
 
   // ── 分支A 3階:護理師 ──
   { id: 'job-physicalSupport-A-3-c01', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 3, payload: '量血壓量到懷疑自己血壓比病人還高。' },
@@ -53,8 +53,8 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-A-3-r01', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 3, payload: '病患出院前緊緊握著我的手道謝。' },
   { id: 'job-physicalSupport-A-3-r02', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 3, payload: '深夜陪一個害怕的孩子聊天,直到他安心睡著。' },
   { id: 'job-physicalSupport-A-3-r03', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 3, payload: '主管難得稱讚我處理得很好,我愣了一下才反應過來。' },
-  { id: 'job-physicalSupport-A-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 3, payload: '值完一整輪大夜班,我才發現自己已經記不清多久沒有好好睡過一場覺。' },
-  { id: 'job-physicalSupport-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 3, payload: '送走康復出院的病患那一刻,我才明白,原來守護別人的健康,也是在守護自己活著的意義。' },
+  { id: 'job-physicalSupport-A-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 3, payload: '值完一整輪大夜班,我已經記不清上次一覺到天亮是什麼時候,可能是上輩子。' },
+  { id: 'job-physicalSupport-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 3, payload: '送走康復出院的病患,他說要請我吃飯答謝,我下班後果然只吃了一碗泡麵。' },
 
   // ── 分支A 4階:健身教練 ──
   { id: 'job-physicalSupport-A-4-c01', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 4, payload: '喊學員加油,順便喊給自己聽。' },
@@ -70,8 +70,8 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-A-4-r01', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 4, payload: '學員瘦身成功,眼眶紅著跟我道謝。' },
   { id: 'job-physicalSupport-A-4-r02', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 4, payload: '意外接到轉介紹的新學員,終於不用再擔心這個月的業績。' },
   { id: 'job-physicalSupport-A-4-r03', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 4, payload: '學員說看到我的努力,自己也想更努力,我愣了一下有點感動。' },
-  { id: 'job-physicalSupport-A-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 4, payload: '喊了無數次加油之後,我才發現,自己好像比誰都更需要聽到這兩個字。' },
-  { id: 'job-physicalSupport-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 4, payload: '看著學員完成從沒想過能做到的動作,我才明白,陪伴別人變強的過程,也讓自己更相信自己。' },
+  { id: 'job-physicalSupport-A-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 4, payload: '喊了無數次加油之後,我才發現,自己比誰都更需要聽到這兩個字,可惜這行沒人喊教練加油。' },
+  { id: 'job-physicalSupport-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 4, payload: '看著學員完成從沒想過能做到的動作,他感動得哭了,我在心裡盤算這堂課要不要順便推銷續約方案。' },
 
   // ── 分支A 5階:急診室王牌護理長 ──
   { id: 'job-physicalSupport-A-5-c01', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 5, payload: '急診室的警報聲,比魔王的咆哮還讓人清醒。' },
@@ -87,8 +87,8 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-A-5-r01', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 5, payload: '搶救回一位病患,家屬跪下來謝我,我扶起他們說這是應該的。' },
   { id: 'job-physicalSupport-A-5-r02', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 5, payload: '院方頒了張獎狀給我,我笑說命都保住了,獎狀是其次。' },
   { id: 'job-physicalSupport-A-5-r03', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 5, payload: '新人問我怎麼撐過這麼多年,我說撐著撐著就習慣了。' },
-  { id: 'job-physicalSupport-A-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 5, payload: '連續搶救好幾條生命之後,我才發現自己早就分不清這是工作,還是命中注定要做的事。' },
-  { id: 'job-physicalSupport-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 5, payload: '深夜終於等到病房安靜下來的那一刻,我才明白,守護生命的重量,早已刻進了我的每一次呼吸。' },
+  { id: 'job-physicalSupport-A-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 5, payload: '連續搶救好幾條生命之後,我才發現自己早就分不清這是使命,還是單純忘記申請調班。' },
+  { id: 'job-physicalSupport-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'A', tier: 5, payload: '深夜終於等到病房安靜下來,我癱在椅子上,才明白這份「使命感」,其實就是忘記自己也需要休息的委婉說法。' },
 
   // ── 分支B 2階:空服員 ──
   { id: 'job-physicalSupport-B-2-c01', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '推餐車推到手痠,魔王攻擊反而輕鬆。' },
@@ -104,8 +104,8 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-B-2-r01', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '乘客特地寫感謝信給公司,提到了我的名字。' },
   { id: 'job-physicalSupport-B-2-r02', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '安撫了一個害怕飛行的小孩,他下機前給了我一個擁抱。' },
   { id: 'job-physicalSupport-B-2-r03', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '意外升等商務艙服務,體驗了一次不一樣的視野。' },
-  { id: 'job-physicalSupport-B-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '飛遍了世界各地之後,我才發現自己最想落地的地方,反而是好久沒回去的家。' },
-  { id: 'job-physicalSupport-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '降落後看著滿臉笑容走出機艙的乘客,我才明白,自己一直都在守護著別人平安抵達的旅程。' },
+  { id: 'job-physicalSupport-B-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '飛遍了世界各地之後,我記得住十幾個機場的免稅店,卻想不起家裡冰箱還剩什麼。' },
+  { id: 'job-physicalSupport-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '降落後看著滿臉笑容走出機艙的乘客,我在心裡默默計算,這是這個月第幾次沒能睡在自己的床上。' },
 
   // ── 分支B 3階:居家照護員 ──
   { id: 'job-physicalSupport-B-3-c01', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 3, payload: '幫長輩翻身,比舉重還考驗技巧。' },
@@ -122,7 +122,7 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-B-3-r02', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 3, payload: '長輩突然拉著我的手說謝謝有我陪伴,我眼眶一熱。' },
   { id: 'job-physicalSupport-B-3-r03', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 3, payload: '意外發現長輩偷偷替我準備了點心。' },
   { id: 'job-physicalSupport-B-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 3, payload: '照顧了長輩這麼久之後,我才發現自己陪伴他的時間,比陪伴自己家人的時間還多。' },
-  { id: 'job-physicalSupport-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 3, payload: '送走安詳離世的長輩那天,我才明白,陪伴到最後一刻,也是一種深刻的幸福。' },
+  { id: 'job-physicalSupport-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 3, payload: '送走安詳離世的長輩那天,家屬塞了個紅包謝謝我,我看著封面燙金的「感謝」兩個字,竟比薪資單還有分量。' },
 
   // ── 分支B 4階:物理治療師 ──
   { id: 'job-physicalSupport-B-4-c01', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 4, payload: '幫病患做關節鬆動術,自己的關節倒是先喀喀作響。' },
@@ -138,8 +138,8 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-B-4-r01', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 4, payload: '病患重新站起來走路那一刻,眼眶跟著我一起紅了。' },
   { id: 'job-physicalSupport-B-4-r02', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 4, payload: '意外被轉介紹了好幾個新病患,診所排隊都排到我這來。' },
   { id: 'job-physicalSupport-B-4-r03', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 4, payload: '病患送來親手做的卡片謝謝我的耐心。' },
-  { id: 'job-physicalSupport-B-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 4, payload: '幫無數病患重新站起來之後,我才發現,自己也是靠著他們一次次的進步撐下去的。' },
-  { id: 'job-physicalSupport-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 4, payload: '看著最頑固的病患終於能自己走出診間,我才明白,復原的不只是他的身體,還有我對這份工作的信念。' },
+  { id: 'job-physicalSupport-B-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 4, payload: '幫無數病患重新站起來之後,我才發現,自己的腰倒是一次次彎下去,再也直不太起來。' },
+  { id: 'job-physicalSupport-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 4, payload: '看著最頑固的病患終於能自己走出診間,他揮手說再也不用來了,我看著空出來的時段,竟有點高興又有點失落。' },
 
   // ── 分支B 5階:奧運隨隊防護員 ──
   { id: 'job-physicalSupport-B-5-c01', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 5, payload: '選手賽前的緊張感,比我自己上場還讓人揪心。' },
@@ -155,6 +155,6 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-B-5-r01', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 5, payload: '選手奪牌後第一個擁抱給了我,說沒有我就沒有今天。' },
   { id: 'job-physicalSupport-B-5-r02', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 5, payload: '協會頒了一面感謝獎牌給幕後團隊,我笑著收下。' },
   { id: 'job-physicalSupport-B-5-r03', rarity: 'rare', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 5, payload: '新進防護員問我怎麼撐過這麼多屆賽事,我說靠的是選手的信任。' },
-  { id: 'job-physicalSupport-B-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 5, payload: '跟著代表隊征戰過無數場國際賽事之後,我才發現,自己早就把每個選手的傷痛都當成了自己的傷痛。' },
-  { id: 'job-physicalSupport-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 5, payload: '站在頒獎台下看著選手戴上金牌的那一刻,我才明白,自己從沒站上頒獎台,卻早已站在了最值得驕傲的位置。' },
+  { id: 'job-physicalSupport-B-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 5, payload: '跟著代表隊征戰過無數場國際賽事之後,我才發現,護照上的紀念章比薪資單上的數字還多。' },
+  { id: 'job-physicalSupport-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 5, payload: '站在頒獎台下看著選手戴上金牌,轉播鏡頭完全沒帶到我,我拍拍手,順便確認一下候補國旗別針還在不在。' },
 ];
