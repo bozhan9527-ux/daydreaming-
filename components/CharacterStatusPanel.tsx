@@ -4,7 +4,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { calcCombatMultiplier, getArchetypeComposition, getJobTitle } from '../game/combat';
 import { EquipmentSlot, getEquipmentBonusTotalsFull, getItemById, getSubstatTotals } from '../game/equipment';
 import { heroAttackPower, heroDefensePower, heroMaxHp } from '../game/heroHealth';
-import { getPassiveBonusValue } from '../game/skillTree';
+import { effectiveSkillLevel, getPassiveBonusValue } from '../game/skillTree';
 import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
@@ -113,7 +113,9 @@ export function CharacterStatusPanel() {
   const defensePower = heroDefensePower(level.level, tier, resistanceSubstat);
   // 吸血/回血:裝備素質+passive3被動加成的完整合併值——原本是 JobSelector.tsx 的
   // HeroStatusPanel 專用計算,整組搬過來時一起帶過來。
-  const passive3Level = hasChosenJob ? skillTree[job.archetype].passive3 : studentSkillTree.passive3;
+  const passive3Level = hasChosenJob
+    ? effectiveSkillLevel(skillTree[job.archetype], tier, 'passive3')
+    : studentSkillTree.passive3;
   const totalLifesteal = substatTotals.lifesteal + getPassiveBonusValue(passive3Level);
   const totalHpRegen = substatTotals.hpRegen + getPassiveBonusValue(passive3Level);
 

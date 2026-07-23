@@ -163,7 +163,7 @@ export default function HomeScreen() {
     enhanceStones,
     gemCounts,
     jobTier,
-    activeSkillLevels: hasChosenJob ? skillTree[job.archetype] : studentSkillTree,
+    activeSkillLevels: hasChosenJob ? skillTree[job.archetype][jobTier] : studentSkillTree,
     skillBooks,
     companionGear,
     dungeon,

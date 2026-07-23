@@ -15,18 +15,44 @@ export function isPassiveSlot(slot: SkillSlotId): boolean {
   return PASSIVE_SLOT_IDS.includes(slot);
 }
 
-export type SkillTreeLevels = Record<Archetype, Record<SkillSlotId, number>>;
+// 每個職業階級(1~5)各自獨立一組0-10級的技能等級,不會因為升階就作廢或鎖住——玩家可以
+// 在晉升到2階之後,依然回頭把1階那組繼續點滿(用1階自己的書),呼應「每階職業技能分開
+// 計算」的需求。戰鬥中的實際效果不是只看「目前這階」的數字,而是累加所有已投資階級
+// (見 effectiveSkillLevel),晉升不會讓之前的投資變得毫無意義。
+export type SkillTreeLevels = Record<Archetype, Record<JobTier, Record<SkillSlotId, number>>>;
+
+function createEmptySkillSlots(): Record<SkillSlotId, number> {
+  return { passive1: 0, passive2: 0, passive3: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
+}
+
+function createEmptySkillTiers(): Record<JobTier, Record<SkillSlotId, number>> {
+  return { 1: createEmptySkillSlots(), 2: createEmptySkillSlots(), 3: createEmptySkillSlots(), 4: createEmptySkillSlots(), 5: createEmptySkillSlots() };
+}
 
 export function createInitialSkillTreeLevels(): SkillTreeLevels {
-  const emptySlots = { passive1: 0, passive2: 0, passive3: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
   return {
-    physicalMelee: { ...emptySlots },
-    physicalRanged: { ...emptySlots },
-    physicalSupport: { ...emptySlots },
-    magicMelee: { ...emptySlots },
-    magicRanged: { ...emptySlots },
-    magicSupport: { ...emptySlots },
+    physicalMelee: createEmptySkillTiers(),
+    physicalRanged: createEmptySkillTiers(),
+    physicalSupport: createEmptySkillTiers(),
+    magicMelee: createEmptySkillTiers(),
+    magicRanged: createEmptySkillTiers(),
+    magicSupport: createEmptySkillTiers(),
   };
+}
+
+// 戰鬥中主動技能的觸發間隔/削減比例、被動加成的實際效果,吃的是「累加全部已投資階級」的
+// 總和(1階練滿10級+2階練滿10級=有效20級),不是只看目前這一階自己的數字——呼應「分開
+// 計算但不作廢」的設計,每一階的投資都會永久疊加到角色的實際戰鬥力上。
+export function effectiveSkillLevel(
+  archetypeLevels: Record<JobTier, Record<SkillSlotId, number>>,
+  currentTier: JobTier,
+  slot: SkillSlotId
+): number {
+  let total = 0;
+  for (let t = 1; t <= currentTier; t++) {
+    total += archetypeLevels[t as JobTier][slot];
+  }
+  return total;
 }
 
 // 主動技能欄選擇機制:4個欄位(以出現在首頁 SkillTracker 的固定位置為準,決定基準秒數/顯示
@@ -95,9 +121,10 @@ export function enforceLoadoutIdentityCap(loadout: ActiveSkillLoadout, archetype
   return next;
 }
 
-// 技能等級上限改成「累積技能書」制:轉職之後(不分職業樹階級)每一格都是直接封頂10級,
-// 不再依1-5階分段解鎖——呼應「10級的進度比300級好懂太多」的重新設計。tier 參數保留只是
-// 為了不用改動全部呼叫端的簽章,實際不影響回傳值。
+// 每一階自己的技能等級上限都是10級(見 SkillTreeLevels 的分階說明),5個階級各自一條
+// 獨立的0-10軌道——這裡回傳的是「單一階級自己」的封頂值,不是累加後的有效等級(那個見
+// effectiveSkillLevel/MAX_EFFECTIVE_SKILL_LEVEL)。tier 參數保留是因為每一階都封頂在
+// 同一個10級,目前用不上實際差異化,但介面上仍標明「這是哪一階的封頂」。
 export const SKILL_LEVEL_CAP = 10;
 
 export function skillSlotLevelCap(tier: JobTier): number {
@@ -133,10 +160,12 @@ export function rollSkillBookDrop(rng: () => number = Math.random): boolean {
 }
 
 // 技能書掉落階級:依職業階級分配(currentMaterialTier,學生期固定初階),不再一律掉初階——
-// 高階玩家掉高階書,不用再刷一堆用不到的初階書慢慢合成。例外:目前這個職業的7個技能格
-// (3被動+4主動)全部都已經封頂(SKILL_LEVEL_CAP,不分階級一律10級,見 skillSlotLevelCap
-// 的說明),代表這個職業階級再怎麼升也沒有格子能投資了,改掉下一階的書,提前儲備升階後
-// 需要的材料,而不是繼續掉一堆現在已經用不到的目前階書。
+// 高階玩家掉高階書,不用再刷一堆用不到的初階書慢慢合成。例外:目前這個職業階級「自己那組」
+// 7個技能格(3被動+4主動)全部都已經封頂(SKILL_LEVEL_CAP,見 skillSlotLevelCap 的說明),
+// 代表這一階再怎麼升也沒有格子能投資了(其他階級的投資可以之後再繼續點,不影響這裡的判斷),
+// 改掉下一階的書,提前儲備升階後需要的材料,而不是繼續掉一堆現在已經用不到的目前階書。
+// archetypeSkillLevels 傳的是「目前職業階級自己那組」的7格數字(skillTree[archetype][jobTier]),
+// 不是累加後的有效等級。
 export function skillBookDropTier(
   hasChosenJob: boolean,
   jobTier: JobTier,
@@ -149,8 +178,10 @@ export function skillBookDropTier(
 }
 
 // 主動技能觸發間隔:秒數倒數,固定不受戰鬥/關卡時長影響。4 個主動欄位各自有自己的基準秒數
-// (前3招一般技能 6/7/8 秒,第4招特別技能 15 秒),隨等級線性降到 tier5 封頂等級(10級,
-// 對齊 skillSlotLevelCap(5))時觸底,下限是基準值的 2/3——6→4秒、7→4.67秒、8→5.33秒、15→10秒。
+// (前3招一般技能 6/7/8 秒,第4招特別技能 15 秒),隨「累加全部已投資階級」的有效等級線性
+// 降到 5 階全部練滿(每階10級 x 5階=50)時觸底,下限是基準值的 2/3——6→4秒、7→4.67秒、
+// 8→5.33秒、15→10秒。呼叫端傳進來的 level 是 effectiveSkillLevel() 算出來的累加值,不是
+// 單一階級自己的0-10數字。
 const ACTIVE_SLOT_BASE_INTERVAL_SECONDS: Record<ActiveSkillSlotId, number> = {
   active1: 6,
   active2: 7,
@@ -158,11 +189,12 @@ const ACTIVE_SLOT_BASE_INTERVAL_SECONDS: Record<ActiveSkillSlotId, number> = {
   active4: 15,
 };
 const INTERVAL_FLOOR_RATIO = 2 / 3;
-const INTERVAL_DECAY_LEVEL_CAP = SKILL_LEVEL_CAP;
+// 5階全部練滿的累加封頂值(每階0-10級 x 5階),不是單一階級自己的10級封頂。
+export const MAX_EFFECTIVE_SKILL_LEVEL = SKILL_LEVEL_CAP * 5;
 
 export function activeSkillTriggerIntervalSeconds(slot: ActiveSkillSlotId, level: number): number {
   const base = ACTIVE_SLOT_BASE_INTERVAL_SECONDS[slot];
-  const progress = Math.min(level, INTERVAL_DECAY_LEVEL_CAP) / INTERVAL_DECAY_LEVEL_CAP;
+  const progress = Math.min(level, MAX_EFFECTIVE_SKILL_LEVEL) / MAX_EFFECTIVE_SKILL_LEVEL;
   const interval = base * (1 - (1 - INTERVAL_FLOOR_RATIO) * progress);
   return Math.round(interval * 100) / 100;
 }
@@ -182,9 +214,11 @@ export const ACTIVE_SLOT_DAMAGE_CUT_RATIO_RANGE: Record<ActiveSkillSlotId, { min
   active4: { min: 0.18, max: 0.4 },
 };
 
+// level 同樣吃 effectiveSkillLevel() 算出來的累加值(見 activeSkillTriggerIntervalSeconds
+// 的說明),5階全部練滿才會到 max。
 export function activeSkillDamageCutRatio(slot: ActiveSkillSlotId, level: number): number {
   const { min, max } = ACTIVE_SLOT_DAMAGE_CUT_RATIO_RANGE[slot];
-  const progress = Math.min(level, SKILL_LEVEL_CAP) / SKILL_LEVEL_CAP;
+  const progress = Math.min(level, MAX_EFFECTIVE_SKILL_LEVEL) / MAX_EFFECTIVE_SKILL_LEVEL;
   return min + (max - min) * progress;
 }
 
@@ -233,8 +267,8 @@ export function getPassiveEffectKind(slot: SkillSlotId): PassiveEffectKind {
   return 'lifeMastery';
 }
 
-// 每級 +3% 加成,階5滿級(10級)時最高 +30%(跟舊制「300級封頂30%」戰力對齊,只是刻度從
-// 0.1%/級改成3%/級),量級跟裝備/寵物既有加成同一個數量級,不會暴衝。
+// 每級 +3% 加成,level 吃 effectiveSkillLevel() 累加值——1階練滿10級是+30%,5階全部練滿
+// (累加50級)是+150%,呼應「每階分開投資、疊加不作廢」的設計,越晚期投入越深。
 const PASSIVE_BONUS_PER_LEVEL = 0.03;
 
 export function getPassiveBonusValue(level: number): number {
@@ -356,8 +390,9 @@ export const SKILL_SLOT_DESCRIPTIONS: Record<Archetype, Record<SkillSlotId, stri
   },
 };
 
-// 依目前技能等級,把「每N秒觸發一次+實際效果」或「永久加成」組成一句人看得懂的說明,
-// 對應 hooks/useGameState.ts tickBattle() 裡實際套用的效果,不是另一套規則。
+// 依「累加全部已投資階級」的有效等級(見 effectiveSkillLevel),把「每N秒觸發一次+實際
+// 效果」或「永久加成」組成一句人看得懂的說明,對應 hooks/useGameState.ts tickBattle() 裡
+// 實際套用的效果,不是另一套規則。
 export function getSkillSlotBonusDescription(archetype: Archetype, slot: SkillSlotId, level: number): string {
   if (isPassiveSlot(slot)) {
     const kind = getPassiveEffectKind(slot);

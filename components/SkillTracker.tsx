@@ -7,6 +7,7 @@ import {
   ACTIVE_SLOT_IDS,
   ActiveSkillSlotId,
   activeSkillTriggerIntervalSeconds,
+  effectiveSkillLevel,
   secondaryActiveSkillTriggerIntervalSeconds,
   SKILL_SLOT_NAMES,
   SkillSlotId,
@@ -162,7 +163,7 @@ export function SkillTracker() {
           const tileSourceSlot = hasChosenJob ? (loadoutRef?.sourceSlot ?? slot) : slot;
           const slotLevel = hasChosenJob
             ? loadoutRef
-              ? skillTree[loadoutRef.archetype][loadoutRef.sourceSlot]
+              ? effectiveSkillLevel(skillTree[loadoutRef.archetype], tier, loadoutRef.sourceSlot)
               : 0
             : studentSkillTree[slot];
           const label = hasChosenJob
@@ -194,10 +195,10 @@ export function SkillTracker() {
             archetype={secondaryJob}
             slot="active1"
             label={SKILL_SLOT_NAMES[secondaryJob].active1}
-            level={skillTree[secondaryJob].active1}
+            level={effectiveSkillLevel(skillTree[secondaryJob], tier, 'active1')}
             tier={tier}
             timerStartedAt={secondarySkillTimerStartedAt}
-            intervalSeconds={secondaryActiveSkillTriggerIntervalSeconds(skillTree[secondaryJob].active1)}
+            intervalSeconds={secondaryActiveSkillTriggerIntervalSeconds(effectiveSkillLevel(skillTree[secondaryJob], tier, 'active1'))}
             justTriggered={secondaryJustTriggered}
             now={now}
           />

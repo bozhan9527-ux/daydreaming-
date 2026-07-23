@@ -51,7 +51,43 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 38;
+export const SCHEMA_VERSION = 39;
+
+// v39 之前(v27~v38)skillTree 是「每個職業6格欄位各一個不分階級的數字」的舊制(見
+// game/skillTree.ts 目前 SkillTreeLevels 的分階說明,那個型別現在已經改成三維)。這裡凍結一份
+// 舊制的形狀,專門給歷史版本的 interface/驗證函式/遷移函式用,不能讓它們跟著現行
+// SkillTreeLevels 的定義一起變動——道理跟 LEGACY_SKILL_SLOT_IDS_PRE_PASSIVE3 完全一樣。
+type LegacySkillTreeLevels = Record<Archetype, Record<SkillSlotId, number>>;
+
+function createEmptyLegacySkillTreeLevels(): LegacySkillTreeLevels {
+  const emptySlots = { passive1: 0, passive2: 0, passive3: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
+  return {
+    physicalMelee: { ...emptySlots },
+    physicalRanged: { ...emptySlots },
+    physicalSupport: { ...emptySlots },
+    magicMelee: { ...emptySlots },
+    magicRanged: { ...emptySlots },
+    magicSupport: { ...emptySlots },
+  };
+}
+
+// v39:skillTree 改成每個職業階級(1~5)各自獨立一組0-10級(見 game/skillTree.ts 的
+// SkillTreeLevels/effectiveSkillLevel 說明)——玩家原本那個不分階級的單一數字,直接搬進
+// 「目前職業階級」那一格,其餘階級補0。這是玩家用目前階級的書練出來的等級,只是換個位置
+// 放,不多不少;其餘階級留白讓玩家之後可以繼續用該階自己的書投資,不會覺得進度被清空。
+function migrateFlatSkillTreeLevelsToTiered(flat: LegacySkillTreeLevels, currentTier: JobTier): SkillTreeLevels {
+  const result = {} as SkillTreeLevels;
+  (Object.keys(flat) as Archetype[]).forEach((archetype) => {
+    const tiers = { 1: createEmptySkillSlotsForMigration(), 2: createEmptySkillSlotsForMigration(), 3: createEmptySkillSlotsForMigration(), 4: createEmptySkillSlotsForMigration(), 5: createEmptySkillSlotsForMigration() };
+    tiers[currentTier] = { ...flat[archetype] };
+    result[archetype] = tiers;
+  });
+  return result;
+}
+
+function createEmptySkillSlotsForMigration(): Record<SkillSlotId, number> {
+  return { passive1: 0, passive2: 0, passive3: 0, active1: 0, active2: 0, active3: 0, active4: 0 };
+}
 
 // 存檔遷移到 v25 之前的技能等級是舊制(連續等級,職業樹封頂 tier*60、學生樹封頂60),
 // v25 改成「累積技能書」制(職業樹封頂 tier*2、學生樹封頂2)——縮放係數 30 剛好同時對應
@@ -68,8 +104,8 @@ function migrateSkillLevel(oldLevel: number, newCap: number, oldToNewRatio: numb
 // 沒有這個防呆,migrateSkillLevel(undefined, ...) 會算出 NaN,把整份技能樹污染成 NaN。
 // 用 ?? 0 讓「這格在舊存檔裡根本不存在」等同「這格是0級」,新格 passive3 换算完自然落在0級,
 // 不會是 NaN 也不會意外繼承到別格的數值。
-function migrateSkillTreeLevels(skillTree: SkillTreeLevels): SkillTreeLevels {
-  const result = {} as SkillTreeLevels;
+function migrateSkillTreeLevels(skillTree: LegacySkillTreeLevels): LegacySkillTreeLevels {
+  const result = {} as LegacySkillTreeLevels;
   (Object.keys(skillTree) as Archetype[]).forEach((archetype) => {
     const slots = skillTree[archetype];
     const convertedSlots = {} as Record<SkillSlotId, number>;
@@ -315,7 +351,7 @@ function isSkillLevels(value: unknown): value is SkillLevels {
 
 // 給 v15~v26(passive3 上線前)的舊存檔驗證用:刻意吃 LEGACY_SKILL_SLOT_IDS_PRE_PASSIVE3
 // (固定6格)而不是現在的 SKILL_SLOT_IDS(7格),理由見上面該常數的註解。
-function isSkillTreeLevels(value: unknown): value is SkillTreeLevels {
+function isSkillTreeLevels(value: unknown): value is LegacySkillTreeLevels {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return SKILL_IDS.every((archetypeId) => {
@@ -333,9 +369,10 @@ function isStudentSkillTreeLevels(value: unknown): value is Record<SkillSlotId, 
   return LEGACY_SKILL_SLOT_IDS_PRE_PASSIVE3.every((slotId) => typeof record[slotId] === 'number');
 }
 
-// v27(passive3/吸血/回血上線後)的現制驗證:吃現在的 SKILL_SLOT_IDS(7格,含 passive3),
-// 只給 isSaveDataV27 這個新的 passthrough 檢查用。
-function isCurrentSkillTreeLevels(value: unknown): value is SkillTreeLevels {
+// v27~v38(passive3/吸血/回血上線後、分階獨立等級上線前)的驗證:吃 SKILL_SLOT_IDS
+// (7格,含 passive3)但每個職業只有「一個不分階級」的扁平數字,給 isSaveDataV27~isSaveDataV38
+// 這條 legacy 驗證鏈共用。
+function isSkillTreeLevelsV27(value: unknown): value is LegacySkillTreeLevels {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   return SKILL_IDS.every((archetypeId) => {
@@ -343,6 +380,24 @@ function isCurrentSkillTreeLevels(value: unknown): value is SkillTreeLevels {
     if (typeof slots !== 'object' || slots === null) return false;
     const slotRecord = slots as Record<string, unknown>;
     return SKILL_SLOT_IDS.every((slotId) => typeof slotRecord[slotId] === 'number');
+  });
+}
+
+// v39起(每個職業階級1~5各自獨立一組0-10級,見 game/skillTree.ts 的 SkillTreeLevels)的現制
+// 驗證,只給 isSaveDataV39 這個新的 passthrough 檢查用。
+function isCurrentSkillTreeLevels(value: unknown): value is SkillTreeLevels {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return SKILL_IDS.every((archetypeId) => {
+    const tiers = record[archetypeId];
+    if (typeof tiers !== 'object' || tiers === null) return false;
+    const tierRecord = tiers as Record<string, unknown>;
+    return ([1, 2, 3, 4, 5] as const).every((tier) => {
+      const slots = tierRecord[tier];
+      if (typeof slots !== 'object' || slots === null) return false;
+      const slotRecord = slots as Record<string, unknown>;
+      return SKILL_SLOT_IDS.every((slotId) => typeof slotRecord[slotId] === 'number');
+    });
   });
 }
 
@@ -924,7 +979,7 @@ interface SaveDataV15 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -968,7 +1023,7 @@ interface SaveDataV16 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1023,7 +1078,7 @@ interface SaveDataV17 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1077,7 +1132,7 @@ interface SaveDataV18 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1175,7 +1230,7 @@ interface SaveDataV19 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1237,7 +1292,7 @@ interface SaveDataV20 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1301,7 +1356,7 @@ interface SaveDataV21 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1369,7 +1424,7 @@ interface SaveDataV22 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1445,7 +1500,7 @@ interface SaveDataV23 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1520,7 +1575,7 @@ interface SaveDataV24 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1597,7 +1652,7 @@ interface SaveDataV25 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1678,7 +1733,7 @@ interface SaveDataV26 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1760,7 +1815,7 @@ interface SaveDataV27 {
   job: JobSelection;
   equipment: EquipmentLoadout;
   bodyType: BodyType;
-  skillTree: SkillTreeLevels;
+  skillTree: LegacySkillTreeLevels;
   gender: Gender;
   coins: number;
   unlockedItemIds: UnlockedItemIds;
@@ -1802,7 +1857,7 @@ function isSaveDataV27(value: unknown): value is SaveDataV27 {
     isJobSelection(record.job) &&
     isEquipmentLoadout(record.equipment) &&
     isBodyType(record.bodyType) &&
-    isCurrentSkillTreeLevels(record.skillTree) &&
+    isSkillTreeLevelsV27(record.skillTree) &&
     isGender(record.gender) &&
     typeof record.coins === 'number' &&
     isUnlockedItemIds(record.unlockedItemIds) &&
@@ -2022,10 +2077,11 @@ function isSaveDataV35(value: unknown): value is SaveDataV35 {
 // v36(職業階級晉升機制上線):比 v35 多了 jobTier(見 game/combat.ts 的 JobTier)。凍結成
 // 明確獨立的 interface+literal版本號檢查,itemInstances/gemCounts 沿用鑲嵌石加素質類+分階制
 // 上線前的舊形狀(LegacyItemInstances/LegacyGemCounts)——這是這兩個欄位最後一個舊形狀版本。
-interface SaveDataV36 extends Omit<SaveData, 'version' | 'itemInstances' | 'gemCounts'> {
+interface SaveDataV36 extends Omit<SaveData, 'version' | 'itemInstances' | 'gemCounts' | 'skillTree'> {
   version: 36;
   itemInstances: LegacyItemInstances;
   gemCounts: LegacyGemCounts;
+  skillTree: LegacySkillTreeLevels;
 }
 
 function isSaveDataV36(value: unknown): value is SaveDataV36 {
@@ -2080,9 +2136,12 @@ function isGemCountsV2(value: unknown): value is GemCounts {
 
 // v37(鑲嵌石加入素質類+分階制):比 v36 多了鑲嵌石種類(13種)+分階(見 game/equipment.ts
 // 的鑲嵌系統),itemInstances.socketedGems/gemCounts 兩個欄位形狀跟著改變。
-// v38 幫裝備加入分支維度後,version 字面數字往前推一位——這裡改成比對字面 37(不再是
-// SCHEMA_VERSION,現在 SCHEMA_VERSION 已經是38),跟 isSaveDataV36 當初凍結的做法一樣。
-function isSaveDataV37(value: unknown): value is SaveData {
+interface SaveDataV38 extends Omit<SaveData, 'version' | 'skillTree'> {
+  version: 38;
+  skillTree: LegacySkillTreeLevels;
+}
+
+function isSaveDataV37(value: unknown): value is SaveDataV38 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   // isSaveDataV36 要求 itemInstances/gemCounts 是舊形狀,這裡驗證的是已經分階的真正形狀——
@@ -2100,19 +2159,36 @@ function isSaveDataV37(value: unknown): value is SaveData {
 // 沒有新增/改變任何欄位形狀,單純是 equipment/unlockedItemIds/itemInstances 三個欄位裡的
 // tier2-5 裝備 id 字串內容從舊格式(無 branch 區段)換成新格式(含 branch 區段)——這種「同
 // 形狀、只是內容字串換格式」的變更沒辦法靠結構驗證分辨新舊,只能單純比對 version 字面數字。
-// 這是 migrate() 的第一道 passthrough 檢查——已經跑過分支 id 轉換的存檔直接原樣回傳。
-function isSaveDataV38(value: unknown): value is SaveData {
+// v39 把 skillTree 改成分階獨立等級後,version 字面數字往前推一位——這裡改成比對字面 38
+// (不再是 SCHEMA_VERSION,現在 SCHEMA_VERSION 已經是39),跟 isSaveDataV36 當初凍結的做法一樣。
+function isSaveDataV38(value: unknown): value is SaveDataV38 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
-  return record.version === SCHEMA_VERSION && isSaveDataV37({ ...record, version: 37 });
+  return record.version === 38 && isSaveDataV37({ ...record, version: 37 });
+}
+
+// v39(技能等級改成每個職業階級1~5各自獨立一組0-10級,見 game/skillTree.ts 的 SkillTreeLevels/
+// effectiveSkillLevel):skillTree 從「每職業一組扁平數字」變成「每職業每階級各自一組數字」,
+// 其餘欄位形狀不變。這是 migrate() 的第一道 passthrough 檢查——已經是分階形狀的存檔直接原樣回傳。
+function isSaveDataV39(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  // isSaveDataV38 要求 skillTree 是舊的扁平形狀,這裡驗證的是已經分階的真正形狀——用空的
+  // legacy 佔位值蓋掉這個欄位餵給 isSaveDataV38,只借用它對「其餘欄位」的檢查,新形狀本身
+  // 另外用 isCurrentSkillTreeLevels 獨立驗證。
+  return (
+    record.version === SCHEMA_VERSION &&
+    isSaveDataV38({ ...record, version: 38, skillTree: createEmptyLegacySkillTreeLevels() }) &&
+    isCurrentSkillTreeLevels(record.skillTree)
+  );
 }
 
 // passive3(見 game/skillTree.ts 的 passive3/lifeMastery)是 v27 新增的第3個被動欄位,v27之前
 // 全部存檔的 skillTree/studentSkillTree 都沒有這個 key。下面兩個 helper 給 migrate() 的每一條
 // 分支(不論是舊版本各自建構出全新 SaveData 形狀、還是走 migrateSkillTreeLevels 縮放過的)統一
 // 補上 passive3:0,不用在 ~20 條分支裡各自手動改 object literal(容易漏改)。
-function withPassive3(skillTree: Record<Archetype, Record<SkillSlotId, number>>): SkillTreeLevels {
-  const result = {} as SkillTreeLevels;
+function withPassive3(skillTree: Record<Archetype, Record<SkillSlotId, number>>): LegacySkillTreeLevels {
+  const result = {} as LegacySkillTreeLevels;
   (Object.keys(skillTree) as Archetype[]).forEach((archetype) => {
     result[archetype] = { ...skillTree[archetype], passive3: skillTree[archetype].passive3 ?? 0 };
   });
@@ -2194,7 +2270,12 @@ function withStudentPassive3(studentSkillTree: Record<SkillSlotId, number>): Rec
 // 不會平白消失,只是換了個容器裝,之後要升到更高階要透過新的合成機制(兩本前一階換一本
 // 下一階)。
 // 等級/經驗/保底/職業/裝備/體型/性別/貨幣/裝備解鎖清單一律原樣保留。
-function migrateShape(value: unknown): SaveData {
+// 這個函式內部的每一條分支都還是舊制「skillTree 扁平不分階級」的形狀(道理跟原本 migrateShape
+// 一樣,沿用歷史上每個版本各自的欄位轉換邏輯,不逐一改寫),最後由外層 migrateShape() 統一做
+// 「扁平→分階獨立」這一步轉換(見 migrateFlatSkillTreeLevelsToTiered),不用在下面 ~30 條分支
+// 裡各自手動改一次(容易漏改,風險遠高於統一在最後轉一次)。
+function migrateShapeToLegacySkillTree(value: unknown): Omit<SaveData, 'skillTree'> & { skillTree: LegacySkillTreeLevels } {
+  if (isSaveDataV38(value)) return { ...value, version: SCHEMA_VERSION };
   if (isSaveDataV37(value)) return { ...value, version: SCHEMA_VERSION };
   // 舊存檔遷移到鑲嵌石加素質類+分階制:itemInstances.socketedGems/gemCounts 兩個欄位從舊形狀
   // (寶石只有3種、鑲入插槽是純字串、持有量不分階級)轉成新形狀,不倒退玩家原本已經鑲上的
@@ -2771,7 +2852,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -2823,7 +2904,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -2875,7 +2956,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -2927,7 +3008,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -2979,7 +3060,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -3031,7 +3112,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -3083,7 +3164,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: value.gender,
       coins: value.coins,
       unlockedItemIds: value.unlockedItemIds,
@@ -3135,7 +3216,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: value.gender,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(value.gender),
@@ -3187,7 +3268,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -3239,7 +3320,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: value.bodyType,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -3291,7 +3372,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: value.equipment,
       bodyType: DEFAULT_BODY_TYPE,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -3343,7 +3424,7 @@ function migrateShape(value: unknown): SaveData {
       job: value.job,
       equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
       bodyType: DEFAULT_BODY_TYPE,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -3395,7 +3476,7 @@ function migrateShape(value: unknown): SaveData {
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
       equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
       bodyType: DEFAULT_BODY_TYPE,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -3447,7 +3528,7 @@ function migrateShape(value: unknown): SaveData {
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
       equipment: applyGenderDefault(createEmptyLoadout(), DEFAULT_GENDER),
       bodyType: DEFAULT_BODY_TYPE,
-      skillTree: withPassive3(createInitialSkillTreeLevels()),
+      skillTree: withPassive3(createEmptyLegacySkillTreeLevels()),
       gender: DEFAULT_GENDER,
       coins: DEFAULT_COINS,
       unlockedItemIds: unlockedItemsForGender(DEFAULT_GENDER),
@@ -3486,7 +3567,15 @@ function migrateShape(value: unknown): SaveData {
       lastActiveAt: value.lastActiveAt,
     };
   }
-  return createInitialSaveData();
+  return { ...createInitialSaveData(), skillTree: createEmptyLegacySkillTreeLevels() };
+}
+
+// 承接 migrateShapeToLegacySkillTree() 產出的「其餘欄位都已經是最新形狀、只有 skillTree
+// 還是扁平」中間結果,在這裡統一做最後一步「扁平→分階獨立」轉換(見
+// migrateFlatSkillTreeLevelsToTiered),回傳真正完整的最新 SaveData。
+function migrateShape(value: unknown): SaveData {
+  const legacy = migrateShapeToLegacySkillTree(value);
+  return { ...legacy, skillTree: migrateFlatSkillTreeLevelsToTiered(legacy.skillTree, legacy.jobTier) };
 }
 
 // 舊格式(無 branch 區段)的 tier2-5 生成式裝備 id,例如 top-physicalMelee-20、
@@ -3536,7 +3625,7 @@ function remapLegacyEquipmentBranchIds(save: SaveData): SaveData {
 // v38:裝備分支 id 轉換獨立成最後一道統一步驟(見上面兩個 helper 的說明),不用像先前每個
 // schema 版本那樣在 migrateShape 的每一條分支裡各自插入轉換呼叫。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV38(value)) return value;
+  if (isSaveDataV39(value)) return value;
   return remapLegacyEquipmentBranchIds(migrateShape(value));
 }
 

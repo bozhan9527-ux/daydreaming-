@@ -320,7 +320,7 @@ function SkillDetailPanel({
   onBack: () => void;
 }) {
   const [previewSlot, setPreviewSlot] = useState<SkillSlotId>('active1');
-  const previewLevel = skillLevels[previewSlot];
+  const previewLevel = skillLevels[tier][previewSlot];
   const flavor = getSlotFlavor(archetype, branch, tier, previewSlot);
   const tierTitle = getJobTitle(archetype, branch, tier);
 
@@ -337,7 +337,7 @@ function SkillDetailPanel({
 
       <View style={styles.previewGrid}>
         {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
-          const slotLevel = skillLevels[slot];
+          const slotLevel = skillLevels[tier][slot];
           const icon = getSkillIcon(archetype, slot, tier);
           const isSelected = slot === previewSlot;
           return (

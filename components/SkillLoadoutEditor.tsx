@@ -8,6 +8,7 @@ import {
   activeSkillTriggerIntervalSeconds,
   ActiveSkillSlotId,
   countBorrowedActiveSlots,
+  effectiveSkillLevel,
   MAX_BORROWED_ACTIVE_SLOTS,
   SKILL_SLOT_NAMES,
   SkillTreeLevels,
@@ -36,7 +37,7 @@ export function SkillLoadoutEditor({ archetype, tier }: SkillLoadoutEditorProps)
 
   const [editingPosition, setEditingPosition] = useState<ActiveSkillSlotId | null>(null);
 
-  const learnedOptions = collectLearnedActiveSkills(skillTree);
+  const learnedOptions = collectLearnedActiveSkills(skillTree, tier);
   const borrowedCount = countBorrowedActiveSlots(activeSkillLoadout, archetype);
   const editingRef = editingPosition ? activeSkillLoadout[editingPosition] : null;
   const editingIsAlreadyBorrowed = editingRef !== null && editingRef.archetype !== archetype;
@@ -53,7 +54,7 @@ export function SkillLoadoutEditor({ archetype, tier }: SkillLoadoutEditorProps)
           const ref = activeSkillLoadout[position];
           const tileArchetype = ref?.archetype ?? archetype;
           const tileSourceSlot = ref?.sourceSlot ?? position;
-          const level = ref ? skillTree[ref.archetype][ref.sourceSlot] : 0;
+          const level = ref ? effectiveSkillLevel(skillTree[ref.archetype], tier, ref.sourceSlot) : 0;
           const icon = getSkillIcon(tileArchetype, tileSourceSlot, tier);
           const isBorrowed = ref !== null && ref.archetype !== archetype;
           const isEditing = editingPosition === position;
@@ -140,11 +141,11 @@ interface LearnedActiveSkillOption {
 // 效益排序輔助:4個技能欄現在全部是同一種效果(造成傷害),不用再按「效果種類」分組——
 // 直接用「每秒平均削減戰鬥時間的比例」(削減比例/觸發間隔)當唯一排序依據由高到低排,
 // 玩家一眼就看得出哪個選項效益最高,不用自己心算換算。
-function collectLearnedActiveSkills(skillTree: SkillTreeLevels): LearnedActiveSkillOption[] {
+function collectLearnedActiveSkills(skillTree: SkillTreeLevels, tier: JobTier): LearnedActiveSkillOption[] {
   const options: LearnedActiveSkillOption[] = [];
   ARCHETYPES.forEach((archetype) => {
     ACTIVE_SLOT_IDS.forEach((slot) => {
-      const level = skillTree[archetype][slot];
+      const level = effectiveSkillLevel(skillTree[archetype], tier, slot);
       if (level > 0) {
         const intervalSeconds = activeSkillTriggerIntervalSeconds(slot, level);
         const cutRatio = activeSkillDamageCutRatio(slot, level);

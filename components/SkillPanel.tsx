@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { JobTier } from '../game/combat';
 import { currentMaterialTier, MATERIAL_TIER_LABELS } from '../game/materials';
 import {
   ACTIVE_SLOT_IDS,
@@ -50,29 +51,37 @@ export function SkillPanel() {
   const showJobTree = hasChosenJob && viewingJobTree;
   const [selectedSlot, setSelectedSlot] = useState<SkillSlotId>('active1');
 
-  const slotLevels = showJobTree ? skillTree[archetype] : studentSkillTree;
-  const cap = showJobTree ? skillSlotLevelCap(tier) : STUDENT_SKILL_LEVEL_CAP;
+  // 依階級瀏覽(見 TierBrowsePanel):每一階都是獨立的0-10級軌道,可以隨時切換回去投資
+  // 更早的階級(見 game/skillTree.ts 的 SkillTreeLevels 說明),viewingTier 直接驅動整張
+  // 技能卡片(圖示/名稱/敘述/等級/升級按鈕),不是另外開一張獨立預覽卡。預設看目前實際
+  // 職業階級,只有職業技能樹有階級概念,學生技能沒有。
+  const [viewingTier, setViewingTier] = useState<JobTier>(tier);
+  const isViewingUnlockedTier = viewingTier <= tier;
 
-  // 技能書分階制(見 game/materials.ts):要用哪一階的書,直接對應目前職業階級,學生技能
-  // 固定吃初階(currentMaterialTier 在 !hasChosenJob 時固定回傳0)。
-  const materialTier = currentMaterialTier(hasChosenJob && showJobTree, tier);
+  const slotLevels = showJobTree ? skillTree[archetype][viewingTier] : studentSkillTree;
+  const cap = showJobTree ? skillSlotLevelCap(viewingTier) : STUDENT_SKILL_LEVEL_CAP;
+
+  // 技能書分階制(見 game/materials.ts):要用哪一階的書,對應「正在瀏覽/投資的那一階」,
+  // 不是固定目前職業階級——玩家可以切回去用低階書投資低階,學生技能固定吃初階
+  // (currentMaterialTier 在 !hasChosenJob 時固定回傳0)。
+  const materialTier = currentMaterialTier(hasChosenJob && showJobTree, viewingTier);
   const availableBooks = skillBooks[materialTier];
 
   const selectedLevel = slotLevels[selectedSlot];
   const selectedBookCost = skillSlotUpgradeBookCost(selectedLevel);
   const canUpgradeSelected = showJobTree
-    ? canUpgradeSkillSlot(selectedLevel, tier, availableBooks)
+    ? isViewingUnlockedTier && canUpgradeSkillSlot(selectedLevel, viewingTier, availableBooks)
     : canUpgradeStudentSkillSlot(selectedLevel, availableBooks);
   const selectedAtCap = selectedLevel >= cap;
 
   const selectedFlavor = getStudentSkillFlavor(level.level, selectedSlot);
-  // 職業技能格的名稱/敘述要依實際職業階級(tier)換套文案——tier1沿用game/skillTree.ts
-  // 既有內容,tier2~5改吃game/skillTreeFlavor.ts依階級+分支寫的專屬文案(見getTierSkillFlavor),
-  // 不能像舊版那樣不管幾階都固定顯示tier1的內容。
+  // 職業技能格的名稱/敘述要依「正在瀏覽的階級」(viewingTier)換套文案——tier1沿用
+  // game/skillTree.ts 既有內容,tier2~5改吃game/skillTreeFlavor.ts依階級+分支寫的專屬文案
+  // (見getTierSkillFlavor),不能像舊版那樣不管幾階都固定顯示tier1的內容。
   const jobFlavor =
-    tier === 1
+    viewingTier === 1
       ? { name: SKILL_SLOT_NAMES[archetype][selectedSlot], description: SKILL_SLOT_DESCRIPTIONS[archetype][selectedSlot] }
-      : getTierSkillFlavor(archetype, branch, tier, selectedSlot);
+      : getTierSkillFlavor(archetype, branch, viewingTier, selectedSlot);
   const selectedName = showJobTree ? jobFlavor.name : selectedFlavor.name;
   const selectedDesc = showJobTree ? jobFlavor.description : selectedFlavor.description;
   const selectedBonusDesc = showJobTree
@@ -113,13 +122,13 @@ export function SkillPanel() {
       {/* 職業階級晉升(見 game/jobPromotion.ts):晉升按鈕+依階級瀏覽技能圖示變化,
           同樣只跟「職業技能」這棵樹有關,學生期沒有階級概念。 */}
       {showJobTree && <JobPromotionCard />}
-      {showJobTree && <TierBrowsePanel archetype={archetype} slot={selectedSlot} />}
+      {showJobTree && <TierBrowsePanel currentTier={tier} viewingTier={viewingTier} onSelectTier={setViewingTier} />}
 
       <View style={styles.grid}>
         {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
           const slotLevel = slotLevels[slot];
           const isSelected = slot === selectedSlot;
-          const icon = getSkillIcon(archetype, slot, tier);
+          const icon = getSkillIcon(archetype, slot, showJobTree ? viewingTier : 1);
           return (
             <Pressable
               key={slot}
@@ -150,35 +159,45 @@ export function SkillPanel() {
         </View>
         <Text style={styles.detailDesc}>{selectedDesc}</Text>
         <Text style={styles.detailBonus}>{selectedBonusDesc}</Text>
-        <Text style={styles.detailCap}>目前階級上限:{cap} 級{showJobTree ? '(升階可再提高)' : ''}</Text>
+        <Text style={styles.detailCap}>
+          {showJobTree ? `${viewingTier}階上限:${cap} 級` : `目前階級上限:${cap} 級`}
+        </Text>
 
-        <View style={styles.upgradeButtonRow}>
-          <Pressable
-            style={[styles.upgradeButton, !canUpgradeSelected && styles.upgradeButtonDisabled]}
-            onPress={() => (showJobTree ? upgradeSkillSlot(archetype, selectedSlot) : upgradeStudentSkillSlot(selectedSlot))}
-            disabled={!canUpgradeSelected}
-          >
-            <Text style={styles.upgradeLabel}>
-              {selectedAtCap
-                ? '已達上限'
-                : `升級 (${selectedBookCost} 本${MATERIAL_TIER_LABELS[materialTier]}技能書,持有 ${availableBooks} 本)`}
-            </Text>
-          </Pressable>
-          {/* 批量升級:書夠的話一次衝到存量能到的最高等級,不用照書量一級一級手動點——
-              呼應「批量升級改善」的需求。跟上面單級版本共用同一個 canUpgradeSelected 判斷
-              (書不夠升1級,當然也不夠衝更多級)。 */}
-          {!selectedAtCap && (
+        {showJobTree && !isViewingUnlockedTier ? (
+          <Text style={styles.lockedHint}>尚未晉升到{viewingTier}階,晉升後才能投資這一階</Text>
+        ) : (
+          <View style={styles.upgradeButtonRow}>
             <Pressable
-              style={[styles.upgradeButtonMax, !canUpgradeSelected && styles.upgradeButtonDisabled]}
+              style={[styles.upgradeButton, !canUpgradeSelected && styles.upgradeButtonDisabled]}
               onPress={() =>
-                showJobTree ? upgradeSkillSlotMax(archetype, selectedSlot) : upgradeStudentSkillSlotMax(selectedSlot)
+                showJobTree ? upgradeSkillSlot(archetype, viewingTier, selectedSlot) : upgradeStudentSkillSlot(selectedSlot)
               }
               disabled={!canUpgradeSelected}
             >
-              <Text style={styles.upgradeLabel}>衝到底</Text>
+              <Text style={styles.upgradeLabel}>
+                {selectedAtCap
+                  ? '已達上限'
+                  : `升級 (${selectedBookCost} 本${MATERIAL_TIER_LABELS[materialTier]}技能書,持有 ${availableBooks} 本)`}
+              </Text>
             </Pressable>
-          )}
-        </View>
+            {/* 批量升級:書夠的話一次衝到存量能到的最高等級,不用照書量一級一級手動點——
+                呼應「批量升級改善」的需求。跟上面單級版本共用同一個 canUpgradeSelected 判斷
+                (書不夠升1級,當然也不夠衝更多級)。 */}
+            {!selectedAtCap && (
+              <Pressable
+                style={[styles.upgradeButtonMax, !canUpgradeSelected && styles.upgradeButtonDisabled]}
+                onPress={() =>
+                  showJobTree
+                    ? upgradeSkillSlotMax(archetype, viewingTier, selectedSlot)
+                    : upgradeStudentSkillSlotMax(selectedSlot)
+                }
+                disabled={!canUpgradeSelected}
+              >
+                <Text style={styles.upgradeLabel}>衝到底</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -309,6 +328,12 @@ const styles = StyleSheet.create({
   detailCap: {
     color: '#6a6a75',
     fontSize: 11,
+  },
+  lockedHint: {
+    marginTop: 4,
+    color: '#e0a040',
+    fontSize: 11,
+    textAlign: 'center',
   },
   upgradeButtonRow: {
     marginTop: 4,

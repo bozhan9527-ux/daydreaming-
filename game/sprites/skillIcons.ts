@@ -910,10 +910,16 @@ function mixHex(hexA: string, hexB: string, t: number): string {
   return rgbToHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
 }
 
+// 階2的飽和度/明度增量原本只有0.04/0.02,疊代形狀本身變化也很小(見 applyTierEvolution),
+// 兩者加起來在實際顯示尺寸下幾乎看不出跟階1的差異——拉大整條階梯(尤其階2起跳的幅度),
+// 讓「升階了、圖示真的不一樣」肉眼就分辨得出來,不用兩張並排比對才看得出。
+const TIER_SAT_DELTA: Record<JobTier, number> = { 1: 0, 2: 0.09, 3: 0.15, 4: 0.22, 5: 0.28 };
+const TIER_LITE_DELTA: Record<JobTier, number> = { 1: 0, 2: 0.05, 3: 0.08, 4: 0.11, 5: 0.14 };
+
 function tierPalette(base: Record<string, string>, tier: JobTier): Record<string, string> {
   if (tier === 1) return base;
-  const satDelta = tier >= 4 ? 0.18 : tier >= 3 ? 0.1 : 0.04;
-  const liteDelta = tier >= 4 ? 0.08 : tier >= 3 ? 0.04 : 0.02;
+  const satDelta = TIER_SAT_DELTA[tier];
+  const liteDelta = TIER_LITE_DELTA[tier];
   const result: Record<string, string> = {};
   for (const key of Object.keys(base)) {
     let color = adjustHsl(base[key], satDelta, liteDelta);

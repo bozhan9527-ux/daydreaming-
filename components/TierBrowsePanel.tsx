@@ -1,24 +1,15 @@
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Archetype, JobTier, TIER_UNLOCK_LEVELS } from '../game/combat';
+import { JobTier, TIER_UNLOCK_LEVELS } from '../game/combat';
 import {
-  SKILL_SLOT_DESCRIPTIONS,
-  SKILL_SLOT_NAMES,
-  SkillSlotId,
   TIER2_BONUS_COIN_MULT,
   TIER3_BONUS_EXP_MULT,
   TIER4_BONUS_FLAT_COINS,
   TIER5_EXTRA_DAMAGE_CHANCE,
   TIER5_EXTRA_DAMAGE_CUT_RATIO,
 } from '../game/skillTree';
-import { getTierSkillFlavor } from '../game/skillTreeFlavor';
-import { getSkillIcon } from '../game/sprites/skillIcons';
-import { useGameState } from '../hooks/useGameState';
-import { PixelSprite } from './PixelSprite';
 
 const TIERS: JobTier[] = [1, 2, 3, 4, 5];
-const PREVIEW_TILE_SIZE = 44;
 
 // 每晉一階新增疊加的專屬加成(見 game/skillTree.ts 的 getTierTriggerBonus):1階沒有額外加成
 // (轉職剛畢業的基準線),2~5階各自新增一種,疊加生效不是取代。
@@ -31,28 +22,20 @@ const TIER_BONUS_TEXT: Record<JobTier, string | null> = {
 };
 
 interface TierBrowsePanelProps {
-  archetype: Archetype;
-  slot: SkillSlotId;
+  currentTier: JobTier;
+  viewingTier: JobTier;
+  onSelectTier: (tier: JobTier) => void;
 }
 
-// 依階級瀏覽:5個階級分頁,不管目前實際晉升到第幾階,都可以先看每一階的技能圖示會變成
-// 什麼樣子、晉升時額外解鎖什麼加成——跟 JobSelector.tsx 選職業時的 TierList/SkillDetailPanel
-// 是同一種「先看後選」精神,只是這裡看的是已經投資中的技能,不是還沒選的職業。
-export function TierBrowsePanel({ archetype, slot }: TierBrowsePanelProps) {
-  const currentTier = useGameState((state) => state.jobTier);
-  const branch = useGameState((state) => state.job.branch);
-  const [viewingTier, setViewingTier] = useState<JobTier>(currentTier);
-
-  const icon = getSkillIcon(archetype, slot, viewingTier);
+// 依階級瀏覽:5個階級分頁,不管目前實際晉升到第幾階,都可以先切過去看那一階自己的技能
+// 等級/敘述/升級按鈕(見 SkillPanel.tsx——這裡選的 viewingTier 直接驅動整張技能卡片,
+// 不是另外開一張獨立預覽卡)。這個元件現在只負責分頁列本身+晉升解鎖的階級加成說明。
+export function TierBrowsePanel({ currentTier, viewingTier, onSelectTier }: TierBrowsePanelProps) {
   const bonusText = TIER_BONUS_TEXT[viewingTier];
-  const flavor =
-    viewingTier === 1
-      ? { name: SKILL_SLOT_NAMES[archetype][slot], description: SKILL_SLOT_DESCRIPTIONS[archetype][slot] }
-      : getTierSkillFlavor(archetype, branch, viewingTier, slot);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.hint}>依階級瀏覽:同一格技能升階後的圖示變化+晉升解鎖的加成</Text>
+      <Text style={styles.hint}>依階級瀏覽:選哪一階,下面的技能卡片就顯示那一階自己的等級/升級</Text>
       <View style={styles.tabRow}>
         {TIERS.map((t) => {
           const reached = t <= currentTier;
@@ -61,7 +44,7 @@ export function TierBrowsePanel({ archetype, slot }: TierBrowsePanelProps) {
             <Pressable
               key={t}
               style={[styles.tab, isSelected && styles.tabSelected, !reached && styles.tabLocked]}
-              onPress={() => setViewingTier(t)}
+              onPress={() => onSelectTier(t)}
             >
               <Text style={[styles.tabLabel, isSelected && styles.tabLabelSelected]}>{t}階</Text>
               {t === currentTier && <Text style={styles.tabCurrentMark}>現階</Text>}
@@ -69,18 +52,11 @@ export function TierBrowsePanel({ archetype, slot }: TierBrowsePanelProps) {
           );
         })}
       </View>
-
-      <View style={styles.previewRow}>
-        <View style={styles.previewIconWrap}>
-          <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={3} />
-        </View>
-        <View style={styles.previewText}>
-          <Text style={styles.previewName}>{flavor.name}</Text>
-          <Text style={styles.previewDesc}>{flavor.description}</Text>
-          <Text style={styles.previewLevelReq}>Lv.{TIER_UNLOCK_LEVELS[viewingTier]} 解鎖資格</Text>
-          <Text style={styles.previewBonus}>{bonusText ?? '轉職起點,尚無額外加成'}</Text>
-        </View>
-      </View>
+      <Text style={styles.bonusRow}>
+        {viewingTier > currentTier
+          ? `Lv.${TIER_UNLOCK_LEVELS[viewingTier]} 解鎖資格,尚未晉升到此階`
+          : (bonusText ?? '轉職起點,尚無額外加成')}
+      </Text>
     </View>
   );
 }
@@ -124,39 +100,12 @@ const styles = StyleSheet.create({
     color: '#c9a94f',
     fontSize: 8,
   },
-  previewRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
+  bonusRow: {
+    color: '#8fd4a8',
+    fontSize: 11,
+    textAlign: 'center',
     padding: 8,
     borderRadius: 8,
     backgroundColor: '#1c1c24',
-  },
-  previewIconWrap: {
-    width: PREVIEW_TILE_SIZE,
-    height: PREVIEW_TILE_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewText: {
-    flex: 1,
-    gap: 2,
-  },
-  previewName: {
-    color: '#f2f2f2',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  previewDesc: {
-    color: '#a8a8b2',
-    fontSize: 11,
-  },
-  previewLevelReq: {
-    color: '#8a8a95',
-    fontSize: 11,
-  },
-  previewBonus: {
-    color: '#8fd4a8',
-    fontSize: 11,
   },
 });
