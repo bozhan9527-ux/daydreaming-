@@ -935,3 +935,22 @@ export function getSkillIcon(archetype: Archetype, slot: SkillSlotId, tier: JobT
   const palette = tierPalette(spec.palette, tier);
   return { frame: buildFrame(marks), palette };
 }
+
+// ===== 學生格子的圖示(見 components/JobSelector.tsx 的 ArchetypeGrid):不屬於上面 6 職業 x
+// 6格的體系,單獨一顆固定圖示,不分階級演變——畢業帽剪影(金色扣飾+流蘇,呼應「畢業」主題)。
+const STUDENT_ICON_MARKS: Mark[] = [
+  ...rect(1, 3, 10, 4, 'B'),
+  { x: 5, y: 2, c: 'G' },
+  { x: 6, y: 2, c: 'G' },
+  ...rect(4, 5, 7, 7, 'H'),
+  { x: 6, y: 5, c: 'G' },
+  { x: 7, y: 6, c: 'G' },
+  { x: 8, y: 7, c: 'G' },
+  ...rect(8, 8, 9, 9, 'G'),
+];
+
+const STUDENT_ICON_PALETTE: Record<string, string> = { B: '#3a3542', H: PHYSICAL_COLOR, G: '#c9a94f' };
+
+export function getStudentIcon(): SkillIconData {
+  return { frame: buildFrame(STUDENT_ICON_MARKS), palette: STUDENT_ICON_PALETTE };
+}

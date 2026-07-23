@@ -27,7 +27,7 @@ import {
   SkillTreeLevels,
 } from '../game/skillTree';
 import { getTierSkillFlavor } from '../game/skillTreeFlavor';
-import { getSkillIcon } from '../game/sprites/skillIcons';
+import { getSkillIcon, getStudentIcon } from '../game/sprites/skillIcons';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
@@ -71,8 +71,9 @@ export function getSlotFlavor(archetype: Archetype, branch: JobBranch, tier: Job
 }
 
 // 第一層:6個職業各自一個icon,不再用「物理/魔法 x 近戰/遠程/輔助」的文字分組樹狀圖——
-// 一眼就能看到6個職業,點哪個都直接進到那個職業的階級分支畫面。額外補一格「學生」,
-// 學生技能樹從這裡單獨進去投資,不再混在任何一個職業的畫面裡(見 StudentSkillPanel.tsx)。
+// 一眼就能看到6個職業,點哪個都直接進到那個職業的階級分支畫面。額外補一格「學生」放在最
+// 左側(第一格,呼應「先是學生,才轉職」的時間順序),學生技能樹從這裡單獨進去投資,
+// 不再混在任何一個職業的畫面裡(見 StudentSkillPanel.tsx)。
 function ArchetypeGrid({
   job,
   secondaryJob,
@@ -86,8 +87,17 @@ function ArchetypeGrid({
   onSelect: (archetype: Archetype) => void;
   onSelectStudent: () => void;
 }) {
+  const studentIcon = getStudentIcon();
   return (
     <View style={styles.archetypeGrid}>
+      <Pressable style={[styles.archetypeTile, styles.studentTile]} onPress={onSelectStudent}>
+        <View style={[styles.archetypeIconWrap, styles.studentIconWrap]}>
+          <PixelSprite frame={studentIcon.frame} palette={studentIcon.palette} pixelSize={2.5} />
+        </View>
+        <Text style={styles.archetypeTileLabel} numberOfLines={1}>
+          學生
+        </Text>
+      </Pressable>
       {ARCHETYPES.map((archetype) => {
         const icon = getSkillIcon(archetype, 'active1', 1);
         const isPrimary = hasChosenJob && job === archetype;
@@ -113,14 +123,6 @@ function ArchetypeGrid({
           </Pressable>
         );
       })}
-      <Pressable style={[styles.archetypeTile, styles.studentTile]} onPress={onSelectStudent}>
-        <View style={[styles.archetypeIconWrap, styles.studentIconWrap]}>
-          <Text style={styles.studentIconGlyph}>學</Text>
-        </View>
-        <Text style={styles.archetypeTileLabel} numberOfLines={1}>
-          學生
-        </Text>
-      </Pressable>
     </View>
   );
 }
@@ -601,11 +603,6 @@ const styles = StyleSheet.create({
   },
   studentIconWrap: {
     backgroundColor: '#274357',
-  },
-  studentIconGlyph: {
-    color: '#8fbfe0',
-    fontSize: 20,
-    fontWeight: '700',
   },
   archetypeTileLabel: {
     color: '#f2f2f2',
