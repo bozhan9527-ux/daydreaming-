@@ -94,7 +94,7 @@ export const PHYSICAL_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalSupport-B-2-c01', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '推餐車推到手痠,魔王攻擊反而輕鬆。' },
   { id: 'job-physicalSupport-B-2-c02', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '亂流來襲,我笑著端穩托盤穩住全場。' },
   { id: 'job-physicalSupport-B-2-c03', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '時差調不過來,魔王倒是隨時都醒著。' },
-  { id: 'job-physicalSupport-B-2-c04', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '乘客按鈴不停,我的笑容練得比誰都standard。' },
+  { id: 'job-physicalSupport-B-2-c04', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '乘客按鈴不停,我的笑容練得比誰都標準。' },
   { id: 'job-physicalSupport-B-2-c05', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '高跟鞋站一整天,腳比打十場怪還痠。' },
   { id: 'job-physicalSupport-B-2-c06', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '免稅品賣得再好,業績獎金還是少少的。' },
   { id: 'job-physicalSupport-B-2-c07', rarity: 'common', type: 'text', archetype: 'physicalSupport', branch: 'B', tier: 2, payload: '廣播詞唸得比魔王的挑釁台詞還熟。' },
