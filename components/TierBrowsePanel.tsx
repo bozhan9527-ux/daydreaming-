@@ -7,7 +7,8 @@ import {
   TIER2_BONUS_COIN_MULT,
   TIER3_BONUS_EXP_MULT,
   TIER4_BONUS_FLAT_COINS,
-  TIER5_EXTRA_INSTANT_CHANCE,
+  TIER5_EXTRA_DAMAGE_CHANCE,
+  TIER5_EXTRA_DAMAGE_CUT_RATIO,
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { useGameState } from '../hooks/useGameState';
@@ -23,7 +24,7 @@ const TIER_BONUS_TEXT: Record<JobTier, string | null> = {
   2: `主動技能觸發額外 +${Math.round(TIER2_BONUS_COIN_MULT * 100)}% 金幣`,
   3: `主動技能觸發額外 +${Math.round(TIER3_BONUS_EXP_MULT * 100)}% 經驗`,
   4: `主動技能觸發額外 +${TIER4_BONUS_FLAT_COINS} 金幣`,
-  5: `${Math.round(TIER5_EXTRA_INSTANT_CHANCE * 100)}% 機率額外瞬間結束一場戰鬥`,
+  5: `${Math.round(TIER5_EXTRA_DAMAGE_CHANCE * 100)}% 機率額外造成一記重擊(削減戰鬥剩餘時間 ${Math.round(TIER5_EXTRA_DAMAGE_CUT_RATIO * 100)}%)`,
 };
 
 interface TierBrowsePanelProps {

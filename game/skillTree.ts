@@ -1,4 +1,4 @@
-import { Archetype, getArchetypeComposition, JobTier, Subtype } from './combat';
+import { Archetype, JobTier } from './combat';
 import { currentMaterialTier, MaterialTier } from './materials';
 
 // 每個職業 7 個技能欄位:3 被動(永久數值加成)+ 4 主動(各自獨立冷卻,同時運作)。
@@ -167,36 +167,45 @@ export function activeSkillTriggerIntervalSeconds(slot: ActiveSkillSlotId, level
   return Math.round(interval * 100) / 100;
 }
 
-export type ActiveEffectKind = 'instantFinish' | 'doubleReward' | 'bonusCoins' | 'expBoost';
 export type PassiveEffectKind = 'expMastery' | 'coinMastery' | 'lifeMastery';
 
-const BONUS_COINS_AMOUNT = 20;
-const EXP_BOOST_AMOUNT = 30;
+// 4個主動技能全部是「造成傷害」:傷害表現成「削減這場戰鬥的剩餘時間」(呼應點擊加速勇者
+// 用的同一套機制,見 hooks/useGameState.ts 的 boostCurrentFight),不是另外發明一套血量系統。
+// 削減比例依「欄位」決定基礎強度(active1最快觸發但削最少、active4最慢觸發但削最多),
+// 隨等級(1~10級)線性成長到封頂值——數值刻意不設任何「保底剩餘時間」之類的安全鎖:
+// 如果削減量剛好蓋過剩餘時間,戰鬥就正常結束(等同一擊打死),這是傷害算出來的正常結果;
+// 不允許的是像舊版「觸發了就無條件讓下一場戰鬥瞬間結束」那種不看數字、保證必死的寫法。
+export const ACTIVE_SLOT_DAMAGE_CUT_RATIO_RANGE: Record<ActiveSkillSlotId, { min: number; max: number }> = {
+  active1: { min: 0.08, max: 0.2 },
+  active2: { min: 0.1, max: 0.24 },
+  active3: { min: 0.12, max: 0.28 },
+  active4: { min: 0.18, max: 0.4 },
+};
 
-export function getBonusCoinsAmount(): number {
-  return BONUS_COINS_AMOUNT;
+export function activeSkillDamageCutRatio(slot: ActiveSkillSlotId, level: number): number {
+  const { min, max } = ACTIVE_SLOT_DAMAGE_CUT_RATIO_RANGE[slot];
+  const progress = Math.min(level, SKILL_LEVEL_CAP) / SKILL_LEVEL_CAP;
+  return min + (max - min) * progress;
 }
 
-export function getExpBoostAmount(): number {
-  return EXP_BOOST_AMOUNT;
-}
-
-// 職業樹分階內容:每晉一階(2/3/4/5),主動技能觸發時額外「疊加」一個新效果在既有4種基礎機制
+// 職業樹分階內容:每晉一階(2/3/4/5),主動技能觸發時額外「疊加」一個新效果在既有4格傷害
 // 之外——是疊加不是取代,tier5玩家同時享有tier2~5全部疊加效果,呼應「職業樹點進去可以看到
 // 2/3/4/5階分支,各階都有專屬新技能」的需求。數值刻意壓在跟被動技能封頂(+30%)、裝備爆擊率
 // 等既有加成同一量級,不會讓經濟大幅波動。每次「任一主動技能觸發」的批次只套用一次(不會因為
 // 剛好4格同時觸發就疊加4次),見 hooks/useGameState.ts 的 tickBattle。副職觸發不套用這組加成,
-// 呼應副職「只拿部分加成」的既有定位。
+// 呼應副職「只拿部分加成」的既有定位。tier5的加成原本是「無條件瞬殺」,同樣改成跟4個主動
+// 技能一樣的傷害邏輯——只是機率觸發、削減幅度特別大(50%),一樣不保證打死。
 export const TIER2_BONUS_COIN_MULT = 0.1;
 export const TIER3_BONUS_EXP_MULT = 0.1;
 export const TIER4_BONUS_FLAT_COINS = 3;
-export const TIER5_EXTRA_INSTANT_CHANCE = 0.08;
+export const TIER5_EXTRA_DAMAGE_CHANCE = 0.08;
+export const TIER5_EXTRA_DAMAGE_CUT_RATIO = 0.5;
 
 export interface TierTriggerBonus {
   bonusCoinMult: number;
   bonusExpMult: number;
   bonusFlatCoins: number;
-  extraInstantChance: number;
+  extraDamageChance: number;
 }
 
 export function getTierTriggerBonus(tier: JobTier): TierTriggerBonus {
@@ -204,43 +213,8 @@ export function getTierTriggerBonus(tier: JobTier): TierTriggerBonus {
     bonusCoinMult: tier >= 2 ? TIER2_BONUS_COIN_MULT : 0,
     bonusExpMult: tier >= 3 ? TIER3_BONUS_EXP_MULT : 0,
     bonusFlatCoins: tier >= 4 ? TIER4_BONUS_FLAT_COINS : 0,
-    extraInstantChance: tier >= 5 ? TIER5_EXTRA_INSTANT_CHANCE : 0,
+    extraDamageChance: tier >= 5 ? TIER5_EXTRA_DAMAGE_CHANCE : 0,
   };
-}
-
-// 4 種主動效果依 subtype 決定排列順序:跟該 subtype 呼應的「招牌效果」排在 active1(沿用舊版單一
-// 技能的效果分配),其餘 3 種依固定順序輪流填滿 active2-4,確保每個職業的 4 個主動技能各不相同。
-export const ACTIVE_KIND_ORDER: ActiveEffectKind[] = ['instantFinish', 'doubleReward', 'bonusCoins', 'expBoost'];
-
-// 效果簡短標籤,給技能欄自選選擇器(SkillLoadoutEditor.tsx)的效益排序輔助用——玩家在picker
-// 裡選要塞哪個技能時,同一種效果分組顯示、按觸發間隔(秒數,不看等級本身)由快到慢排——每種
-// 效果的「每次觸發拿多少」跟等級/來源欄位無關(bonusCoins/expBoost 是固定常數,instantFinish/
-// doubleReward 是二元觸發),等級唯一影響的是觸發間隔(見 activeSkillTriggerIntervalSeconds),
-// 所以同一種效果裡「間隔越短=單位時間觸發越多次=效益越高」是可以直接比較、不用另外發明一個
-// 綜合分數的排序依據。
-export const ACTIVE_EFFECT_KIND_LABELS: Record<ActiveEffectKind, string> = {
-  instantFinish: '瞬間結束',
-  doubleReward: '獎勵翻倍',
-  bonusCoins: '額外金幣',
-  expBoost: '額外經驗',
-};
-
-const SUBTYPE_SIGNATURE_KIND: Record<Subtype, ActiveEffectKind> = {
-  melee: 'instantFinish',
-  ranged: 'doubleReward',
-  support: 'bonusCoins',
-};
-
-function rotatedKinds(signature: ActiveEffectKind): ActiveEffectKind[] {
-  const startIndex = ACTIVE_KIND_ORDER.indexOf(signature);
-  return [...ACTIVE_KIND_ORDER.slice(startIndex), ...ACTIVE_KIND_ORDER.slice(0, startIndex)];
-}
-
-export function getActiveEffectKind(archetype: Archetype, slot: SkillSlotId): ActiveEffectKind {
-  const { subtype } = getArchetypeComposition(archetype);
-  const order = rotatedKinds(SUBTYPE_SIGNATURE_KIND[subtype]);
-  const index = (ACTIVE_SLOT_IDS as SkillSlotId[]).indexOf(slot);
-  return order[index];
 }
 
 // 副職(雙職兼修)只借用主動技能第 1 格(該職業的招牌效果)在戰鬥中觸發,間隔是本職的兩倍,
@@ -330,55 +304,55 @@ export const SKILL_SLOT_DESCRIPTIONS: Record<Archetype, Record<SkillSlotId, stri
     passive1: '日復一日扛貨練出的體感,打怪的經驗值吸收得更快。',
     passive2: '在工地行情裡打滾久了,順手多帶一點回家。',
     passive3: '長期扛重物練出的韌性,讓身體恢復力跟著變好,吸血跟自動回血效果都會提升。',
-    active1: '一拳打爆眼前的敵人,直接讓下一場戰鬥瞬間結束。',
-    active2: '拳拳到肉,這次擊殺的經驗與金幣獎勵直接翻倍。',
+    active1: '一拳打爆眼前的敵人,狠狠痛擊要害,造成大量傷害。',
+    active2: '拳拳到肉,招式力道全開,對敵人造成沉重傷害。',
     active3: '收工前順手清點一下庫存,多賺一筆零用錢。',
-    active4: '扎實幹完一天活,額外進帳一筆經驗值。',
+    active4: '扎實幹完一天活,抓準破綻補刀,造成額外傷害。',
   },
   physicalRanged: {
     passive1: '抄近路抄久了,連怎麼打怪都比別人有效率。',
     passive2: '跑單跑出心得,順路的錢也不放過。',
     passive3: '長時間在外奔波練出的底子耐力,吸血跟自動回血效果都會提升。',
-    active1: '連續多重射擊招呼過去,這次擊殺的經驗與金幣獎勵直接翻倍。',
-    active2: '順路多接一單,額外進帳一筆金幣。',
-    active3: '熟門熟路抄捷徑,額外進帳一筆經驗值。',
-    active4: '一箭封喉,直接讓下一場戰鬥瞬間結束。',
+    active1: '連續多重射擊招呼過去,招式力道全開,對敵人造成沉重傷害。',
+    active2: '順路多接一單,順勢補上一記,造成可觀傷害。',
+    active3: '熟門熟路抄捷徑,抓準破綻補刀,造成額外傷害。',
+    active4: '一箭封喉,造成大量傷害。',
   },
   physicalSupport: {
     passive1: '站櫃檯練出的敏銳觀察力,經驗值吸收得更快。',
     passive2: '會員點數精算到位,順手多換一點回饋金。',
     passive3: '第一線服務練出的抗壓體質,吸血跟自動回血效果都會提升。',
-    active1: '一圈治療光環罩住全場,額外進帳一筆金幣。',
-    active2: '貼心叮嚀送到心坎裡,額外進帳一筆經驗值。',
-    active3: '手腳俐落速戰速決,直接讓下一場戰鬥瞬間結束。',
-    active4: '雙倍關懷灌注全場,這次擊殺的經驗與金幣獎勵直接翻倍。',
+    active1: '一圈治療光環罩住全場,順勢補上一記,造成可觀傷害。',
+    active2: '貼心叮嚀送到心坎裡,抓準破綻補刀,造成額外傷害。',
+    active3: '手腳俐落速戰速決,狠狠痛擊要害,造成大量傷害。',
+    active4: '雙倍關懷灌注全場,招式力道全開,對敵人造成沉重傷害。',
   },
   magicMelee: {
     passive1: '每天固定修煉的日常,經驗值吸收得更快。',
     passive2: '香油錢的緣分到了,順手多收一點。',
     passive3: '打坐修煉出的元氣底子,吸血跟自動回血效果都會提升。',
-    active1: '灌注能量的爆發斬,直接讓下一場戰鬥瞬間結束。',
-    active2: '連環符咒一張接一張,這次擊殺的經驗與金幣獎勵直接翻倍。',
-    active3: '順便幫怪物收個驚,額外進帳一筆金幣。',
-    active4: '一瞬間的頓悟,額外進帳一筆經驗值。',
+    active1: '灌注能量的爆發斬,狠狠痛擊要害,造成大量傷害。',
+    active2: '連環符咒一張接一張,招式力道全開,對敵人造成沉重傷害。',
+    active3: '順便幫怪物收個驚,順勢補上一記,造成可觀傷害。',
+    active4: '一瞬間的頓悟,抓準破綻補刀,造成額外傷害。',
   },
   magicRanged: {
     passive1: '肝出來的手感就是不一樣,經驗值吸收得更快。',
     passive2: '接案眼光練出來了,順手多賺一點外快。',
     passive3: '熬夜爆肝練出的恢復本能,吸血跟自動回血效果都會提升。',
-    active1: '法術齊射覆蓋戰場,這次擊殺的經驗與金幣獎勵直接翻倍。',
-    active2: '業配悄悄置入,額外進帳一筆金幣。',
-    active3: '熬夜肝出的心得沒有白費,額外進帳一筆經驗值。',
-    active4: '一鍵神操作,直接讓下一場戰鬥瞬間結束。',
+    active1: '法術齊射覆蓋戰場,招式力道全開,對敵人造成沉重傷害。',
+    active2: '業配悄悄置入,順勢補上一記,造成可觀傷害。',
+    active3: '熬夜肝出的心得沒有白費,抓準破綻補刀,造成額外傷害。',
+    active4: '一鍵神操作,狠狠痛擊要害,造成大量傷害。',
   },
   magicSupport: {
     passive1: '看診看出來的臨床經驗,經驗值吸收得更快。',
     passive2: '診間累積的人脈,順手多收一點紅包。',
     passive3: '行醫多年悟出的養生之道,吸血跟自動回血效果都會提升。',
-    active1: '增幅祝福籠罩全隊,額外進帳一筆金幣。',
-    active2: '衛教叮嚀說得仔細,額外進帳一筆經驗值。',
-    active3: '手起刀落藥到病除,直接讓下一場戰鬥瞬間結束。',
-    active4: '雙倍療效發揮作用,這次擊殺的經驗與金幣獎勵直接翻倍。',
+    active1: '增幅祝福籠罩全隊,順勢補上一記,造成可觀傷害。',
+    active2: '衛教叮嚀說得仔細,抓準破綻補刀,造成額外傷害。',
+    active3: '手起刀落藥到病除,狠狠痛擊要害,造成大量傷害。',
+    active4: '雙倍療效發揮作用,招式力道全開,對敵人造成沉重傷害。',
   },
 };
 
@@ -392,11 +366,11 @@ export function getSkillSlotBonusDescription(archetype: Archetype, slot: SkillSl
     if (kind === 'coinMastery') return `永久金幣獲取 +${pct}%`;
     return `永久吸血+自動回血 +${pct}%`;
   }
-  const kind = getActiveEffectKind(archetype, slot);
   // isPassiveSlot(slot) 已經在上面 return 過了,能走到這裡代表 slot 一定是 4 個主動欄位之一。
-  const seconds = activeSkillTriggerIntervalSeconds(slot as ActiveSkillSlotId, level);
-  if (kind === 'instantFinish') return `每 ${seconds} 秒觸發一次,下一場戰鬥直接瞬間結束`;
-  if (kind === 'doubleReward') return `每 ${seconds} 秒觸發一次,這次擊殺的經驗與金幣翻倍`;
-  if (kind === 'bonusCoins') return `每 ${seconds} 秒觸發一次,額外獲得 ${getBonusCoinsAmount()} 金幣`;
-  return `每 ${seconds} 秒觸發一次,額外獲得 ${getExpBoostAmount()} 經驗`;
+  // archetype 參數保留是為了呼叫端簽章相容(見 SkillPanel.tsx 的呼叫方式),傷害比例本身
+  // 只吃欄位+等級,不吃職業。
+  const activeSlot = slot as ActiveSkillSlotId;
+  const seconds = activeSkillTriggerIntervalSeconds(activeSlot, level);
+  const pct = Math.round(activeSkillDamageCutRatio(activeSlot, level) * 1000) / 10;
+  return `每 ${seconds} 秒觸發一次,對敵人造成傷害(削減這場戰鬥剩餘時間 ${pct}%)`;
 }

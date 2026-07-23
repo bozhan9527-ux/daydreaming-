@@ -134,9 +134,9 @@ import {
   TieredMaterialCounts,
 } from '../game/materials';
 import {
+  activeSkillDamageCutRatio,
   activeSkillTriggerIntervalSeconds,
   ACTIVE_SLOT_IDS,
-  ActiveEffectKind,
   ActiveSkillLoadout,
   ActiveSkillRef,
   ActiveSkillSlotId,
@@ -145,10 +145,7 @@ import {
   createInitialActiveSkillLoadout,
   createInitialSkillTreeLevels,
   enforceLoadoutIdentityCap,
-  getActiveEffectKind,
   MAX_BORROWED_ACTIVE_SLOTS,
-  getBonusCoinsAmount,
-  getExpBoostAmount,
   getPassiveBonusValue,
   getTierTriggerBonus,
   rollSkillBookDrop,
@@ -159,13 +156,13 @@ import {
   skillSlotUpgradeBookCost,
   SkillSlotId,
   SkillTreeLevels,
+  TIER5_EXTRA_DAMAGE_CUT_RATIO,
   upgradeSkillSlot as nextSkillSlotLevel,
 } from '../game/skillTree';
 import { BodyType } from '../game/sprites/heroSilhouette';
 import {
   canUpgradeStudentSkillSlot,
   createInitialStudentSkillTreeLevels,
-  getStudentActiveEffectKind,
   getStudentSkillFlavor,
   upgradeStudentSkillSlot as nextStudentSkillSlotLevel,
 } from '../game/studentSkillTree';
@@ -208,10 +205,10 @@ function currentJobMultiplier(job: JobSelection, tier: JobTier, secondaryJob: Ar
 
 interface ActiveSkillTriggerResult {
   timers: Record<ActiveSkillSlotId, number>;
-  exp: number;
-  coins: number;
-  forceInstantNextFight: boolean;
-  triggered: boolean;
+  // 削減下一場戰鬥的剩餘時間比例(見 hooks/useGameState.ts 的 tickBattle 說明),不是修改
+  // 這次擊殺的獎勵——4個主動技能全部是「造成傷害」,不再碰 exp/coins。
+  headStartRatio: number;
+  triggeredSlot: ActiveSkillSlotId | null;
 }
 
 // 技能書/強化石分階制(見 game/materials.ts):所有既有掉落/獎勵管道(擊殺掉落、商店購買、
@@ -252,43 +249,26 @@ function resolveLoadoutLevels(loadout: ActiveSkillLoadout, skillTree: SkillTreeL
   return levels;
 }
 
-function resolveLoadoutEffectKind(loadout: ActiveSkillLoadout, slot: ActiveSkillSlotId): ActiveEffectKind | null {
-  const ref = loadout[slot];
-  return ref ? getActiveEffectKind(ref.archetype, ref.sourceSlot) : null;
-}
-
-// 全自動:冷卻好了就在下次擊殺結算直接生效,不需要玩家手動點擊觸發。
+// 全自動:冷卻好了就在下次擊殺結算直接生效,不需要玩家手動點擊觸發。4個主動技能欄現在
+// 全部是「造成傷害」(見 game/skillTree.ts 的 activeSkillDamageCutRatio),傷害量只吃
+// 「觸發的是哪一欄位+那一欄位的等級」,不用再像舊版那樣另外查一次「這欄位是哪種效果」。
 function applyActiveSkillTriggers(
   slotLevels: Record<ActiveSkillSlotId, number>,
   timers: Record<ActiveSkillSlotId, number>,
-  getEffect: (slot: ActiveSkillSlotId) => ActiveEffectKind | null,
   now: number,
-  exp: number,
-  coins: number,
-  forceInstantNextFight: boolean
+  headStartRatio: number
 ): ActiveSkillTriggerResult {
   const nextTimers = { ...timers };
-  let triggered = false;
+  let triggeredSlot: ActiveSkillSlotId | null = null;
   for (const slot of ACTIVE_SLOT_IDS) {
     if (slotLevels[slot] <= 0) continue;
     const intervalMs = activeSkillTriggerIntervalSeconds(slot, slotLevels[slot]) * 1000;
     if (now - timers[slot] < intervalMs) continue;
-    const effect = getEffect(slot);
-    if (effect === null) continue;
     nextTimers[slot] = now;
-    triggered = true;
-    if (effect === 'doubleReward') {
-      exp *= 2;
-      coins *= 2;
-    } else if (effect === 'bonusCoins') {
-      coins += getBonusCoinsAmount();
-    } else if (effect === 'expBoost') {
-      exp += getExpBoostAmount();
-    } else if (effect === 'instantFinish') {
-      forceInstantNextFight = true;
-    }
+    headStartRatio += activeSkillDamageCutRatio(slot, slotLevels[slot]);
+    triggeredSlot = slot;
   }
-  return { timers: nextTimers, exp, coins, forceInstantNextFight, triggered };
+  return { timers: nextTimers, headStartRatio, triggeredSlot };
 }
 
 interface RewardMultipliers {
@@ -501,7 +481,14 @@ interface GameState {
   // 技能剛觸發的時間戳,不存檔,只給 UI 顯示「剛發動」的短暫閃光用,跟 lastEnhanceOutcome 同一套模式。
   lastSkillTriggerAt: number | null;
   lastSecondarySkillTriggerAt: number | null;
-  forceInstantNextFight: boolean;
+  // 剛觸發的是「哪個職業的哪一格」技能,不存檔,純粹給 BattleScene.tsx 挑選對應招式圖示的
+  // 攻擊特效動畫用——跟上面兩個時間戳分開存,因為時間戳只需要知道「有沒有剛觸發」,
+  // 這個額外記住「觸發的到底是哪一招」才挑得出正確圖示。
+  lastTriggeredSkillIcon: { archetype: Archetype; slot: ActiveSkillSlotId } | null;
+  // 下一場戰鬥開場就先扣掉的剩餘時間比例(見 hooks/useGameState.ts 的 tickBattle 說明,呼應
+  // 4個主動技能「造成傷害」的機制)——不是保證瞬殺,累積比例達到/超過1時下一場戰鬥才會等於
+  // 直接打完,單純是傷害算出來的結果。
+  nextFightHeadStartRatio: number;
   // 設定(見 components/SettingsModal.tsx):soundMuted 是音效總開關,hasSeenWelcome 是
   // 新手歡迎彈窗是否已經看過/關閉——兩者都要存檔,不然每次重開 App 都要重新關一次音效/
   // 重新看一次歡迎畫面。
@@ -816,7 +803,8 @@ export const useGameState = create<GameState>((set, get) => ({
   secondarySkillTimerStartedAt: Date.now(),
   lastSkillTriggerAt: null,
   lastSecondarySkillTriggerAt: null,
-  forceInstantNextFight: false,
+  lastTriggeredSkillIcon: null,
+  nextFightHeadStartRatio: 0,
   soundMuted: false,
   hasSeenWelcome: false,
   musicMuted: false,
@@ -1094,16 +1082,17 @@ export const useGameState = create<GameState>((set, get) => ({
         bossTier,
         attackPower
       );
-      if (state.forceInstantNextFight) {
-        encounter.fightDurationMs = 0;
-      }
+      // 上一擊觸發的主動技能傷害:削減這場新戰鬥的剩餘時間(見 ActiveSkillTriggerResult 的
+      // headStartRatio 說明)。比例算出來 >=1 就等於直接打完,是傷害數字自然算出來的結果,
+      // 不是另外判斷「要不要瞬殺」——刻意不夾住上限。
+      encounter.fightDurationMs = Math.max(0, Math.round(encounter.fightDurationMs * (1 - state.nextFightHeadStartRatio)));
       set({
         currentEncounter: encounter,
         trigger: encounter.triggerState,
         fightStartedAt: Date.now(),
         fightElapsedMs: 0,
         heroClicksThisFight: 0,
-        forceInstantNextFight: false,
+        nextFightHeadStartRatio: 0,
         defeatRecoveryUntil: null,
       });
       persist(get());
@@ -1174,29 +1163,26 @@ export const useGameState = create<GameState>((set, get) => ({
 
     // 主動技能:4 個技能欄位(active1-4)各自獨立秒數倒數,固定不受戰鬥/關卡時長影響,
     // 全部同時運作、可以同一擊一起觸發,全自動——冷卻好就在這次結算生效,不用玩家點擊。
+    // 4個技能全部是「造成傷害」,不再碰這次擊殺的 exp/coins,累積到 headStartRatio 裡,
+    // 拿去削減「下一場戰鬥」的剩餘時間(見上面 tickBattle 生成新戰鬥那段的套用方式)。
     const now = Date.now();
     let exp = reward.exp;
     let coins = reward.coins;
-    let forceInstantNextFight = state.forceInstantNextFight;
+    let headStartRatio = state.nextFightHeadStartRatio;
     let lastSkillTriggerAt = state.lastSkillTriggerAt;
-    let anySkillTriggered = false;
+    let lastTriggeredSkillIcon = state.lastTriggeredSkillIcon;
+    // 職業樹分階疊加效果(tier2~5),整個結算區塊共用同一份,不用重複呼叫。
+    const tierBonus = getTierTriggerBonus(state.jobTier);
 
-    // 學生主動技能:畢業後不會失效,永遠跟職業主動技能並存,用自己獨立的一組計時器
-    // (見 game/studentSkillTree.ts 的 getStudentActiveEffectKind,不吃 archetype)。
-    const studentTrigger = applyActiveSkillTriggers(
-      state.studentSkillTree,
-      state.studentActiveSkillTimers,
-      getStudentActiveEffectKind,
-      now,
-      exp,
-      coins,
-      forceInstantNextFight
-    );
+    // 學生主動技能:畢業後不會失效,永遠跟職業主動技能並存,用自己獨立的一組計時器。
+    // 學生沒有 archetype,圖示照樣借用 job.archetype 當視覺樣板(跟 SkillTracker.tsx 既有慣例一致)。
+    const studentTrigger = applyActiveSkillTriggers(state.studentSkillTree, state.studentActiveSkillTimers, now, headStartRatio);
     const nextStudentActiveSkillTimers = studentTrigger.timers;
-    exp = studentTrigger.exp;
-    coins = studentTrigger.coins;
-    forceInstantNextFight = studentTrigger.forceInstantNextFight;
-    anySkillTriggered = anySkillTriggered || studentTrigger.triggered;
+    headStartRatio = studentTrigger.headStartRatio;
+    if (studentTrigger.triggeredSlot) {
+      lastSkillTriggerAt = now;
+      lastTriggeredSkillIcon = { archetype: state.job.archetype, slot: studentTrigger.triggeredSlot };
+    }
 
     // 職業主動技能:畢業前(!hasChosenJob)還沒有主職可以套用,跳過這組計時器。
     let nextActiveSkillTimers = state.activeSkillTimers;
@@ -1204,30 +1190,31 @@ export const useGameState = create<GameState>((set, get) => ({
       const jobTrigger = applyActiveSkillTriggers(
         resolveLoadoutLevels(state.activeSkillLoadout, state.skillTree),
         state.activeSkillTimers,
-        (slot) => resolveLoadoutEffectKind(state.activeSkillLoadout, slot),
         now,
-        exp,
-        coins,
-        forceInstantNextFight
+        headStartRatio
       );
       nextActiveSkillTimers = jobTrigger.timers;
-      exp = jobTrigger.exp;
-      coins = jobTrigger.coins;
-      forceInstantNextFight = jobTrigger.forceInstantNextFight;
-      anySkillTriggered = anySkillTriggered || jobTrigger.triggered;
+      headStartRatio = jobTrigger.headStartRatio;
+      if (jobTrigger.triggeredSlot) {
+        lastSkillTriggerAt = now;
+        // loadout 指到的可能是借用別的職業的招式(見 SkillLoadoutEditor.tsx),圖示要照
+        // loadout 實際指到的 archetype+sourceSlot 抓,不是永遠用玩家目前的職業。
+        const ref = state.activeSkillLoadout[jobTrigger.triggeredSlot];
+        if (ref) lastTriggeredSkillIcon = { archetype: ref.archetype, slot: ref.sourceSlot };
+        // 職業樹分階疊加效果:tier2起才有,且是一次觸發批次只套用一次(不會因為剛好4格
+        // 同時觸發就疊加4次)——見 game/skillTree.ts 的 getTierTriggerBonus 設計說明。
+        // tier5的加成原本是「無條件瞬殺」,改成一樣的「削減比例」機制,只是機率觸發、
+        // 削減幅度特別大,一樣不保證打死(見 activeSkillDamageCutRatio 的說明)。
+        if (Math.random() < tierBonus.extraDamageChance) headStartRatio += TIER5_EXTRA_DAMAGE_CUT_RATIO;
+      }
     }
-    if (anySkillTriggered) {
-      lastSkillTriggerAt = now;
-      // 職業樹分階疊加效果:tier2起才有,且是一次觸發批次只套用一次(不會因為剛好4格
-      // 同時觸發就疊加4次)——見 game/skillTree.ts 的 getTierTriggerBonus 設計說明。
-      const tierBonus = getTierTriggerBonus(state.jobTier);
-      coins += Math.round(coins * tierBonus.bonusCoinMult) + tierBonus.bonusFlatCoins;
-      exp += Math.round(exp * tierBonus.bonusExpMult);
-      if (Math.random() < tierBonus.extraInstantChance) forceInstantNextFight = true;
-    }
+    // 職業樹分階的金幣/經驗加成(tier2/3/4)不吃「造成傷害」門檻,只要這一擊真的打死(必定會,
+    // 這裡本來就是擊殺結算區塊)就套用,維持跟舊版一樣「每次擊殺都疊加」的既有行為。
+    coins += Math.round(coins * tierBonus.bonusCoinMult) + tierBonus.bonusFlatCoins;
+    exp += Math.round(exp * tierBonus.bonusExpMult);
 
     // 副職只借用它的主動技能第1格(該職業招牌效果),間隔是本職的兩倍,跟主職各自獨立計時、
-    // 可以同一擊同時觸發,呼應副職只拿「部分加成」的定位,同樣全自動。
+    // 可以同一擊同時觸發,呼應副職只拿「部分加成」的定位,同樣全自動、一樣是造成傷害。
     let nextSecondarySkillTimerStartedAt = state.secondarySkillTimerStartedAt;
     let lastSecondarySkillTriggerAt = state.lastSecondarySkillTriggerAt;
     if (state.secondaryJob) {
@@ -1237,18 +1224,10 @@ export const useGameState = create<GameState>((set, get) => ({
       const secondaryTriggered = secondarySkillLevel > 0 && secondaryReady;
       nextSecondarySkillTimerStartedAt = secondaryTriggered ? now : state.secondarySkillTimerStartedAt;
       if (secondaryTriggered) {
-        const secondaryEffect = getActiveEffectKind(state.secondaryJob, 'active1');
-        if (secondaryEffect === 'doubleReward') {
-          exp *= 2;
-          coins *= 2;
-        } else if (secondaryEffect === 'bonusCoins') {
-          coins += getBonusCoinsAmount();
-        } else if (secondaryEffect === 'expBoost') {
-          exp += getExpBoostAmount();
-        } else if (secondaryEffect === 'instantFinish') {
-          forceInstantNextFight = true;
-        }
+        headStartRatio += activeSkillDamageCutRatio('active1', secondarySkillLevel);
         lastSecondarySkillTriggerAt = now;
+        lastSkillTriggerAt = now;
+        lastTriggeredSkillIcon = { archetype: state.secondaryJob, slot: 'active1' };
       }
     }
 
@@ -1364,7 +1343,8 @@ export const useGameState = create<GameState>((set, get) => ({
       secondarySkillTimerStartedAt: nextSecondarySkillTimerStartedAt,
       lastSkillTriggerAt,
       lastSecondarySkillTriggerAt,
-      forceInstantNextFight,
+      lastTriggeredSkillIcon,
+      nextFightHeadStartRatio: headStartRatio,
     });
     // 這一擊可能同時動到擊殺數/等級/裝備解鎖(掉落)/寵物坐騎解鎖(掉落)/轉職證明,
     // 全部收斂到這一個共用檢查點,不用在上面每個掉落判定各自插一次。

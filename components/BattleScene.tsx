@@ -246,6 +246,7 @@ export function BattleScene() {
 
   const equipment = useGameState((state) => state.equipment);
   const job = useGameState((state) => state.job);
+  const jobTier = useGameState((state) => state.jobTier);
   const companions = useGameState((state) => state.companions);
   const currentEncounter = useGameState((state) => state.currentEncounter);
   const fightStartedAt = useGameState((state) => state.fightStartedAt);
@@ -253,6 +254,7 @@ export function BattleScene() {
   const boostCurrentFight = useGameState((state) => state.boostCurrentFight);
   const lastSkillTriggerAt = useGameState((state) => state.lastSkillTriggerAt);
   const lastSecondarySkillTriggerAt = useGameState((state) => state.lastSecondarySkillTriggerAt);
+  const lastTriggeredSkillIcon = useGameState((state) => state.lastTriggeredSkillIcon);
 
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -260,7 +262,10 @@ export function BattleScene() {
     return () => clearInterval(id);
   }, []);
 
-  const effect = getAttackEffect(job.archetype);
+  // 沒有任何觸發紀錄前(剛開遊戲、還沒有任何主動技能發動過)退回顯示目前職業 active1 的圖示,
+  // 跟舊版預設行為一致。
+  const iconRef = lastTriggeredSkillIcon ?? { archetype: job.archetype, slot: 'active1' as const };
+  const effect = getAttackEffect(iconRef.archetype, iconRef.slot, jobTier);
   const now = Date.now();
   const skillJustTriggered =
     (lastSkillTriggerAt !== null && now - lastSkillTriggerAt < SKILL_FLASH_WINDOW_MS) ||

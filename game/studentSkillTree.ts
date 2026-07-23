@@ -6,12 +6,9 @@
 // 升級花費/觸發間隔/被動加成/主動效果數值全部直接沿用 game/skillTree.ts 的既有公式,
 // 不重新發明——學生樹只是「繫在不同的等級軌道上」,機制跟職業樹完全一樣。
 import {
-  ActiveEffectKind,
+  activeSkillDamageCutRatio,
   ActiveSkillSlotId,
-  ACTIVE_SLOT_IDS,
   activeSkillTriggerIntervalSeconds,
-  getBonusCoinsAmount,
-  getExpBoostAmount,
   getPassiveBonusValue,
   getPassiveEffectKind,
   isPassiveSlot,
@@ -20,11 +17,9 @@ import {
   SkillSlotId,
 } from './skillTree';
 
-export type { ActiveEffectKind, PassiveEffectKind };
+export type { PassiveEffectKind };
 export {
   activeSkillTriggerIntervalSeconds,
-  getBonusCoinsAmount,
-  getExpBoostAmount,
   getPassiveBonusValue,
   getPassiveEffectKind,
   skillSlotUpgradeBookCost,
@@ -44,16 +39,6 @@ export function canUpgradeStudentSkillSlot(level: number, skillBooks: number): b
 
 export function upgradeStudentSkillSlot(level: number): number {
   return Math.min(STUDENT_SKILL_LEVEL_CAP, level + 1);
-}
-
-// 職業樹的 4 個主動格效果順序依 subtype 決定(見 skillTree.ts 的 rotatedKinds),學生沒有
-// subtype,直接固定寫死一個順序:active1=額外經驗、active2=額外金幣、active3=雙倍獎勵、
-// active4=瞬間結束。
-export const STUDENT_ACTIVE_KIND_ORDER: ActiveEffectKind[] = ['expBoost', 'bonusCoins', 'doubleReward', 'instantFinish'];
-
-export function getStudentActiveEffectKind(slot: ActiveSkillSlotId): ActiveEffectKind {
-  const index = (ACTIVE_SLOT_IDS as SkillSlotId[]).indexOf(slot);
-  return STUDENT_ACTIVE_KIND_ORDER[index];
 }
 
 export interface StudentSkillFlavor {
@@ -80,19 +65,19 @@ export const STUDENT_SKILL_FLAVOR: Record<1 | 2, Record<SkillSlotId, StudentSkil
     },
     active1: {
       name: '抄筆記抄出心得',
-      description: '筆記抄出自己的一套心得,額外進帳一筆經驗值。',
+      description: '筆記抄出自己的一套心得,抓準破綻補刀,造成額外傷害。',
     },
     active2: {
       name: '福利社前撿到零錢',
-      description: '福利社前低頭一看撿到一枚硬幣,額外進帳一筆金幣。',
+      description: '福利社前低頭一看撿到一枚硬幣,順勢補上一記,造成可觀傷害。',
     },
     active3: {
       name: '小考超常發揮',
-      description: '這次小考超常發揮,這次擊殺的經驗與金幣獎勵直接翻倍。',
+      description: '這次小考超常發揮,招式力道全開,對敵人造成沉重傷害。',
     },
     active4: {
       name: '打鐘下課',
-      description: '鐘聲一響立刻收拾書包衝出教室,直接讓下一場戰鬥瞬間結束。',
+      description: '鐘聲一響立刻收拾書包衝出教室,狠狠痛擊要害,造成大量傷害。',
     },
   },
   2: {
@@ -110,19 +95,19 @@ export const STUDENT_SKILL_FLAVOR: Record<1 | 2, Record<SkillSlotId, StudentSkil
     },
     active1: {
       name: '重點整理神技',
-      description: '一份重點整理筆記傳遍全班,額外進帳一筆經驗值。',
+      description: '一份重點整理筆記傳遍全班,抓準破綻補刀,造成額外傷害。',
     },
     active2: {
       name: '校慶擺攤賺一筆',
-      description: '校慶園遊會擺攤生意興隆,額外進帳一筆金幣。',
+      description: '校慶園遊會擺攤生意興隆,順勢補上一記,造成可觀傷害。',
     },
     active3: {
       name: '段考奪冠',
-      description: '這次段考全班奪冠,這次擊殺的經驗與金幣獎勵直接翻倍。',
+      description: '這次段考全班奪冠,招式力道全開,對敵人造成沉重傷害。',
     },
     active4: {
       name: '風雲人物人氣爆棚',
-      description: '風雲人物人氣爆棚,一聲令下全場歡呼收場,直接讓下一場戰鬥瞬間結束。',
+      description: '風雲人物人氣爆棚,一聲令下全場歡呼收場,狠狠痛擊要害,造成大量傷害。',
     },
   },
 };
@@ -133,8 +118,8 @@ export function getStudentSkillFlavor(level: number, slot: SkillSlotId): Student
   return STUDENT_SKILL_FLAVOR[level >= 1 ? 2 : 1][slot];
 }
 
-// 依目前技能等級組成一句人看得懂的說明,對照 game/skillTree.ts 的 getSkillSlotBonusDescription,
-// 差別只在主動效果順序改吃 getStudentActiveEffectKind(不吃 archetype/subtype)。
+// 依目前技能等級組成一句人看得懂的說明,對照 game/skillTree.ts 的 getSkillSlotBonusDescription——
+// 學生的4個主動格跟職業樹一樣是「造成傷害」,只吃欄位+等級,不需要職業/subtype 資訊。
 export function getStudentSkillSlotBonusDescription(slot: SkillSlotId, level: number): string {
   if (isPassiveSlot(slot)) {
     const kind = getPassiveEffectKind(slot);
@@ -143,10 +128,8 @@ export function getStudentSkillSlotBonusDescription(slot: SkillSlotId, level: nu
     if (kind === 'coinMastery') return `永久金幣獲取 +${pct}%`;
     return `永久吸血+自動回血 +${pct}%`;
   }
-  const kind = getStudentActiveEffectKind(slot as ActiveSkillSlotId);
-  const seconds = activeSkillTriggerIntervalSeconds(slot as ActiveSkillSlotId, level);
-  if (kind === 'instantFinish') return `每 ${seconds} 秒觸發一次,下一場戰鬥直接瞬間結束`;
-  if (kind === 'doubleReward') return `每 ${seconds} 秒觸發一次,這次擊殺的經驗與金幣翻倍`;
-  if (kind === 'bonusCoins') return `每 ${seconds} 秒觸發一次,額外獲得 ${getBonusCoinsAmount()} 金幣`;
-  return `每 ${seconds} 秒觸發一次,額外獲得 ${getExpBoostAmount()} 經驗`;
+  const activeSlot = slot as ActiveSkillSlotId;
+  const seconds = activeSkillTriggerIntervalSeconds(activeSlot, level);
+  const pct = Math.round(activeSkillDamageCutRatio(activeSlot, level) * 1000) / 10;
+  return `每 ${seconds} 秒觸發一次,對敵人造成傷害(削減這場戰鬥剩餘時間 ${pct}%)`;
 }
