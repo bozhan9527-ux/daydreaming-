@@ -11,26 +11,30 @@ import {
   JobTier,
   TIER_UNLOCK_LEVELS,
 } from '../game/combat';
+import { isTabUnlocked, tabUnlockLevel } from '../game/onboarding';
+import { currentMaterialTier, MATERIAL_TIER_LABELS } from '../game/materials';
 import {
   ACTIVE_SLOT_IDS,
+  canUpgradeSkillSlot,
   getSkillSlotBonusDescription,
   isPassiveSlot,
   PASSIVE_SLOT_IDS,
   SKILL_SLOT_DESCRIPTIONS,
   SKILL_SLOT_NAMES,
+  skillSlotLevelCap,
+  skillSlotUpgradeBookCost,
   SkillSlotId,
   SkillTreeLevels,
 } from '../game/skillTree';
 import { getTierSkillFlavor } from '../game/skillTreeFlavor';
 import { getSkillIcon } from '../game/sprites/skillIcons';
-import {
-  getStudentSkillFlavor,
-  getStudentSkillSlotBonusDescription,
-  STUDENT_SKILL_LEVEL_CAP,
-} from '../game/studentSkillTree';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import { useGameState } from '../hooks/useGameState';
+import { useToast } from '../hooks/useToast';
+import { JobPromotionCard } from './JobPromotionCard';
 import { PixelSprite } from './PixelSprite';
+import { SkillLoadoutEditor } from './SkillLoadoutEditor';
+import { StudentSkillPanel } from './StudentSkillPanel';
 
 const PREVIEW_TILE_SIZE = 48;
 const ARCHETYPE_ICON_SIZE = 44;
@@ -67,17 +71,20 @@ function getSlotFlavor(archetype: Archetype, branch: JobBranch, tier: JobTier, s
 }
 
 // 第一層:6個職業各自一個icon,不再用「物理/魔法 x 近戰/遠程/輔助」的文字分組樹狀圖——
-// 一眼就能看到6個職業,點哪個都直接進到那個職業的階級分支畫面。
+// 一眼就能看到6個職業,點哪個都直接進到那個職業的階級分支畫面。額外補一格「學生」,
+// 學生技能樹從這裡單獨進去投資,不再混在任何一個職業的畫面裡(見 StudentSkillPanel.tsx)。
 function ArchetypeGrid({
   job,
   secondaryJob,
   hasChosenJob,
   onSelect,
+  onSelectStudent,
 }: {
   job: Archetype;
   secondaryJob: Archetype | null;
   hasChosenJob: boolean;
   onSelect: (archetype: Archetype) => void;
+  onSelectStudent: () => void;
 }) {
   return (
     <View style={styles.archetypeGrid}>
@@ -106,6 +113,14 @@ function ArchetypeGrid({
           </Pressable>
         );
       })}
+      <Pressable style={[styles.archetypeTile, styles.studentTile]} onPress={onSelectStudent}>
+        <View style={[styles.archetypeIconWrap, styles.studentIconWrap]}>
+          <Text style={styles.studentIconGlyph}>學</Text>
+        </View>
+        <Text style={styles.archetypeTileLabel} numberOfLines={1}>
+          學生
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -122,7 +137,6 @@ interface TierListProps {
   dualClassUnlocked: boolean;
   transferFragmentCount: number;
   transferProofCount: number;
-  studentSkillTree: Record<SkillSlotId, number>;
   onBack: () => void;
   onSetPrimary: () => void;
   onSetBranch: (branch: JobBranch) => void;
@@ -133,6 +147,8 @@ interface TierListProps {
 
 // 第二層:這個職業的身分/主副職操作(原本 JobDetailCard 的操作區塊搬過來),外加5個階級按鈕——
 // 階級沒解鎖到(currentLevel < TIER_UNLOCK_LEVELS[tier])一樣可以點進去預覽,只是標個鎖頭提示。
+// 「挑戰晉升試煉」(見 JobPromotionCard.tsx)只在瀏覽自己目前主職(isPrimary)時顯示——
+// 那是玩家目前正在生效的職業階級,才有「晉升下一階」這個動作的意義,瀏覽別的職業純粹是預覽。
 function TierList({
   archetype,
   isPrimary,
@@ -145,7 +161,6 @@ function TierList({
   dualClassUnlocked,
   transferFragmentCount,
   transferProofCount,
-  studentSkillTree,
   onBack,
   onSetPrimary,
   onSetBranch,
@@ -252,7 +267,9 @@ function TierList({
           </Pressable>
           {!canGraduate && <Text style={styles.secondaryLocked}>Lv{graduateLevel} 畢業後才能選定主職</Text>}
         </View>
-      ) : isPrimary ? null : (
+      ) : isPrimary ? (
+        <JobPromotionCard />
+      ) : (
         <>
           <Text style={styles.transferProgress}>
             {TRANSFER_PROOF_NAMES[archetype]} x{transferProofCount}｜{TRANSFER_FRAGMENT_NAMES[archetype]} {transferFragmentCount}/
@@ -275,54 +292,49 @@ function TierList({
           </View>
         </>
       )}
-
-      {/* 上面的階級預覽是職業技能樹,不是學生時期投資的技能——這裡另外補一塊唯讀清單,
-          讓玩家看得到自己在「技能」子分頁花技能書升級的學生技能。畢業後學生加成不會消失,
-          永久疊加在職業加成之上,仍可持續花書升級,所以這塊清單畢業後也繼續顯示。
-          升級操作本身還是留在「技能」子分頁做,這裡只負責讓兩邊資訊對得起來。 */}
-      <View style={styles.studentSkillBlock}>
-        <Text style={styles.studentSkillTitle}>你的學生技能</Text>
-        <Text style={styles.detailDesc}>
-          {hasChosenJob
-            ? '畢業前投資的學生技能永久保留,加成疊加在職業技能之上,仍可在「技能」子分頁持續花書升級。'
-            : '畢業前實際生效、在「技能」子分頁花技能書升級的是這些,不是上面的職業技能預覽——畢業後也不會消失。'}
-        </Text>
-        {[...PASSIVE_SLOT_IDS, ...ACTIVE_SLOT_IDS].map((slot) => {
-            const slotLevel = studentSkillTree[slot];
-            const flavor = getStudentSkillFlavor(currentLevel, slot);
-            return (
-              <View key={slot} style={styles.studentSkillRow}>
-                <Text style={styles.studentSkillName}>
-                  {flavor.name} Lv{slotLevel}/{STUDENT_SKILL_LEVEL_CAP}
-                </Text>
-                <Text style={styles.studentSkillDesc}>{getStudentSkillSlotBonusDescription(slot, slotLevel)}</Text>
-              </View>
-            );
-          })}
-      </View>
     </View>
   );
 }
 
 // 第三層:選定階級後看那一階6個技能格的名稱/敘述——等級數字沿用同一條連續累加的軌道
 // (不分階,見 game/skillTree.ts 的 SkillTreeLevels),階級只決定「這格現在用哪套包裝文字」。
+// investable(=瀏覽自己目前主職 && Lv5解鎖技能)時這裡直接是可投資的完整畫面(技能書升級
+// 按鈕),不是另外開一張獨立的投資頁——其餘情況(預覽別的職業、或還沒解鎖技能)維持唯讀預覽。
 function SkillDetailPanel({
   archetype,
   tier,
   branch,
+  actualTier,
   skillLevels,
+  investable,
+  skillBooks,
+  onUpgrade,
+  onUpgradeMax,
   onBack,
 }: {
   archetype: Archetype;
   tier: JobTier;
   branch: JobBranch;
+  actualTier: JobTier;
   skillLevels: SkillTreeLevels[Archetype];
+  investable: boolean;
+  skillBooks: Record<number, number>;
+  onUpgrade: (tier: JobTier, slot: SkillSlotId) => void;
+  onUpgradeMax: (tier: JobTier, slot: SkillSlotId) => void;
   onBack: () => void;
 }) {
   const [previewSlot, setPreviewSlot] = useState<SkillSlotId>('active1');
   const previewLevel = skillLevels[tier][previewSlot];
   const flavor = getSlotFlavor(archetype, branch, tier, previewSlot);
   const tierTitle = getJobTitle(archetype, branch, tier);
+
+  const cap = skillSlotLevelCap(tier);
+  const materialTier = currentMaterialTier(true, tier);
+  const availableBooks = skillBooks[materialTier];
+  const bookCost = skillSlotUpgradeBookCost(previewLevel);
+  const isUnlockedTier = tier <= actualTier;
+  const canUpgrade = investable && isUnlockedTier && canUpgradeSkillSlot(previewLevel, tier, availableBooks);
+  const atCap = previewLevel >= cap;
 
   return (
     <View style={styles.panelCard}>
@@ -352,6 +364,13 @@ function SkillDetailPanel({
               <View style={styles.previewKindTag}>
                 <Text style={styles.previewKindTagText}>{isPassiveSlot(slot) ? '被動' : '主動'}</Text>
               </View>
+              {investable && (
+                <View style={styles.previewLevelBadge}>
+                  <Text style={styles.previewLevelBadgeText}>
+                    {slotLevel}/{cap}
+                  </Text>
+                </View>
+              )}
             </Pressable>
           );
         })}
@@ -359,15 +378,48 @@ function SkillDetailPanel({
       <View style={styles.previewDetail}>
         <Text style={styles.previewDetailName}>
           {flavor.name} Lv.{previewLevel}
+          {investable && atCap ? '(已達本階上限)' : ''}
         </Text>
         <Text style={styles.previewDetailDesc}>{flavor.description}</Text>
         <Text style={styles.previewDetailBonus}>{getSkillSlotBonusDescription(archetype, previewSlot, previewLevel)}</Text>
+
+        {investable && (
+          <>
+            <Text style={styles.previewDetailCap}>{tier}階上限:{cap} 級</Text>
+            {!isUnlockedTier ? (
+              <Text style={styles.lockedHint}>尚未晉升到{tier}階,晉升後才能投資這一階</Text>
+            ) : (
+              <View style={styles.upgradeButtonRow}>
+                <Pressable
+                  style={[styles.upgradeButton, !canUpgrade && styles.upgradeButtonDisabled]}
+                  onPress={() => onUpgrade(tier, previewSlot)}
+                  disabled={!canUpgrade}
+                >
+                  <Text style={styles.upgradeLabel}>
+                    {atCap
+                      ? '已達上限'
+                      : `升級 (${bookCost} 本${MATERIAL_TIER_LABELS[materialTier]}技能書,持有 ${availableBooks} 本)`}
+                  </Text>
+                </Pressable>
+                {!atCap && (
+                  <Pressable
+                    style={[styles.upgradeButtonMax, !canUpgrade && styles.upgradeButtonDisabled]}
+                    onPress={() => onUpgradeMax(tier, previewSlot)}
+                    disabled={!canUpgrade}
+                  >
+                    <Text style={styles.upgradeLabel}>衝到底</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </>
+        )}
       </View>
     </View>
   );
 }
 
-type DrillView = 'archetypes' | 'tiers' | 'skills';
+type DrillView = 'archetypes' | 'tiers' | 'skills' | 'student' | 'loadout';
 
 export function JobSelector() {
   const job = useGameState((state) => state.job);
@@ -375,12 +427,15 @@ export function JobSelector() {
   const currentTier = useGameState((state) => state.jobTier);
   const secondaryJob = useGameState((state) => state.secondaryJob);
   const skillTree = useGameState((state) => state.skillTree);
-  const studentSkillTree = useGameState((state) => state.studentSkillTree);
+  const skillBooks = useGameState((state) => state.skillBooks);
   const transferFragments = useGameState((state) => state.transferFragments);
   const transferProofs = useGameState((state) => state.transferProofs);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const setJob = useGameState((state) => state.setJob);
   const setSecondaryJob = useGameState((state) => state.setSecondaryJob);
+  const upgradeSkillSlot = useGameState((state) => state.upgradeSkillSlot);
+  const upgradeSkillSlotMax = useGameState((state) => state.upgradeSkillSlotMax);
+  const showToast = useToast((state) => state.show);
 
   const [view, setView] = useState<DrillView>('archetypes');
   const [viewingArchetype, setViewingArchetype] = useState<Archetype>(job.archetype);
@@ -388,6 +443,19 @@ export function JobSelector() {
   // 畢業前(!hasChosenJob)先讓玩家自己選好分支,按「設為主職(畢業)」時職業+分支一起套用——
   // 不用等畢業後才能選,呼應「Lv30 轉職就能選分支A/B」。
   const [selectedBranch, setSelectedBranch] = useState<JobBranch>('A');
+
+  // 技能相關的實際投資動作(職業技能投資、學生技能、技能欄自選)沿用原本「技能」子分頁的
+  // Lv5 門檻——職業/階級瀏覽本身維持 Lv1 就能看,只有真的要花書投資/配置技能欄才卡在這裡。
+  const skillUnlocked = isTabUnlocked('skill', level.level, hasChosenJob);
+  const skillUnlockLevel = tabUnlockLevel('skill');
+
+  function guardSkillUnlocked(next: () => void) {
+    if (!skillUnlocked) {
+      showToast(`Lv${skillUnlockLevel} 解鎖「技能」`);
+      return;
+    }
+    next();
+  }
 
   // 學生期(!hasChosenJob)稱號固定顯示「學生」,job.archetype 目前存的只是畢業前的佔位值,
   // 不是玩家真的選過的職業,不能拿去查真正的職業稱號。
@@ -410,7 +478,13 @@ export function JobSelector() {
               setViewingArchetype(archetype);
               setView('tiers');
             }}
+            onSelectStudent={() => guardSkillUnlocked(() => setView('student'))}
           />
+          <Pressable style={styles.loadoutButton} onPress={() => guardSkillUnlocked(() => setView('loadout'))}>
+            <Text style={styles.loadoutButtonLabel}>
+              技能選擇{!skillUnlocked ? `(Lv${skillUnlockLevel})` : ''}
+            </Text>
+          </Pressable>
         </>
       )}
 
@@ -427,7 +501,6 @@ export function JobSelector() {
           dualClassUnlocked={dualClassUnlocked}
           transferFragmentCount={transferFragments[viewingArchetype] ?? 0}
           transferProofCount={transferProofs[viewingArchetype] ?? 0}
-          studentSkillTree={studentSkillTree}
           onBack={() => setView('archetypes')}
           onSetPrimary={() => setJob(viewingArchetype, isViewingPrimary ? job.branch : selectedBranch)}
           onSetBranch={(b) => (isViewingPrimary ? setJob(job.archetype, b) : setSelectedBranch(b))}
@@ -448,9 +521,28 @@ export function JobSelector() {
           archetype={viewingArchetype}
           tier={viewingTier}
           branch={isViewingPrimary ? job.branch : selectedBranch}
+          actualTier={currentTier}
           skillLevels={skillTree[viewingArchetype]}
+          investable={isViewingPrimary && skillUnlocked}
+          skillBooks={skillBooks}
+          onUpgrade={(tier, slot) => upgradeSkillSlot(viewingArchetype, tier, slot)}
+          onUpgradeMax={(tier, slot) => upgradeSkillSlotMax(viewingArchetype, tier, slot)}
           onBack={() => setView('tiers')}
         />
+      )}
+
+      {view === 'student' && <StudentSkillPanel onBack={() => setView('archetypes')} />}
+
+      {view === 'loadout' && (
+        <View style={styles.panelCard}>
+          <View style={styles.panelHeaderRow}>
+            <Pressable style={styles.backButton} onPress={() => setView('archetypes')}>
+              <Text style={styles.backButtonLabel}>‹ 職業</Text>
+            </Pressable>
+            <Text style={styles.tierHeaderLabel}>技能選擇</Text>
+          </View>
+          <SkillLoadoutEditor archetype={job.archetype} tier={currentTier} />
+        </View>
       )}
     </View>
   );
@@ -489,6 +581,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 3,
   },
+  // 學生格子跟6個職業格子同尺寸,但用藍色(互動/選取訊號色)外框區分開,呼應它不是
+  // 「第7個職業」而是獨立的另一套技能樹。
+  studentTile: {
+    borderColor: '#6ab0e0',
+  },
   archetypeIconWrap: {
     width: ARCHETYPE_ICON_SIZE,
     height: ARCHETYPE_ICON_SIZE,
@@ -501,6 +598,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#4a4456',
     borderWidth: 2,
     borderColor: '#c9a94f',
+  },
+  studentIconWrap: {
+    backgroundColor: '#274357',
+  },
+  studentIconGlyph: {
+    color: '#8fbfe0',
+    fontSize: 20,
+    fontWeight: '700',
   },
   archetypeTileLabel: {
     color: '#f2f2f2',
@@ -515,6 +620,20 @@ const styles = StyleSheet.create({
     color: '#c9a94f',
     fontSize: 11,
     fontWeight: '700',
+  },
+  loadoutButton: {
+    width: '100%',
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#1c1c24',
+    borderWidth: 1,
+    borderColor: '#6ab0e0',
+    alignItems: 'center',
+  },
+  loadoutButtonLabel: {
+    color: '#f2f2f2',
+    fontSize: 13,
+    fontWeight: '600',
   },
   panelCard: {
     width: '100%',
@@ -640,6 +759,21 @@ const styles = StyleSheet.create({
     fontSize: 7,
     fontWeight: '600',
   },
+  previewLevelBadge: {
+    position: 'absolute',
+    bottom: 2,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  previewLevelBadgeText: {
+    color: '#f2f2f2',
+    fontSize: 9,
+    fontWeight: '700',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    paddingHorizontal: 3,
+    borderRadius: 3,
+  },
   previewDetail: {
     gap: 3,
     padding: 8,
@@ -659,6 +793,45 @@ const styles = StyleSheet.create({
   previewDetailBonus: {
     color: '#8fd4a8',
     fontSize: 11,
+  },
+  previewDetailCap: {
+    color: '#6a6a75',
+    fontSize: 11,
+  },
+  lockedHint: {
+    marginTop: 4,
+    color: '#e0a040',
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  upgradeButtonRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  upgradeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: '#2a2a35',
+    alignItems: 'center',
+  },
+  upgradeButtonMax: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    backgroundColor: '#274357',
+    borderWidth: 1,
+    borderColor: '#6ab0e0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upgradeButtonDisabled: {
+    opacity: 0.4,
+  },
+  upgradeLabel: {
+    color: '#f2f2f2',
+    fontSize: 12,
   },
   detailHeader: {
     flexDirection: 'row',
@@ -695,10 +868,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
-  // 下面的階級/技能敘述都是「畢業後才會拿到」的預覽,不是玩家現在真正在投資的技能——
-  // 用跟成就分頁一樣視覺語彙的小標籤明確標出「這是預覽」,避免跟真正在升級的技能搞混。
-  // 這裡不能重用 detailDesc(它在別處是獨立區塊裡的純文字,不在 row 容器內,加 flex:1
-  // 會在那邊變成沿著 column 主軸吃掉多餘高度,把下面的技能清單擠開),另開一個專用樣式。
   previewBadgeRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -769,32 +938,6 @@ const styles = StyleSheet.create({
   },
   secondaryLocked: {
     color: '#6a6a75',
-    fontSize: 11,
-  },
-  studentSkillBlock: {
-    width: '100%',
-    gap: 4,
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a35',
-  },
-  studentSkillTitle: {
-    color: '#c9a94f',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  studentSkillRow: {
-    gap: 1,
-    marginTop: 4,
-  },
-  studentSkillName: {
-    color: '#f2f2f2',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  studentSkillDesc: {
-    color: '#8fd4a8',
     fontSize: 11,
   },
 });

@@ -402,8 +402,7 @@ export function getSkillSlotBonusDescription(archetype: Archetype, slot: SkillSl
     return `永久吸血+自動回血 +${pct}%`;
   }
   // isPassiveSlot(slot) 已經在上面 return 過了,能走到這裡代表 slot 一定是 4 個主動欄位之一。
-  // archetype 參數保留是為了呼叫端簽章相容(見 SkillPanel.tsx 的呼叫方式),傷害比例本身
-  // 只吃欄位+等級,不吃職業。
+  // archetype 參數保留是為了呼叫端簽章相容,傷害比例本身只吃欄位+等級,不吃職業。
   const activeSlot = slot as ActiveSkillSlotId;
   const seconds = activeSkillTriggerIntervalSeconds(activeSlot, level);
   const pct = Math.round(activeSkillDamageCutRatio(activeSlot, level) * 1000) / 10;
