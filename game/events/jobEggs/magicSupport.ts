@@ -19,8 +19,8 @@ export const MAGIC_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicSupport-1-r01', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: null, tier: 1, payload: '常客特地跑來跟我說吃了藥好多了,謝謝我的建議。' },
   { id: 'job-magicSupport-1-r02', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: null, tier: 1, payload: '打工存的錢,終於湊夠買一件像樣的裝備。' },
   { id: 'job-magicSupport-1-r03', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: null, tier: 1, payload: '藥局前輩難得誇我細心,聽了心裡暖暖的。' },
-  { id: 'job-magicSupport-1-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: null, tier: 1, payload: '數了無數顆藥丸之後,我才發現,自己遞出去的不只是藥,還有每個人想被聽見的擔憂。' },
-  { id: 'job-magicSupport-1-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: null, tier: 1, payload: '打烊拉下藥局鐵門的那一刻,我才明白,能讓人安心的,從來不只是藥效,還有願意耐心解釋的那份心意。' },
+  { id: 'job-magicSupport-1-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: null, tier: 1, payload: '數了無數顆藥丸之後,我才發現,自己遞出去的其實是同一套仿單台詞,講到都能倒背如流。' },
+  { id: 'job-magicSupport-1-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: null, tier: 1, payload: '打烊拉下藥局鐵門的那一刻,我看著今天說了兩百次的「飯後吃」,才明白這份心意其實比較像復讀機。' },
 
   // ── 分支A 2階:醫生 ──
   { id: 'job-magicSupport-A-2-c01', rarity: 'common', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 2, payload: '門診看到聲音沙啞,魔王攻擊反而讓喉嚨休息一下。' },
@@ -36,8 +36,8 @@ export const MAGIC_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicSupport-A-2-r01', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 2, payload: '病患康復回診,特地帶了水果來道謝。' },
   { id: 'job-magicSupport-A-2-r02', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 2, payload: '深夜成功穩住一位急重症病患,鬆了口氣。' },
   { id: 'job-magicSupport-A-2-r03', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 2, payload: '主治醫師難得稱讚我的診斷很準確。' },
-  { id: 'job-magicSupport-A-2-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 2, payload: '看過這麼多診之後,我才發現,自己早就習慣把病人的擔憂扛在自己肩上。' },
-  { id: 'job-magicSupport-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 2, payload: '深夜送走最後一位病患後,我才明白,這份職業教會我的,不只是治病,還有面對脆弱時的溫柔。' },
+  { id: 'job-magicSupport-A-2-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 2, payload: '看過這麼多診之後,我才發現,自己早就練就一種本事:一邊點頭同理,一邊心算下一個病人還要等多久。' },
+  { id: 'job-magicSupport-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 2, payload: '深夜送走最後一位病患後,我看著自己寫到一半的病歷,才明白這份職業教會我最實用的一課,是字要寫得夠潦草才像醫生。' },
 
   // ── 分支A 3階:心理諮商師 ──
   { id: 'job-magicSupport-A-3-c01', rarity: 'common', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 3, payload: '聽個案講心事講到自己都快哭了。' },
@@ -53,8 +53,8 @@ export const MAGIC_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicSupport-A-3-r01', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 3, payload: '個案走出低潮期,特地回來跟我分享他的好消息。' },
   { id: 'job-magicSupport-A-3-r02', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 3, payload: '個案哭著說謝謝我一直沒有放棄他。' },
   { id: 'job-magicSupport-A-3-r03', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 3, payload: '督導肯定我這次的處理方式,我鬆了口氣。' },
-  { id: 'job-magicSupport-A-3-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 3, payload: '聽過這麼多人的心事之後,我才發現,自己一直在學習的,是怎麼在陪伴別人的同時,也不迷失自己。' },
-  { id: 'job-magicSupport-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 3, payload: '送走終於走出陰霾的個案那天,我才明白,願意陪一個人熬過最黑暗的時刻,本身就是一種了不起的力量。' },
+  { id: 'job-magicSupport-A-3-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 3, payload: '聽過這麼多人的心事之後,我才發現,自己下班後最想做的心理諮商,是找人聽我抱怨個案有多難搞。' },
+  { id: 'job-magicSupport-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 3, payload: '送走終於走出陰霾的個案那天,我看著空出來的時段,才明白這份工作最了不起的地方,是連替自己諮商的時間都排不出來。' },
 
   // ── 分支A 4階:老中醫 ──
   { id: 'job-magicSupport-A-4-c01', rarity: 'common', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 4, payload: '把脈把到手痠,魔王的脈象倒是簡單多了。' },
@@ -70,8 +70,8 @@ export const MAGIC_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicSupport-A-4-r01', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 4, payload: '調理多年的老病患終於康復,特地包了紅包謝我。' },
   { id: 'job-magicSupport-A-4-r02', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 4, payload: '一位老病患介紹了好幾個新病患給我。' },
   { id: 'job-magicSupport-A-4-r03', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 4, payload: '病患說吃了我開的藥終於睡得著覺,我也跟著安心。' },
-  { id: 'job-magicSupport-A-4-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 4, payload: '調理過無數人的身體之後,我才發現,真正難調的從來不是體質,是每個人心裡的那份焦慮。' },
-  { id: 'job-magicSupport-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 4, payload: '看著多年調理的老病患終於健步如飛,我才明白,慢慢來的堅持,有時候比猛藥更有力量。' },
+  { id: 'job-magicSupport-A-4-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 4, payload: '調理過無數人的身體之後,我才發現,真正難調的不是體質,是每個人都想用一帖藥解決十年的壞習慣。' },
+  { id: 'job-magicSupport-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 4, payload: '看著多年調理的老病患終於健步如飛,他塞給我一箱橘子當謝禮,我才明白,慢慢來的堅持換到的報酬,通常是水果。' },
 
   // ── 分支A 5階:神醫/華佗再世 ──
   { id: 'job-magicSupport-A-5-c01', rarity: 'common', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 5, payload: '被稱華佗再世,診間卻還是那間老舊小屋。' },
@@ -87,8 +87,8 @@ export const MAGIC_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicSupport-A-5-r01', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 5, payload: '一位被判定絕症的病患康復回診,激動地跪謝。' },
   { id: 'job-magicSupport-A-5-r02', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 5, payload: '各地醫院請我去會診疑難雜症,終於收入寬裕一點。' },
   { id: 'job-magicSupport-A-5-r03', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 5, payload: '新進學徒眼神裡的認真,讓我想起了當年的自己。' },
-  { id: 'job-magicSupport-A-5-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 5, payload: '治好了這麼多疑難雜症之後,我才發現,自己一直信奉的,從來不是什麼神奇醫術,是那份不輕易放棄病人的堅持。' },
-  { id: 'job-magicSupport-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 5, payload: '看著曾被判定絕症的病患健康地走出診間,我才明白,被稱神醫從來不是重點,重點是自己從未放棄過任何一個人。' },
+  { id: 'job-magicSupport-A-5-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 5, payload: '治好了這麼多疑難雜症之後,我才發現,自己一直信奉的神奇醫術,說穿了就是願意比別人多聽病人講五分鐘的症狀。' },
+  { id: 'job-magicSupport-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'A', tier: 5, payload: '看著曾被判定絕症的病患健康地走出診間,記者又堵在門口要拍照,我才明白,被稱神醫最大的代價,是連買個早餐都要走後門。' },
 
   // ── 分支B 2階:獸醫 ──
   { id: 'job-magicSupport-B-2-c01', rarity: 'common', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 2, payload: '被貓抓傷的次數,比被魔王打傷還多。' },
@@ -104,8 +104,8 @@ export const MAGIC_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicSupport-B-2-r01', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 2, payload: '救回一隻重傷的小狗,飼主感激地送來自製點心。' },
   { id: 'job-magicSupport-B-2-r02', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 2, payload: '原本怕生的貓咪主動蹭了蹭我的手。' },
   { id: 'job-magicSupport-B-2-r03', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 2, payload: '飼主特地寫感謝卡,說謝謝我這麼有耐心。' },
-  { id: 'job-magicSupport-B-2-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 2, payload: '治療過這麼多不會說話的生命之後,我才發現,牠們的眼神其實比人類的話語還誠實。' },
-  { id: 'job-magicSupport-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 2, payload: '看著康復的小動物開心地奔向飼主,我才明白,守護不會說話的生命,也是一種溫柔的重量。' },
+  { id: 'job-magicSupport-B-2-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 2, payload: '治療過這麼多不會說話的生命之後,我才發現,牠們的眼神比人類誠實,咬我的力道倒是一點都不手軟。' },
+  { id: 'job-magicSupport-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 2, payload: '看著康復的小動物開心地奔向飼主,我低頭看看白袍上還沒洗掉的爪痕,這大概就是這份溫柔的代價。' },
 
   // ── 分支B 3階:芳療師 ──
   { id: 'job-magicSupport-B-3-c01', rarity: 'common', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 3, payload: '調精油調到滿手香味,魔王聞了大概會噴嚏連連。' },
@@ -121,8 +121,8 @@ export const MAGIC_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicSupport-B-3-r01', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 3, payload: '客人說按摩完睡了這輩子最安穩的一覺,特地回來指名找我。' },
   { id: 'job-magicSupport-B-3-r02', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 3, payload: '調配出一款客人專屬的香氛,對方感動得眼眶泛紅。' },
   { id: 'job-magicSupport-B-3-r03', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 3, payload: '客人送了一瓶珍貴精油當謝禮。' },
-  { id: 'job-magicSupport-B-3-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 3, payload: '調配過無數種香氣之後,我才發現,自己一直在尋找的,是能讓所有人卸下防備的那種安心的味道。' },
-  { id: 'job-magicSupport-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 3, payload: '看著客人按摩後終於放鬆睡去的臉,我才明白,能讓一個人卸下重擔,本身就是一種難得的療癒。' },
+  { id: 'job-magicSupport-B-3-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 3, payload: '調配過無數種香氣之後,我才發現,自己身上永遠有股洗不掉的薰衣草味,連做夢都聞得到。' },
+  { id: 'job-magicSupport-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 3, payload: '看著客人按摩後終於放鬆睡去的臉,我輕手輕腳收拾器材,順便盤算自己的肩頸到底要痠到什麼時候。' },
 
   // ── 分支B 4階:針灸師 ──
   { id: 'job-magicSupport-B-4-c01', rarity: 'common', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 4, payload: '下針下得比揮劍還精準。' },
@@ -138,8 +138,8 @@ export const MAGIC_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicSupport-B-4-r01', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 4, payload: '治好多年的老毛病,病患激動得說不出話。' },
   { id: 'job-magicSupport-B-4-r02', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 4, payload: '老病患介紹了好幾個新病患給我。' },
   { id: 'job-magicSupport-B-4-r03', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 4, payload: '病患說扎完針終於睡得安穩,我也跟著安心。' },
-  { id: 'job-magicSupport-B-4-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 4, payload: '下過無數次針之後,我才發現,最難的從來不是找到穴位,是讓病人相信自己會好起來。' },
-  { id: 'job-magicSupport-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 4, payload: '看著久病纏身的病患終於能自在行走,我才明白,一根細針的力量,靠的其實是多年累積出來的信任。' },
+  { id: 'job-magicSupport-B-4-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 4, payload: '下過無數次針之後,我才發現,最難的不是找穴位,是說服病人「痠痛感是正常的」而不是我扎錯了。' },
+  { id: 'job-magicSupport-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 4, payload: '看著久病纏身的病患終於能自在行走,我看看自己扎針扎到有點抽筋的手,才明白信任這東西,其實是靠反覆練習換來的。' },
 
   // ── 分支B 5階:都市傳說級神醫 ──
   { id: 'job-magicSupport-B-5-c01', rarity: 'common', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 5, payload: '被封都市傳說,診所卻還是那間巷子裡的小屋。' },
@@ -155,6 +155,6 @@ export const MAGIC_SUPPORT_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicSupport-B-5-r01', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 5, payload: '一位跑遍各大醫院都查不出病因的病患,終於在我這裡找到答案。' },
   { id: 'job-magicSupport-B-5-r02', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 5, payload: '各地民俗療法界的前輩特地登門交流。' },
   { id: 'job-magicSupport-B-5-r03', rarity: 'rare', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 5, payload: '新來的學徒眼神裡的敬畏,讓我想起初出茅廬的自己。' },
-  { id: 'job-magicSupport-B-5-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 5, payload: '治好了這麼多查不出病因的疑難雜症之後,我才發現,自己靠的從不是神秘的傳說,是願意多花時間聽病人把話說完。' },
-  { id: 'job-magicSupport-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 5, payload: '看著又一位病患帶著笑容走出診所,我才明白,都市傳說終究會過去,但這份被人需要的感覺,才是我真正想留住的。' },
+  { id: 'job-magicSupport-B-5-e01', rarity: 'epic', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 5, payload: '治好了這麼多查不出病因的疑難雜症之後,我才發現,自己靠的不是神秘傳說,是願意多花二十分鐘聽病人講完,順便忍住不看時間。' },
+  { id: 'job-magicSupport-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicSupport', branch: 'B', tier: 5, payload: '看著又一位病患帶著笑容走出診所,記者又想堵我拍照,我才明白,都市傳說終究會過去,但躲記者的體力倒是練得比看診還扎實。' },
 ];
