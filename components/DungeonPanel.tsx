@@ -66,6 +66,8 @@ export function DungeonPanel() {
   const showToast = useToast((state) => state.show);
 
   const [activeTab, setActiveTab] = useState<DungeonTab>('job');
+  // 各分頁實際量到的高度(見下面隱形量測分身),key 是分頁 id,值只會越量越大不會縮小。
+  const [tabHeights, setTabHeights] = useState<Partial<Record<DungeonTab, number>>>({});
 
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -150,6 +152,117 @@ export function DungeonPanel() {
   const unlockedTiers = unlockedSkillBookDungeonTiers(hasChosenJob, jobTier);
   const todayGemTypes = availableGemDungeonTypes(new Date().getDay());
 
+  // 分頁內容高度不一(職業6張卡/鑲嵌石週末10張卡/其他分頁1張卡),切分頁時如果讓 View
+  // 自然撐開高度,下面的分頁指示點/其他區塊會跟著跳動。用「量測每個分頁實際高度、取最大值
+  // 當固定高度」的做法解決:下面用一組不可見(opacity 0 + 絕對定位疊在畫面外,不吃互動)的
+  // 分身把6個分頁內容全部渲染一次量測高度,真正顯示的只有 activeTab 那份,包在一個
+  // minHeight = 目前量到的最大值的容器裡——量到的最大值只會越量越大(不會縮小),
+  // 對應「固定使用最高的分頁作為標準」的需求,分頁內容量(技能書依轉職階級/鑲嵌石依星期
+  // 平假日)本來就會隨遊戲進度變動,不用預先算死一個假設的最大值。
+  function renderTabContent(tab: DungeonTab) {
+    switch (tab) {
+      case 'job':
+        return DUNGEON_ARCHETYPES.map((archetype) => {
+          const fragmentCount = transferFragments[archetype] ?? 0;
+          const proofCount = transferProofs[archetype] ?? 0;
+          return (
+            <View key={archetype} style={styles.card}>
+              <Text style={styles.cardTitle}>{ARCHETYPE_LABELS[archetype]}試煉</Text>
+              <Text style={styles.cardProgress}>
+                {TRANSFER_FRAGMENT_NAMES[archetype]} {fragmentCount}/{TRANSFER_FRAGMENTS_PER_PROOF}｜
+                {TRANSFER_PROOF_NAMES[archetype]} x{proofCount}
+              </Text>
+              <Pressable
+                style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+                onPress={() => handleChallenge(archetype)}
+                disabled={!canChallenge}
+              >
+                <Text style={styles.challengeLabel}>挑戰</Text>
+              </Pressable>
+            </View>
+          );
+        });
+      case 'skillBook':
+        return unlockedTiers.map((tier) => (
+          <View key={tier} style={styles.card}>
+            <Text style={styles.cardTitle}>{MATERIAL_TIER_LABELS[tier]}技能書副本</Text>
+            <Text style={styles.cardProgress}>
+              打贏保證掉落 {SKILL_BOOK_DUNGEON_REWARD_AMOUNT} 本{MATERIAL_TIER_LABELS[tier]}技能書(持有 {skillBooks[tier]} 本)
+            </Text>
+            <Pressable
+              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+              onPress={() => handleSkillBookChallenge(tier)}
+              disabled={!canChallenge}
+            >
+              <Text style={styles.challengeLabel}>挑戰</Text>
+            </Pressable>
+          </View>
+        ));
+      case 'enhanceStone':
+        return (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>強化石副本</Text>
+            <Text style={styles.cardProgress}>
+              打贏保證掉落 {ENHANCE_STONE_DUNGEON_REWARD_AMOUNT} 個初階強化石(持有 {enhanceStones[0]} 個)
+            </Text>
+            <Pressable
+              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+              onPress={handleEnhanceStoneChallenge}
+              disabled={!canChallenge}
+            >
+              <Text style={styles.challengeLabel}>挑戰</Text>
+            </Pressable>
+          </View>
+        );
+      case 'gem':
+        return todayGemTypes.map((gemType) => (
+          <View key={gemType} style={styles.card}>
+            <Text style={styles.cardTitle}>{GEM_SPECS[gemType].name}副本</Text>
+            <Text style={styles.cardProgress}>
+              打贏保證掉落 {GEM_DUNGEON_REWARD_AMOUNT} 個初階{GEM_SPECS[gemType].name}(持有 {gemCounts[gemType][0]} 個)
+            </Text>
+            <Pressable
+              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+              onPress={() => handleGemChallenge(gemType)}
+              disabled={!canChallenge}
+            >
+              <Text style={styles.challengeLabel}>挑戰</Text>
+            </Pressable>
+          </View>
+        ));
+      case 'exp':
+        return (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>經驗副本</Text>
+            <Text style={styles.cardProgress}>打贏保證獲得 {dungeonExpDropAmount(level.level)} 經驗</Text>
+            <Pressable
+              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+              onPress={handleExpChallenge}
+              disabled={!canChallenge}
+            >
+              <Text style={styles.challengeLabel}>挑戰</Text>
+            </Pressable>
+          </View>
+        );
+      case 'coin':
+        return (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>金錢副本</Text>
+            <Text style={styles.cardProgress}>打贏保證獲得 {dungeonCoinDropAmount(level.level)} 金幣</Text>
+            <Pressable
+              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+              onPress={handleCoinChallenge}
+              disabled={!canChallenge}
+            >
+              <Text style={styles.challengeLabel}>挑戰</Text>
+            </Pressable>
+          </View>
+        );
+    }
+  }
+
+  const maxTabHeight = Math.max(0, ...Object.values(tabHeights));
+
   return (
     <View style={styles.container}>
       <View style={styles.ticketRow}>
@@ -174,105 +287,29 @@ export function DungeonPanel() {
         ))}
       </View>
 
-      {activeTab === 'job' &&
-        DUNGEON_ARCHETYPES.map((archetype) => {
-          const fragmentCount = transferFragments[archetype] ?? 0;
-          const proofCount = transferProofs[archetype] ?? 0;
-          return (
-            <View key={archetype} style={styles.card}>
-              <Text style={styles.cardTitle}>{ARCHETYPE_LABELS[archetype]}試煉</Text>
-              <Text style={styles.cardProgress}>
-                {TRANSFER_FRAGMENT_NAMES[archetype]} {fragmentCount}/{TRANSFER_FRAGMENTS_PER_PROOF}｜{TRANSFER_PROOF_NAMES[archetype]} x
-                {proofCount}
-              </Text>
-              <Pressable
-                style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
-                onPress={() => handleChallenge(archetype)}
-                disabled={!canChallenge}
-              >
-                <Text style={styles.challengeLabel}>挑戰</Text>
-              </Pressable>
-            </View>
-          );
-        })}
+      <View style={maxTabHeight > 0 ? { minHeight: maxTabHeight } : undefined}>{renderTabContent(activeTab)}</View>
 
-      {activeTab === 'skillBook' &&
-        unlockedTiers.map((tier) => (
-          <View key={tier} style={styles.card}>
-            <Text style={styles.cardTitle}>{MATERIAL_TIER_LABELS[tier]}技能書副本</Text>
-            <Text style={styles.cardProgress}>
-              打贏保證掉落 {SKILL_BOOK_DUNGEON_REWARD_AMOUNT} 本{MATERIAL_TIER_LABELS[tier]}技能書(持有 {skillBooks[tier]} 本)
-            </Text>
-            <Pressable
-              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
-              onPress={() => handleSkillBookChallenge(tier)}
-              disabled={!canChallenge}
-            >
-              <Text style={styles.challengeLabel}>挑戰</Text>
-            </Pressable>
+      {/* 隱形量測分身:6個分頁內容全部各自渲染一次算出高度,不吃互動、不佔版面
+          (絕對定位疊在容器外,opacity 0)。見上面 maxTabHeight 的說明。 */}
+      <View style={styles.measureLayer} pointerEvents="none">
+        {DUNGEON_TABS.map((tab) => (
+          <View
+            key={tab}
+            style={styles.measureItem}
+            onLayout={(e) => {
+              // 取歷史最大值,不直接覆蓋——鑲嵌石分頁平日只開放2種、週末開放10種,
+              // 高度本來就會隨星期變動,不能讓固定高度也跟著週間縮回去。
+              const measured = e.nativeEvent.layout.height;
+              setTabHeights((prev) => {
+                const next = Math.max(prev[tab] ?? 0, measured);
+                return next === prev[tab] ? prev : { ...prev, [tab]: next };
+              });
+            }}
+          >
+            {renderTabContent(tab)}
           </View>
         ))}
-
-      {activeTab === 'enhanceStone' && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>強化石副本</Text>
-          <Text style={styles.cardProgress}>
-            打贏保證掉落 {ENHANCE_STONE_DUNGEON_REWARD_AMOUNT} 個初階強化石(持有 {enhanceStones[0]} 個)
-          </Text>
-          <Pressable
-            style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
-            onPress={handleEnhanceStoneChallenge}
-            disabled={!canChallenge}
-          >
-            <Text style={styles.challengeLabel}>挑戰</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {activeTab === 'gem' &&
-        todayGemTypes.map((gemType) => (
-          <View key={gemType} style={styles.card}>
-            <Text style={styles.cardTitle}>{GEM_SPECS[gemType].name}副本</Text>
-            <Text style={styles.cardProgress}>
-              打贏保證掉落 {GEM_DUNGEON_REWARD_AMOUNT} 個初階{GEM_SPECS[gemType].name}(持有 {gemCounts[gemType][0]} 個)
-            </Text>
-            <Pressable
-              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
-              onPress={() => handleGemChallenge(gemType)}
-              disabled={!canChallenge}
-            >
-              <Text style={styles.challengeLabel}>挑戰</Text>
-            </Pressable>
-          </View>
-        ))}
-
-      {activeTab === 'exp' && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>經驗副本</Text>
-          <Text style={styles.cardProgress}>打贏保證獲得 {dungeonExpDropAmount(level.level)} 經驗</Text>
-          <Pressable
-            style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
-            onPress={handleExpChallenge}
-            disabled={!canChallenge}
-          >
-            <Text style={styles.challengeLabel}>挑戰</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {activeTab === 'coin' && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>金錢副本</Text>
-          <Text style={styles.cardProgress}>打贏保證獲得 {dungeonCoinDropAmount(level.level)} 金幣</Text>
-          <Pressable
-            style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
-            onPress={handleCoinChallenge}
-            disabled={!canChallenge}
-          >
-            <Text style={styles.challengeLabel}>挑戰</Text>
-          </Pressable>
-        </View>
-      )}
+      </View>
     </View>
   );
 }
@@ -335,6 +372,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#1c1c24',
     marginBottom: 8,
+  },
+  // 隱形量測分身容器:絕對定位疊到畫面外(left設一個超出容器寬度的值),不影響版面、
+  // 不吃互動,寬度跟顯示中的內容同寬(280,呼應 container 的 maxWidth)才能量出跟實際顯示
+  // 時一致的文字換行高度。
+  measureLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 9999,
+    width: 280,
+  },
+  measureItem: {
+    width: 280,
   },
   cardTitle: {
     color: '#f2f2f2',
