@@ -63,7 +63,7 @@ const BRANCHES: JobBranch[] = ['A', 'B'];
 // 依 tier 拿該格的名稱/敘述:tier1 沿用 game/skillTree.ts 既有內容(職業樹最初階本來就是這套),
 // tier2~5 是新增的「職業樹分支」內容(game/skillTreeFlavor.ts),兩邊資料來源不同但介面統一,
 // 呼叫端(SkillDetailPanel)不用管背後是哪個檔案在供應資料。
-function getSlotFlavor(archetype: Archetype, branch: JobBranch, tier: JobTier, slot: SkillSlotId): { name: string; description: string } {
+export function getSlotFlavor(archetype: Archetype, branch: JobBranch, tier: JobTier, slot: SkillSlotId): { name: string; description: string } {
   if (tier === 1) {
     return { name: SKILL_SLOT_NAMES[archetype][slot], description: SKILL_SLOT_DESCRIPTIONS[archetype][slot] };
   }
@@ -541,7 +541,7 @@ export function JobSelector() {
             </Pressable>
             <Text style={styles.tierHeaderLabel}>技能選擇</Text>
           </View>
-          <SkillLoadoutEditor archetype={job.archetype} tier={currentTier} />
+          <SkillLoadoutEditor archetype={job.archetype} branch={job.branch} tier={currentTier} />
         </View>
       )}
     </View>

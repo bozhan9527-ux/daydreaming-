@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Archetype, JobTier } from '../game/combat';
+import { Archetype, JobBranch, JobTier } from '../game/combat';
 import {
   activeSkillDamageCutRatio,
   ACTIVE_SLOT_IDS,
@@ -15,8 +15,23 @@ import {
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
 import { useGameState } from '../hooks/useGameState';
-import { ARCHETYPE_LABELS, ARCHETYPES } from './JobSelector';
+import { ARCHETYPE_LABELS, ARCHETYPES, getSlotFlavor } from './JobSelector';
 import { PixelSprite } from './PixelSprite';
+
+// 技能格顯示名稱:玩家自己目前這個職業的技能,名稱要跟「依階級瀏覽」畫面(JobSelector.tsx 的
+// getSlotFlavor)一致——那邊 2 階起會顯示職業分支專屬的「花名」(例如速戰速決在餐廳服務生
+// 底下顯示成「手腳俐落出餐」),這裡如果還印通用名稱「速戰速決」,玩家會找不到自己在瀏覽頁看到
+// 的那個技能名字。借來的別職業技能沒有對應的 branch 資訊可查,維持印通用名稱。
+function displaySkillName(
+  slotArchetype: Archetype,
+  slotSourceSlot: ActiveSkillSlotId,
+  ownArchetype: Archetype,
+  ownBranch: JobBranch,
+  tier: JobTier
+): string {
+  if (slotArchetype !== ownArchetype) return SKILL_SLOT_NAMES[slotArchetype][slotSourceSlot];
+  return getSlotFlavor(slotArchetype, ownBranch, tier, slotSourceSlot).name;
+}
 
 const TILE_SIZE = 44;
 
@@ -27,10 +42,11 @@ const TILE_SIZE = 44;
 // 職業技能,避免完全自由配置讓玩家的技能欄跟「目前是什麼職業」完全脫鉤。
 interface SkillLoadoutEditorProps {
   archetype: Archetype;
+  branch: JobBranch;
   tier: JobTier;
 }
 
-export function SkillLoadoutEditor({ archetype, tier }: SkillLoadoutEditorProps) {
+export function SkillLoadoutEditor({ archetype, branch, tier }: SkillLoadoutEditorProps) {
   const skillTree = useGameState((state) => state.skillTree);
   const activeSkillLoadout = useGameState((state) => state.activeSkillLoadout);
   const setActiveSkillLoadout = useGameState((state) => state.setActiveSkillLoadout);
@@ -74,7 +90,7 @@ export function SkillLoadoutEditor({ archetype, tier }: SkillLoadoutEditorProps)
               )}
               <Text style={styles.positionLevel}>{ref ? `Lv.${level}` : '空著'}</Text>
               <Text style={styles.positionLabel} numberOfLines={1}>
-                {ref ? SKILL_SLOT_NAMES[ref.archetype][ref.sourceSlot] : '未配置'}
+                {ref ? displaySkillName(ref.archetype, ref.sourceSlot, archetype, branch, tier) : '未配置'}
               </Text>
             </Pressable>
           );
@@ -113,7 +129,7 @@ export function SkillLoadoutEditor({ archetype, tier }: SkillLoadoutEditorProps)
                   }}
                 >
                   <Text style={[styles.pickerRowText, locked && styles.pickerRowTextLocked]}>
-                    {SKILL_SLOT_NAMES[option.archetype][option.sourceSlot]} Lv.{option.level}(每{option.intervalSeconds}秒削減
+                    {displaySkillName(option.archetype, option.sourceSlot, archetype, branch, tier)} Lv.{option.level}(每{option.intervalSeconds}秒削減
                     {option.damageCutPct}%戰鬥時間)
                   </Text>
                   <Text style={styles.pickerRowSub}>
