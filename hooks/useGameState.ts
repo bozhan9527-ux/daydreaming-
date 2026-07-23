@@ -141,17 +141,26 @@ import {
   ActiveSkillRef,
   ActiveSkillSlotId,
   canSetLoadoutSlot,
+  canSetPassiveLoadoutSlot,
   canUpgradeSkillSlot,
   createInitialActiveSkillLoadout,
+  createInitialPassiveSkillLoadout,
   createInitialSkillTreeLevels,
   effectiveSkillLevel,
   enforceLoadoutIdentityCap,
+  enforcePassiveLoadoutIdentityCap,
   MAX_BORROWED_ACTIVE_SLOTS,
+  MAX_BORROWED_PASSIVE_SLOTS,
   getPassiveBonusValue,
   getTierTriggerBonus,
+  PassiveSkillLoadout,
+  PassiveSkillRef,
+  PassiveSlotId,
+  resolveSkillLevel,
   rollSkillBookDrop,
   secondaryActiveSkillTriggerIntervalSeconds,
   skillBookDropTier,
+  SKILL_LEVEL_CAP,
   SKILL_SLOT_NAMES,
   skillSlotLevelCap,
   skillSlotUpgradeBookCost,
@@ -165,6 +174,7 @@ import {
   canUpgradeStudentSkillSlot,
   createInitialStudentSkillTreeLevels,
   getStudentSkillFlavor,
+  STUDENT_SKILL_LEVEL_CAP,
   upgradeStudentSkillSlot as nextStudentSkillSlotLevel,
 } from '../game/studentSkillTree';
 import {
@@ -234,30 +244,38 @@ function spendMaterialAtTier(counts: TieredMaterialCounts, tier: MaterialTier, a
   return { ...counts, [tier]: counts[tier] - amount };
 }
 
-// 主動技能觸發判定共用邏輯:職業技能樹跟學生技能樹畢業後永久並存(各自獨立計時器),
-// 這個函式抽出來讓 tickBattle 對兩邊各呼叫一次,避免同一段判定寫兩份。
-// 主動技能欄自選(見 game/skillTree.ts 的 ActiveSkillLoadout):4個位置各自透過 loadout 指到
-// 「某個職業、某個主動格」的技能,不再固定等於目前職業自己的active1-4。這裡把 loadout 攤平成
-// applyActiveSkillTriggers 原本就吃的 Record<ActiveSkillSlotId, number> 形狀——空位(null)直接
-// 給0級,跟既有的 Lv.0 gating(見該函式內的 slotLevels[slot]<=0 continue)完全共用同一套「不
-// 參與倒數、不能觸發」邏輯,不用另外寫一套「空欄位」的特殊處理。
-// 借用格的等級一樣吃「累加全部已投資階級」的有效等級,tier 一律用玩家目前的全局職業階級
-// (jobTree 不分職業各自記階級,見 SaveData.jobTier 的欄位註解)——借來的技能要維持有效,
-// 該職業在這一階也要有投資,不是只看曾經練過哪個archetype就一路吃到底。
-function resolveLoadoutLevels(loadout: ActiveSkillLoadout, skillTree: SkillTreeLevels, tier: JobTier): Record<ActiveSkillSlotId, number> {
-  const levels = {} as Record<ActiveSkillSlotId, number>;
+// 技能欄自選(見 game/skillTree.ts 的 ActiveSkillLoadout/resolveSkillLevel):4個位置各自
+// 指到「某一階職業技能,或學生技能」,每階/學生都是完全獨立的技能、不加總——resolveSkillLevel
+// 直接讀那個 ref 自己的原始等級。levelCap 決定這一格封頂在哪(職業任一階=SKILL_LEVEL_CAP,
+// 學生=STUDENT_SKILL_LEVEL_CAP),讓觸發間隔/傷害削減比例照那個來源自己的滿級表現,不是
+// 拿一個全域共用的封頂值硬套。空位(null)給0級+隨便的封頂值,跟既有的 Lv.0 gating(見
+// applyActiveSkillTriggers 內的 level<=0 continue)共用同一套「不參與倒數、不能觸發」邏輯。
+interface ResolvedSlotLevel {
+  level: number;
+  levelCap: number;
+}
+
+function resolveLoadoutLevels(
+  loadout: ActiveSkillLoadout,
+  skillTree: SkillTreeLevels,
+  studentSkillTree: Record<SkillSlotId, number>
+): Record<ActiveSkillSlotId, ResolvedSlotLevel> {
+  const levels = {} as Record<ActiveSkillSlotId, ResolvedSlotLevel>;
   ACTIVE_SLOT_IDS.forEach((slot) => {
     const ref = loadout[slot];
-    levels[slot] = ref ? effectiveSkillLevel(skillTree[ref.archetype], tier, ref.sourceSlot) : 0;
+    levels[slot] = {
+      level: resolveSkillLevel(ref, skillTree, studentSkillTree),
+      levelCap: ref?.source === 'student' ? STUDENT_SKILL_LEVEL_CAP : SKILL_LEVEL_CAP,
+    };
   });
   return levels;
 }
 
 // 全自動:冷卻好了就在下次擊殺結算直接生效,不需要玩家手動點擊觸發。4個主動技能欄現在
 // 全部是「造成傷害」(見 game/skillTree.ts 的 activeSkillDamageCutRatio),傷害量只吃
-// 「觸發的是哪一欄位+那一欄位的等級」,不用再像舊版那樣另外查一次「這欄位是哪種效果」。
+// 「觸發的是哪一欄位+那一欄位的等級/封頂值」,不用再像舊版那樣另外查一次「這欄位是哪種效果」。
 function applyActiveSkillTriggers(
-  slotLevels: Record<ActiveSkillSlotId, number>,
+  slotLevels: Record<ActiveSkillSlotId, ResolvedSlotLevel>,
   timers: Record<ActiveSkillSlotId, number>,
   now: number,
   cutRatio: number
@@ -265,14 +283,28 @@ function applyActiveSkillTriggers(
   const nextTimers = { ...timers };
   let triggeredSlot: ActiveSkillSlotId | null = null;
   for (const slot of ACTIVE_SLOT_IDS) {
-    if (slotLevels[slot] <= 0) continue;
-    const intervalMs = activeSkillTriggerIntervalSeconds(slot, slotLevels[slot]) * 1000;
+    const { level, levelCap } = slotLevels[slot];
+    if (level <= 0) continue;
+    const intervalMs = activeSkillTriggerIntervalSeconds(slot, level, levelCap) * 1000;
     if (now - timers[slot] < intervalMs) continue;
     nextTimers[slot] = now;
-    cutRatio += activeSkillDamageCutRatio(slot, slotLevels[slot]);
+    cutRatio += activeSkillDamageCutRatio(slot, level, levelCap);
     triggeredSlot = slot;
   }
   return { timers: nextTimers, cutRatio, triggeredSlot };
+}
+
+// 被動技能欄自選(見 game/skillTree.ts 的 PassiveSkillLoadout):3個被動格各自指到某一階
+// 職業技能或學生技能,只有「被裝備」的那一個會生效——不再像舊制那樣職業被動+學生被動
+// 永遠同時疊加(那是舊版「畢業後兩邊都算」的行為,見下面 computePassiveSkillBonus 的
+// 修訂說明)。
+function currentPassiveBonusValue(
+  passiveSkillLoadout: PassiveSkillLoadout,
+  skillTree: SkillTreeLevels,
+  studentSkillTree: Record<SkillSlotId, number>,
+  slot: PassiveSlotId
+): number {
+  return getPassiveBonusValue(resolveSkillLevel(passiveSkillLoadout[slot], skillTree, studentSkillTree));
 }
 
 interface RewardMultipliers {
@@ -282,26 +314,17 @@ interface RewardMultipliers {
 }
 
 // 職業倍率只影響經驗;裝備(含強化+鑲嵌寶石)、寵物/坐騎、被動技能的 exp/coins/speed 加成
-// 疊加在職業倍率之上。畢業前投資的學生技能樹不會因為選定主職而失效——學生被動加成永久
-// 疊加在(如果已經畢業)主職被動加成之上,呼應畢業後仍可持續花書升級學生技能的設計。
+// 疊加在職業倍率之上。passive1/passive2 分別對應經驗/金幣加成,改吃 passiveSkillLoadout
+// 自選配置(見 game/skillTree.ts 的 PassiveSkillLoadout)——只有「被裝備」的那一個生效,
+// 不再像舊制那樣職業被動+學生被動永遠同時疊加(那是舊版「畢業後兩邊都算」的雙倍加成)。
 function computePassiveSkillBonus(
-  job: JobSelection,
-  tier: JobTier,
+  passiveSkillLoadout: PassiveSkillLoadout,
   skillTree: SkillTreeLevels,
-  studentSkillTree: Record<SkillSlotId, number>,
-  hasChosenJob: boolean
+  studentSkillTree: Record<SkillSlotId, number>
 ): { exp: number; coins: number } {
-  const studentBonus = {
-    exp: getPassiveBonusValue(studentSkillTree.passive1),
-    coins: getPassiveBonusValue(studentSkillTree.passive2),
-  };
-  if (!hasChosenJob) return studentBonus;
-  // 被動加成吃「累加全部已投資階級」的有效等級(見 effectiveSkillLevel),不是只看目前
-  // 這一階自己的數字——1階練滿之後升到2階,1階的投資依然疊加在角色的被動加成上。
-  const jobArchetypeLevels = skillTree[job.archetype];
   return {
-    exp: studentBonus.exp + getPassiveBonusValue(effectiveSkillLevel(jobArchetypeLevels, tier, 'passive1')),
-    coins: studentBonus.coins + getPassiveBonusValue(effectiveSkillLevel(jobArchetypeLevels, tier, 'passive2')),
+    exp: currentPassiveBonusValue(passiveSkillLoadout, skillTree, studentSkillTree, 'passive1'),
+    coins: currentPassiveBonusValue(passiveSkillLoadout, skillTree, studentSkillTree, 'passive2'),
   };
 }
 
@@ -317,13 +340,14 @@ function computeRewardMultipliers(
   studentSkillTree: Record<SkillSlotId, number>,
   hasChosenJob: boolean,
   ascensionUpgrades: Partial<Record<AscensionUpgradeId, number>>,
-  claimedAchievementIds: string[]
+  claimedAchievementIds: string[],
+  passiveSkillLoadout: PassiveSkillLoadout
 ): RewardMultipliers {
   const jobMultiplier = currentJobMultiplier(job, tier, secondaryJob, hasChosenJob);
   const equipmentBonus = getEquipmentBonusTotalsFull(equipment, itemInstances);
   const companionBonus = getCompanionBonusTotals(companions);
   const companionGearBonus = getCompanionGearBonusTotals(companionGear);
-  const passiveBonus = computePassiveSkillBonus(job, tier, skillTree, studentSkillTree, hasChosenJob);
+  const passiveBonus = computePassiveSkillBonus(passiveSkillLoadout, skillTree, studentSkillTree);
   // 輪迴/轉生加成(見 game/ascension.ts):永久疊加在所有其他加成之上,不受裝備/寵物坐騎
   // 更換影響,是唯一不會因為玩家調整build而變動的加成來源。
   const ascensionExp = getAscensionBonusTotal('exp', ascensionUpgrades);
@@ -481,9 +505,9 @@ interface GameState {
   // 4 個主動技能欄位各自的倒數計時器起始時間戳(不存檔,重開只是倒數重新開始算)——
   // 用 Date.now() - activeSkillTimers[slot] 對比 activeSkillTriggerIntervalSeconds() 的毫秒數判斷是否觸發。
   activeSkillTimers: Record<ActiveSkillSlotId, number>;
-  // 學生主動技能畢業後永久跟職業主動技能並存,用獨立一組計時器(同樣不存檔),
-  // 避免兩邊互搶同一個倒數。
-  studentActiveSkillTimers: Record<ActiveSkillSlotId, number>;
+  // 3個被動技能欄自選配置(見 game/skillTree.ts 的 PassiveSkillLoadout):跟 activeSkillLoadout
+  // 同一套自選機制,只是被動沒有計時器,單純決定「這格生效值要吃哪個來源的原始等級」。
+  passiveSkillLoadout: PassiveSkillLoadout;
   secondarySkillTimerStartedAt: number;
   // 技能剛觸發的時間戳,不存檔,只給 UI 顯示「剛發動」的短暫閃光用,跟 lastEnhanceOutcome 同一套模式。
   lastSkillTriggerAt: number | null;
@@ -548,9 +572,12 @@ interface GameState {
   claimAchievement: (id: string) => void;
   claimAllAchievements: () => void;
   // 主動技能欄自選(見 game/skillTree.ts 的 ActiveSkillLoadout):position 是首頁4個固定位置
-  // 之一,ref=null 代表把這格清空。只能指到「已經投資過等級(>0)」的職業主動技能,防呆檢查
-  // 在 action 內部做,UI 端(SkillLoadoutEditor.tsx)本來就只會列出已學過的選項可選。
+  // 之一,ref=null 代表把這格清空。只能指到「已經投資過等級(>0)」的技能(職業任一階或學生),
+  // 防呆檢查在 action 內部做,UI 端(SkillLoadoutEditor.tsx)本來就只會列出已學過的選項可選。
   setActiveSkillLoadout: (position: ActiveSkillSlotId, ref: ActiveSkillRef | null) => void;
+  // 被動技能欄自選(見 game/skillTree.ts 的 PassiveSkillLoadout):3個被動位置版本,規則跟
+  // setActiveSkillLoadout 一致,只是沒有計時器可言。
+  setPassiveSkillLoadout: (position: PassiveSlotId, ref: PassiveSkillRef | null) => void;
 }
 
 type PersistableState = Pick<
@@ -563,6 +590,7 @@ type PersistableState = Pick<
   | 'bodyType'
   | 'skillTree'
   | 'activeSkillLoadout'
+  | 'passiveSkillLoadout'
   | 'studentSkillTree'
   | 'gender'
   | 'coins'
@@ -614,6 +642,7 @@ function persist(state: PersistableState): void {
     bodyType: state.bodyType,
     skillTree: state.skillTree,
     activeSkillLoadout: state.activeSkillLoadout,
+    passiveSkillLoadout: state.passiveSkillLoadout,
     studentSkillTree: state.studentSkillTree,
     gender: state.gender,
     coins: state.coins,
@@ -748,6 +777,7 @@ export const useGameState = create<GameState>((set, get) => ({
   bodyType: DEFAULT_BODY_TYPE,
   skillTree: createInitialSkillTreeLevels(),
   activeSkillLoadout: createInitialActiveSkillLoadout(DEFAULT_JOB.archetype),
+  passiveSkillLoadout: createInitialPassiveSkillLoadout(DEFAULT_JOB.archetype),
   studentSkillTree: createInitialStudentSkillTreeLevels(),
   gender: DEFAULT_GENDER,
   coins: 0,
@@ -802,7 +832,6 @@ export const useGameState = create<GameState>((set, get) => ({
   lastCoinWindfall: null,
   lastTransferFragmentArchetype: null,
   activeSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
-  studentActiveSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
   secondarySkillTimerStartedAt: Date.now(),
   lastSkillTriggerAt: null,
   lastSecondarySkillTriggerAt: null,
@@ -837,7 +866,8 @@ export const useGameState = create<GameState>((set, get) => ({
       save.studentSkillTree,
       save.hasChosenJob,
       save.ascensionUpgrades,
-      save.claimedAchievementIds
+      save.claimedAchievementIds,
+      save.passiveSkillLoadout
     );
     const gainedExp = Math.floor(baseGain * expMultiplier);
 
@@ -921,6 +951,9 @@ export const useGameState = create<GameState>((set, get) => ({
       // 舊存檔可能存著「4格全借別的職業」這種現在不合法的配置——讀檔時清一次,超標的借用格
       // 直接清空,不需要為此多加一版存檔遷移(loadout 本身的資料結構沒有變)。
       activeSkillLoadout: enforceLoadoutIdentityCap(save.activeSkillLoadout, save.job.archetype),
+      // 3個被動欄位比照辦理(見 game/skillTree.ts 的 enforcePassiveLoadoutIdentityCap),
+      // 上限是1格而不是2格,超標的借用格一樣直接清空。
+      passiveSkillLoadout: enforcePassiveLoadoutIdentityCap(save.passiveSkillLoadout, save.job.archetype),
       studentSkillTree: save.studentSkillTree,
       gender: save.gender,
       coins,
@@ -974,7 +1007,6 @@ export const useGameState = create<GameState>((set, get) => ({
       fightStartedAt: null,
       fightElapsedMs: 0,
       activeSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
-      studentActiveSkillTimers: { active1: Date.now(), active2: Date.now(), active3: Date.now(), active4: Date.now() },
       secondarySkillTimerStartedAt: Date.now(),
     });
     // 音效/BGM模組是獨立於 store 之外的命令式播放(見 lib/sounds.ts),load() 時同步一次目前的
@@ -1025,9 +1057,7 @@ export const useGameState = create<GameState>((set, get) => ({
     // 在這裡算一次給下面全部用到,不用在每個分支各自重算。畢業後學生 passive3 永久疊加在
     // 職業 passive3 之上,跟 computePassiveSkillBonus 的 exp/coins 疊加邏輯一致。
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
-    const passive3Bonus =
-      getPassiveBonusValue(state.studentSkillTree.passive3) +
-      (state.hasChosenJob ? getPassiveBonusValue(effectiveSkillLevel(state.skillTree[state.job.archetype], state.jobTier, 'passive3')) : 0);
+    const passive3Bonus = currentPassiveBonusValue(state.passiveSkillLoadout, state.skillTree, state.studentSkillTree, 'passive3');
     const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
     const hpRegenTotal = substatTotals.hpRegen + passive3Bonus;
 
@@ -1062,7 +1092,8 @@ export const useGameState = create<GameState>((set, get) => ({
         state.studentSkillTree,
         state.hasChosenJob,
         state.ascensionUpgrades,
-        state.claimedAchievementIds
+        state.claimedAchievementIds,
+        state.passiveSkillLoadout
       );
       const isBoss = isBossSubStage(state.stageProgress.subStage);
       const isFinalBoss = isFinalBossStage(state.stageProgress.stage, state.stageProgress.subStage);
@@ -1109,41 +1140,36 @@ export const useGameState = create<GameState>((set, get) => ({
     // 職業樹分階疊加效果(tier2~5),下面技能觸發判定跟擊殺結算都共用同一份,不重複呼叫。
     const tierBonus = getTierTriggerBonus(state.jobTier);
 
-    // 學生主動技能:畢業後不會失效,永遠跟職業主動技能並存,用自己獨立的一組計時器。
-    // 學生沒有 archetype,圖示照樣借用 job.archetype 當視覺樣板(跟 SkillTracker.tsx 既有慣例一致)。
-    const studentTrigger = applyActiveSkillTriggers(state.studentSkillTree, state.studentActiveSkillTimers, now, cutRatio);
-    const nextStudentActiveSkillTimers = studentTrigger.timers;
-    cutRatio = studentTrigger.cutRatio;
-    if (studentTrigger.triggeredSlot) {
+    // 主動技能欄自選(見 game/skillTree.ts 的 ActiveSkillLoadout):4格各自指到某一階職業
+    // 技能或學生技能,不分畢業與否一律運作同一組計時器——學生技能被裝進某一格之後就等於
+    // 「那一格是學生技能」,不會像舊制那樣另外再跑一份獨立的學生專屬觸發(那是舊版「畢業後
+    // 兩邊都算」的雙重觸發,見 computePassiveSkillBonus 的同一份修訂說明)。
+    const jobTrigger = applyActiveSkillTriggers(
+      resolveLoadoutLevels(state.activeSkillLoadout, state.skillTree, state.studentSkillTree),
+      state.activeSkillTimers,
+      now,
+      cutRatio
+    );
+    const nextActiveSkillTimers = jobTrigger.timers;
+    cutRatio = jobTrigger.cutRatio;
+    if (jobTrigger.triggeredSlot) {
       lastSkillTriggerAt = now;
-      lastTriggeredSkillIcon = { archetype: state.job.archetype, slot: studentTrigger.triggeredSlot };
-      skillStateChanged = true;
-    }
-
-    // 職業主動技能:畢業前(!hasChosenJob)還沒有主職可以套用,跳過這組計時器。
-    let nextActiveSkillTimers = state.activeSkillTimers;
-    if (state.hasChosenJob) {
-      const jobTrigger = applyActiveSkillTriggers(
-        resolveLoadoutLevels(state.activeSkillLoadout, state.skillTree, state.jobTier),
-        state.activeSkillTimers,
-        now,
-        cutRatio
-      );
-      nextActiveSkillTimers = jobTrigger.timers;
-      cutRatio = jobTrigger.cutRatio;
-      if (jobTrigger.triggeredSlot) {
-        lastSkillTriggerAt = now;
-        // loadout 指到的可能是借用別的職業的招式(見 SkillLoadoutEditor.tsx),圖示要照
-        // loadout 實際指到的 archetype+sourceSlot 抓,不是永遠用玩家目前的職業。
-        const ref = state.activeSkillLoadout[jobTrigger.triggeredSlot];
-        if (ref) lastTriggeredSkillIcon = { archetype: ref.archetype, slot: ref.sourceSlot };
-        // 職業樹分階疊加效果:tier2起才有,且是一次觸發批次只套用一次(不會因為剛好4格
-        // 同時觸發就疊加4次)——見 game/skillTree.ts 的 getTierTriggerBonus 設計說明。
-        // tier5的加成原本是「無條件瞬殺」,改成一樣的「削減比例」機制,只是機率觸發、
-        // 削減幅度特別大,一樣不保證打死(見 activeSkillDamageCutRatio 的說明)。
-        if (Math.random() < tierBonus.extraDamageChance) cutRatio += TIER5_EXTRA_DAMAGE_CUT_RATIO;
-        skillStateChanged = true;
+      // loadout 指到的可能是借用別的職業(或學生)的招式(見 SkillLoadoutEditor.tsx),圖示
+      // 要照 loadout 實際指到的來源抓;學生技能沒有 archetype,圖示借用 job.archetype 當
+      // 視覺樣板(跟舊版學生技能圖示慣例一致)。
+      const ref = state.activeSkillLoadout[jobTrigger.triggeredSlot];
+      if (ref) {
+        lastTriggeredSkillIcon = {
+          archetype: ref.source === 'student' ? state.job.archetype : ref.source,
+          slot: ref.sourceSlot,
+        };
       }
+      // 職業樹分階疊加效果:tier2起才有,且是一次觸發批次只套用一次(不會因為剛好4格
+      // 同時觸發就疊加4次)——見 game/skillTree.ts 的 getTierTriggerBonus 設計說明。
+      // tier5的加成原本是「無條件瞬殺」,改成一樣的「削減比例」機制,只是機率觸發、
+      // 削減幅度特別大,一樣不保證打死(見 activeSkillDamageCutRatio 的說明)。
+      if (Math.random() < tierBonus.extraDamageChance) cutRatio += TIER5_EXTRA_DAMAGE_CUT_RATIO;
+      skillStateChanged = true;
     }
 
     // 副職只借用它的主動技能第1格(該職業招牌效果),間隔是本職的兩倍,跟主職各自獨立計時、
@@ -1180,7 +1206,6 @@ export const useGameState = create<GameState>((set, get) => ({
           fightStartedAt,
           fightElapsedMs: elapsed,
           activeSkillTimers: nextActiveSkillTimers,
-          studentActiveSkillTimers: nextStudentActiveSkillTimers,
           secondarySkillTimerStartedAt: nextSecondarySkillTimerStartedAt,
           lastSkillTriggerAt,
           lastSecondarySkillTriggerAt,
@@ -1204,7 +1229,8 @@ export const useGameState = create<GameState>((set, get) => ({
       state.studentSkillTree,
       state.hasChosenJob,
       state.ascensionUpgrades,
-      state.claimedAchievementIds
+      state.claimedAchievementIds,
+      state.passiveSkillLoadout
     );
     // 關卡難度倍率:跟這隻怪生成當下用的是同一份 stageProgress/輪次(這次擊殺才會讓它們晉級,
     // 所以算獎勵的當下都還沒變),疊加在等級/裝備既有的獎勵倍率之上,是完全獨立的另一條軸線。
@@ -1241,7 +1267,6 @@ export const useGameState = create<GameState>((set, get) => ({
         fightElapsedMs: 0,
         defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
         activeSkillTimers: nextActiveSkillTimers,
-        studentActiveSkillTimers: nextStudentActiveSkillTimers,
         secondarySkillTimerStartedAt: nextSecondarySkillTimerStartedAt,
         lastSkillTriggerAt,
         lastSecondarySkillTriggerAt,
@@ -1369,7 +1394,6 @@ export const useGameState = create<GameState>((set, get) => ({
       fightStartedAt: null,
       fightElapsedMs: 0,
       activeSkillTimers: nextActiveSkillTimers,
-      studentActiveSkillTimers: nextStudentActiveSkillTimers,
       secondarySkillTimerStartedAt: nextSecondarySkillTimerStartedAt,
       lastSkillTriggerAt,
       lastSecondarySkillTriggerAt,
@@ -1399,9 +1423,7 @@ export const useGameState = create<GameState>((set, get) => ({
       dungeonMonsterSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
     // 吸血加成跟 tickBattle 同一套算法(裝備素質+學生 passive3 永久疊加職業 passive3),
     // 副本沒有 hpRegen tick(見 hooks/useGameState.ts 的 tickBattle 說明,只有一般戰鬥迴圈才會推進時間制回血)。
-    const passive3Bonus =
-      getPassiveBonusValue(state.studentSkillTree.passive3) +
-      (state.hasChosenJob ? getPassiveBonusValue(effectiveSkillLevel(state.skillTree[state.job.archetype], state.jobTier, 'passive3')) : 0);
+    const passive3Bonus = currentPassiveBonusValue(state.passiveSkillLoadout, state.skillTree, state.studentSkillTree, 'passive3');
     const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
     const healthResult = resolveFightHealth(
       state.heroHp,
@@ -1462,9 +1484,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
     const matchingResistance =
       ENHANCE_STONE_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
-    const passive3Bonus =
-      getPassiveBonusValue(state.studentSkillTree.passive3) +
-      (state.hasChosenJob ? getPassiveBonusValue(effectiveSkillLevel(state.skillTree[state.job.archetype], state.jobTier, 'passive3')) : 0);
+    const passive3Bonus = currentPassiveBonusValue(state.passiveSkillLoadout, state.skillTree, state.studentSkillTree, 'passive3');
     const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
     const healthResult = resolveFightHealth(
       state.heroHp,
@@ -1515,9 +1535,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
     const matchingResistance =
       SKILL_BOOK_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
-    const passive3Bonus =
-      getPassiveBonusValue(state.studentSkillTree.passive3) +
-      (state.hasChosenJob ? getPassiveBonusValue(effectiveSkillLevel(state.skillTree[state.job.archetype], state.jobTier, 'passive3')) : 0);
+    const passive3Bonus = currentPassiveBonusValue(state.passiveSkillLoadout, state.skillTree, state.studentSkillTree, 'passive3');
     const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
     const healthResult = resolveFightHealth(
       state.heroHp,
@@ -1567,9 +1585,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
     const matchingResistance =
       GEM_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
-    const passive3Bonus =
-      getPassiveBonusValue(state.studentSkillTree.passive3) +
-      (state.hasChosenJob ? getPassiveBonusValue(effectiveSkillLevel(state.skillTree[state.job.archetype], state.jobTier, 'passive3')) : 0);
+    const passive3Bonus = currentPassiveBonusValue(state.passiveSkillLoadout, state.skillTree, state.studentSkillTree, 'passive3');
     const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
     const healthResult = resolveFightHealth(
       state.heroHp,
@@ -1623,9 +1639,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
     const matchingResistance =
       EXP_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
-    const passive3Bonus =
-      getPassiveBonusValue(state.studentSkillTree.passive3) +
-      (state.hasChosenJob ? getPassiveBonusValue(effectiveSkillLevel(state.skillTree[state.job.archetype], state.jobTier, 'passive3')) : 0);
+    const passive3Bonus = currentPassiveBonusValue(state.passiveSkillLoadout, state.skillTree, state.studentSkillTree, 'passive3');
     const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
     const healthResult = resolveFightHealth(
       state.heroHp,
@@ -1674,9 +1688,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
     const matchingResistance =
       COIN_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
-    const passive3Bonus =
-      getPassiveBonusValue(state.studentSkillTree.passive3) +
-      (state.hasChosenJob ? getPassiveBonusValue(effectiveSkillLevel(state.skillTree[state.job.archetype], state.jobTier, 'passive3')) : 0);
+    const passive3Bonus = currentPassiveBonusValue(state.passiveSkillLoadout, state.skillTree, state.studentSkillTree, 'passive3');
     const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
     const healthResult = resolveFightHealth(
       state.heroHp,
@@ -1739,9 +1751,7 @@ export const useGameState = create<GameState>((set, get) => ({
     const trialMonsterSchool = oppositeDamageType(getArchetypeComposition(state.job.archetype).damageType);
     const matchingResistance =
       trialMonsterSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
-    const passive3Bonus =
-      getPassiveBonusValue(state.studentSkillTree.passive3) +
-      (state.hasChosenJob ? getPassiveBonusValue(effectiveSkillLevel(state.skillTree[state.job.archetype], state.jobTier, 'passive3')) : 0);
+    const passive3Bonus = currentPassiveBonusValue(state.passiveSkillLoadout, state.skillTree, state.studentSkillTree, 'passive3');
     const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
     const healthResult = resolveFightHealth(
       state.heroHp,
@@ -1809,7 +1819,8 @@ export const useGameState = create<GameState>((set, get) => ({
   // 主職換成跟目前副職一樣的話,副職自動清空(不能兩職都選同一個);
   // 身上原本裝的職業鎖裝如果不符新主職,直接卸下(不限職業的款式不受影響)。
   setJob: (archetype, branch) => {
-    const { job, secondaryJob, equipment, transferProofs, transferFragments, hasChosenJob, level, activeSkillLoadout } = get();
+    const { job, secondaryJob, equipment, transferProofs, transferFragments, hasChosenJob, level, activeSkillLoadout, passiveSkillLoadout } =
+      get();
 
     // 「學生」畢業:第一次真正選定主職,對齊 TIER_UNLOCK_LEVELS[1](Lv30)這個既有里程碑,
     // 免費、不受轉職證明限制——job 目前存的值只是畢業前的佔位預設,不是玩家真的選過的職業,
@@ -1826,6 +1837,7 @@ export const useGameState = create<GameState>((set, get) => ({
         // 職業認同上限(見 game/skillTree.ts):畢業前的佔位配置可能指到跟真正選定主職不同的
         // archetype,超標的借用格清掉——反正這時候 skillTree 投資都還是 0,清掉不影響任何實質效果。
         activeSkillLoadout: enforceLoadoutIdentityCap(activeSkillLoadout, archetype),
+        passiveSkillLoadout: enforcePassiveLoadoutIdentityCap(passiveSkillLoadout, archetype),
       });
       checkAndUnlockAchievements(get, set);
       persist(get());
@@ -1853,6 +1865,7 @@ export const useGameState = create<GameState>((set, get) => ({
       // 職業認同上限(見 game/skillTree.ts):轉職後基準跟著換了,原本合法的配置可能瞬間
       // 超標(例如4格都是舊職業的技能),超標的借用格清掉,不會卡在不合法狀態。
       activeSkillLoadout: enforceLoadoutIdentityCap(activeSkillLoadout, archetype),
+      passiveSkillLoadout: enforcePassiveLoadoutIdentityCap(passiveSkillLoadout, archetype),
       // 只有這條「真的換成不同 archetype、消耗證明」的分支代表玩家「改頭換面」過一次,
       // 畢業選第一個主職(上面 !hasChosenJob 分支)不算——見 transfer_first_switch 成就。
       ...(isJobChange
@@ -2418,16 +2431,27 @@ export const useGameState = create<GameState>((set, get) => ({
   setActiveSkillLoadout: (position, ref) => {
     const state = get();
     // 清空這格一定合法;指到某個技能的話,那個技能一定要「已經投資過等級」才能放進來——
-    // 呼應「從已學習的職業技能中選擇」的需求,UI 本來就只會列出已學過的選項,這裡再擋一次
-    // 純防呆(避免透過非正規管道塞進一個等級 0、還沒點過的技能)。
-    if (ref !== null && effectiveSkillLevel(state.skillTree[ref.archetype], state.jobTier, ref.sourceSlot) <= 0) return;
-    // 職業認同上限(見 game/skillTree.ts 的 canSetLoadoutSlot):4格最多2格能借別的職業技能,
-    // 超過就擋下這次設定並跳提示,不會靜默失敗。
+    // 呼應「從已學過的技能(職業任一階或學生)中選擇」的需求,UI 本來就只會列出已學過的
+    // 選項,這裡再擋一次純防呆(避免透過非正規管道塞進一個等級 0、還沒點過的技能)。
+    if (ref !== null && resolveSkillLevel(ref, state.skillTree, state.studentSkillTree) <= 0) return;
+    // 職業認同上限(見 game/skillTree.ts 的 canSetLoadoutSlot):4格最多2格能借別的來源
+    // (別的職業任一階,或學生技能),超過就擋下這次設定並跳提示,不會靜默失敗。
     if (!canSetLoadoutSlot(state.activeSkillLoadout, state.job.archetype, position, ref)) {
-      useToast.getState().show(`最多只能有${MAX_BORROWED_ACTIVE_SLOTS}格塞別的職業技能,至少要留給目前職業自己的招式`);
+      useToast.getState().show(`最多只能有${MAX_BORROWED_ACTIVE_SLOTS}格塞別的來源技能,至少要留給目前職業自己的招式`);
       return;
     }
     set({ activeSkillLoadout: { ...state.activeSkillLoadout, [position]: ref } });
+    persist(get());
+  },
+
+  setPassiveSkillLoadout: (position, ref) => {
+    const state = get();
+    if (ref !== null && resolveSkillLevel(ref, state.skillTree, state.studentSkillTree) <= 0) return;
+    if (!canSetPassiveLoadoutSlot(state.passiveSkillLoadout, state.job.archetype, position, ref)) {
+      useToast.getState().show(`最多只能有${MAX_BORROWED_PASSIVE_SLOTS}格塞別的來源技能,至少要留給目前職業自己的招式`);
+      return;
+    }
+    set({ passiveSkillLoadout: { ...state.passiveSkillLoadout, [position]: ref } });
     persist(get());
   },
 }));

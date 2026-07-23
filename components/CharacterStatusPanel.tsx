@@ -4,7 +4,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { calcCombatMultiplier, getArchetypeComposition, getJobTitle } from '../game/combat';
 import { EquipmentSlot, getEquipmentBonusTotalsFull, getItemById, getSubstatTotals } from '../game/equipment';
 import { heroAttackPower, heroDefensePower, heroMaxHp } from '../game/heroHealth';
-import { effectiveSkillLevel, getPassiveBonusValue } from '../game/skillTree';
+import { getPassiveBonusValue, resolveSkillLevel } from '../game/skillTree';
 import { getEquipmentSlotIcon } from '../game/sprites/equipmentIcons';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
@@ -99,6 +99,7 @@ export function CharacterStatusPanel() {
   const heroHp = useGameState((state) => state.heroHp);
   const skillTree = useGameState((state) => state.skillTree);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
+  const passiveSkillLoadout = useGameState((state) => state.passiveSkillLoadout);
   const showToast = useToast((state) => state.show);
 
   const title = hasChosenJob ? getJobTitle(job.archetype, job.branch, tier) : '學生';
@@ -111,11 +112,10 @@ export function CharacterStatusPanel() {
   const maxHp = heroMaxHp(level.level);
   const attackPower = heroAttackPower(level.level, tier, attackSubstat);
   const defensePower = heroDefensePower(level.level, tier, resistanceSubstat);
-  // 吸血/回血:裝備素質+passive3被動加成的完整合併值——原本是 JobSelector.tsx 的
-  // HeroStatusPanel 專用計算,整組搬過來時一起帶過來。
-  const passive3Level = hasChosenJob
-    ? effectiveSkillLevel(skillTree[job.archetype], tier, 'passive3')
-    : studentSkillTree.passive3;
+  // 吸血/回血:裝備素質+passive3被動技能欄自選(見 game/skillTree.ts 的
+  // PassiveSkillLoadout)的完整合併值——跟 hooks/useGameState.ts 的 currentPassiveBonusValue
+  // 同一份資料來源,不再用「畢業與否」二選一,改成直接讀目前實際裝的那一格。
+  const passive3Level = resolveSkillLevel(passiveSkillLoadout.passive3, skillTree, studentSkillTree);
   const totalLifesteal = substatTotals.lifesteal + getPassiveBonusValue(passive3Level);
   const totalHpRegen = substatTotals.hpRegen + getPassiveBonusValue(passive3Level);
 

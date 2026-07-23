@@ -3,138 +3,328 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype, JobBranch, JobTier } from '../game/combat';
 import {
-  activeSkillDamageCutRatio,
   ACTIVE_SLOT_IDS,
-  activeSkillTriggerIntervalSeconds,
+  ActiveSkillRef,
   ActiveSkillSlotId,
+  activeSkillDamageCutRatio,
+  activeSkillTriggerIntervalSeconds,
   countBorrowedActiveSlots,
-  effectiveSkillLevel,
+  countBorrowedPassiveSlots,
+  getPassiveBonusValue,
   MAX_BORROWED_ACTIVE_SLOTS,
+  MAX_BORROWED_PASSIVE_SLOTS,
+  PASSIVE_SLOT_IDS,
+  PassiveSkillRef,
+  PassiveSlotId,
+  resolveSkillLevel,
+  SKILL_LEVEL_CAP,
   SKILL_SLOT_NAMES,
+  SkillSlotId,
+  SkillSource,
   SkillTreeLevels,
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
+import { getStudentSkillFlavor, STUDENT_SKILL_LEVEL_CAP } from '../game/studentSkillTree';
 import { useGameState } from '../hooks/useGameState';
 import { ARCHETYPE_LABELS, ARCHETYPES, getSlotFlavor } from './JobSelector';
 import { PixelSprite } from './PixelSprite';
 
-// 技能格顯示名稱:玩家自己目前這個職業的技能,名稱要跟「依階級瀏覽」畫面(JobSelector.tsx 的
-// getSlotFlavor)一致——那邊 2 階起會顯示職業分支專屬的「花名」(例如速戰速決在餐廳服務生
-// 底下顯示成「手腳俐落出餐」),這裡如果還印通用名稱「速戰速決」,玩家會找不到自己在瀏覽頁看到
-// 的那個技能名字。借來的別職業技能沒有對應的 branch 資訊可查,維持印通用名稱。
+// 每個職業階級(1~5)的技能都是完全獨立的技能,不加總——玩家可以自由挑選「哪一階、哪個
+// 職業(或學生)的哪一格」放進7個技能欄(3被動+4主動),不限於目前職業/目前階級自己的版本。
+// 借用來源的顯示名稱:自己職業自己那一階用「依階級瀏覽」同一套花名(見 JobSelector.tsx 的
+// getSlotFlavor),學生用學生自己的花名(依學生自己投資的等級門檻),其餘(別的職業任一階)
+// 沒有對應的 branch 資訊可查,維持印通用名稱。
 function displaySkillName(
-  slotArchetype: Archetype,
-  slotSourceSlot: ActiveSkillSlotId,
+  source: SkillSource,
+  sourceSlot: SkillSlotId,
+  tier: JobTier,
   ownArchetype: Archetype,
   ownBranch: JobBranch,
-  tier: JobTier
+  studentSkillTree: Record<SkillSlotId, number>
 ): string {
-  if (slotArchetype !== ownArchetype) return SKILL_SLOT_NAMES[slotArchetype][slotSourceSlot];
-  return getSlotFlavor(slotArchetype, ownBranch, tier, slotSourceSlot).name;
+  if (source === 'student') return getStudentSkillFlavor(studentSkillTree[sourceSlot], sourceSlot).name;
+  if (source !== ownArchetype) return SKILL_SLOT_NAMES[source][sourceSlot];
+  return getSlotFlavor(source, ownBranch, tier, sourceSlot).name;
 }
 
-const TILE_SIZE = 44;
+function sourceLabel(source: SkillSource): string {
+  return source === 'student' ? '學生' : ARCHETYPE_LABELS[source];
+}
 
-// 主動技能欄自選:轉職是這個遊戲的既有機制,skillTree 永久保留玩家投資過的每個職業的技能等級
-// (見 game/skillTree.ts 的 SkillTreeLevels),所以玩家不限於目前職業自己的4招,可以把「已經
-// 投資過等級的其他職業主動技能」也塞進這4個欄位——呼應「從已學習的職業技能中選擇」的需求。
-// 職業認同上限(見 game/skillTree.ts 的 MAX_BORROWED_ACTIVE_SLOTS):4格最多只能借2格別的
-// 職業技能,避免完全自由配置讓玩家的技能欄跟「目前是什麼職業」完全脫鉤。
+const ALL_TIERS: JobTier[] = [1, 2, 3, 4, 5];
+const TILE_SIZE = 40;
+
 interface SkillLoadoutEditorProps {
   archetype: Archetype;
   branch: JobBranch;
-  tier: JobTier;
 }
 
-export function SkillLoadoutEditor({ archetype, branch, tier }: SkillLoadoutEditorProps) {
+interface LearnedActiveOption {
+  source: SkillSource;
+  tier: JobTier;
+  sourceSlot: ActiveSkillSlotId;
+  level: number;
+  intervalSeconds: number;
+  damageCutPct: number;
+}
+
+// 效益排序輔助:不管來源是哪一階職業還是學生,4個主動技能欄現在全部是同一種效果
+// (造成傷害),直接用「每秒平均削減戰鬥時間的比例」(削減比例/觸發間隔)當唯一排序依據
+// 由高到低排,玩家一眼就看得出哪個選項效益最高。levelCap 依來源決定(職業任一階=
+// SKILL_LEVEL_CAP,學生=STUDENT_SKILL_LEVEL_CAP),呼應每個來源「單獨滿級」就有滿值表現。
+function collectLearnedActiveOptions(
+  skillTree: SkillTreeLevels,
+  studentSkillTree: Record<SkillSlotId, number>
+): LearnedActiveOption[] {
+  const options: LearnedActiveOption[] = [];
+  ARCHETYPES.forEach((archetype) => {
+    ALL_TIERS.forEach((tier) => {
+      ACTIVE_SLOT_IDS.forEach((slot) => {
+        const level = skillTree[archetype][tier][slot];
+        if (level > 0) {
+          options.push({
+            source: archetype,
+            tier,
+            sourceSlot: slot,
+            level,
+            intervalSeconds: activeSkillTriggerIntervalSeconds(slot, level, SKILL_LEVEL_CAP),
+            damageCutPct: Math.round(activeSkillDamageCutRatio(slot, level, SKILL_LEVEL_CAP) * 1000) / 10,
+          });
+        }
+      });
+    });
+  });
+  ACTIVE_SLOT_IDS.forEach((slot) => {
+    const level = studentSkillTree[slot];
+    if (level > 0) {
+      options.push({
+        source: 'student',
+        tier: 1,
+        sourceSlot: slot,
+        level,
+        intervalSeconds: activeSkillTriggerIntervalSeconds(slot, level, STUDENT_SKILL_LEVEL_CAP),
+        damageCutPct: Math.round(activeSkillDamageCutRatio(slot, level, STUDENT_SKILL_LEVEL_CAP) * 1000) / 10,
+      });
+    }
+  });
+  return options.sort((a, b) => b.damageCutPct / b.intervalSeconds - a.damageCutPct / a.intervalSeconds);
+}
+
+interface LearnedPassiveOption {
+  source: SkillSource;
+  tier: JobTier;
+  sourceSlot: PassiveSlotId;
+  level: number;
+  bonusPct: number;
+}
+
+function collectLearnedPassiveOptions(
+  skillTree: SkillTreeLevels,
+  studentSkillTree: Record<SkillSlotId, number>
+): LearnedPassiveOption[] {
+  const passiveSlots = PASSIVE_SLOT_IDS as PassiveSlotId[];
+  const options: LearnedPassiveOption[] = [];
+  ARCHETYPES.forEach((archetype) => {
+    ALL_TIERS.forEach((tier) => {
+      passiveSlots.forEach((slot) => {
+        const level = skillTree[archetype][tier][slot];
+        if (level > 0) {
+          options.push({ source: archetype, tier, sourceSlot: slot, level, bonusPct: Math.round(getPassiveBonusValue(level) * 1000) / 10 });
+        }
+      });
+    });
+  });
+  passiveSlots.forEach((slot) => {
+    const level = studentSkillTree[slot];
+    if (level > 0) {
+      options.push({ source: 'student', tier: 1, sourceSlot: slot, level, bonusPct: Math.round(getPassiveBonusValue(level) * 1000) / 10 });
+    }
+  });
+  return options.sort((a, b) => b.bonusPct - a.bonusPct);
+}
+
+type EditingTarget = { kind: 'active'; position: ActiveSkillSlotId } | { kind: 'passive'; position: PassiveSlotId };
+
+export function SkillLoadoutEditor({ archetype, branch }: SkillLoadoutEditorProps) {
   const skillTree = useGameState((state) => state.skillTree);
+  const studentSkillTree = useGameState((state) => state.studentSkillTree);
   const activeSkillLoadout = useGameState((state) => state.activeSkillLoadout);
+  const passiveSkillLoadout = useGameState((state) => state.passiveSkillLoadout);
   const setActiveSkillLoadout = useGameState((state) => state.setActiveSkillLoadout);
+  const setPassiveSkillLoadout = useGameState((state) => state.setPassiveSkillLoadout);
 
-  const [editingPosition, setEditingPosition] = useState<ActiveSkillSlotId | null>(null);
+  const [editing, setEditing] = useState<EditingTarget | null>(null);
 
-  const learnedOptions = collectLearnedActiveSkills(skillTree, tier);
-  const borrowedCount = countBorrowedActiveSlots(activeSkillLoadout, archetype);
-  const editingRef = editingPosition ? activeSkillLoadout[editingPosition] : null;
-  const editingIsAlreadyBorrowed = editingRef !== null && editingRef.archetype !== archetype;
-  const borrowCapReached = borrowedCount >= MAX_BORROWED_ACTIVE_SLOTS && !editingIsAlreadyBorrowed;
+  const activeOptions = collectLearnedActiveOptions(skillTree, studentSkillTree);
+  const passiveOptions = collectLearnedPassiveOptions(skillTree, studentSkillTree);
+
+  const borrowedActiveCount = countBorrowedActiveSlots(activeSkillLoadout, archetype);
+  const borrowedPassiveCount = countBorrowedPassiveSlots(passiveSkillLoadout, archetype);
+
+  const editingActiveRef = editing?.kind === 'active' ? activeSkillLoadout[editing.position] : null;
+  const editingPassiveRef = editing?.kind === 'passive' ? passiveSkillLoadout[editing.position] : null;
+  const editingActiveAlreadyBorrowed = editingActiveRef !== null && editingActiveRef.source !== archetype;
+  const editingPassiveAlreadyBorrowed = editingPassiveRef !== null && editingPassiveRef.source !== archetype;
+  const activeBorrowCapReached = borrowedActiveCount >= MAX_BORROWED_ACTIVE_SLOTS && !editingActiveAlreadyBorrowed;
+  const passiveBorrowCapReached = borrowedPassiveCount >= MAX_BORROWED_PASSIVE_SLOTS && !editingPassiveAlreadyBorrowed;
 
   return (
     <View style={styles.container}>
       <Text style={styles.hint}>
-        點一個欄位可以更換要放的技能——不限於目前職業自己的招式,任何你投資過等級的職業技能都能塞進來,
-        但最多只能借{MAX_BORROWED_ACTIVE_SLOTS}格別的職業技能(已借用 {borrowedCount}/{MAX_BORROWED_ACTIVE_SLOTS})。
+        點一個欄位可以更換要放的技能——不限於目前職業自己的招式或目前階級,任何職業任一階、或學生期
+        投資過等級的技能都能塞進來。主動最多借{MAX_BORROWED_ACTIVE_SLOTS}格別的來源
+        (已借 {borrowedActiveCount}/{MAX_BORROWED_ACTIVE_SLOTS}),被動最多借{MAX_BORROWED_PASSIVE_SLOTS}格
+        (已借 {borrowedPassiveCount}/{MAX_BORROWED_PASSIVE_SLOTS})。
       </Text>
+
+      <Text style={styles.sectionTitle}>主動技能</Text>
       <View style={styles.positionRow}>
         {ACTIVE_SLOT_IDS.map((position) => {
           const ref = activeSkillLoadout[position];
-          const tileArchetype = ref?.archetype ?? archetype;
-          const tileSourceSlot = ref?.sourceSlot ?? position;
-          const level = ref ? effectiveSkillLevel(skillTree[ref.archetype], tier, ref.sourceSlot) : 0;
-          const icon = getSkillIcon(tileArchetype, tileSourceSlot, tier);
-          const isBorrowed = ref !== null && ref.archetype !== archetype;
-          const isEditing = editingPosition === position;
+          const isEditing = editing?.kind === 'active' && editing.position === position;
+          const isBorrowed = ref !== null && ref.source !== archetype;
+          const iconArchetype = ref === null ? archetype : ref.source === 'student' ? archetype : ref.source;
+          const icon = ref ? getSkillIcon(iconArchetype, ref.sourceSlot, ref.tier as JobTier) : null;
+          const level = ref ? resolveSkillLevel(ref, skillTree, studentSkillTree) : 0;
           return (
             <Pressable
               key={position}
               style={[styles.positionTile, isEditing && styles.positionTileActive]}
-              onPress={() => setEditingPosition(isEditing ? null : position)}
+              onPress={() => setEditing(isEditing ? null : { kind: 'active', position })}
             >
               <View style={styles.iconWrap}>
-                <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={2} />
+                {icon && <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={2} />}
               </View>
-              {isBorrowed && (
+              {isBorrowed && ref && (
                 <View style={styles.borrowedTag}>
-                  <Text style={styles.borrowedTagText}>{ARCHETYPE_LABELS[ref.archetype]}</Text>
+                  <Text style={styles.borrowedTagText}>{sourceLabel(ref.source)}</Text>
                 </View>
               )}
               <Text style={styles.positionLevel}>{ref ? `Lv.${level}` : '空著'}</Text>
               <Text style={styles.positionLabel} numberOfLines={1}>
-                {ref ? displaySkillName(ref.archetype, ref.sourceSlot, archetype, branch, tier) : '未配置'}
+                {ref ? displaySkillName(ref.source, ref.sourceSlot, ref.tier as JobTier, archetype, branch, studentSkillTree) : '未配置'}
               </Text>
             </Pressable>
           );
         })}
       </View>
 
-      {editingPosition && (
+      {editing?.kind === 'active' && (
         <View style={styles.pickerCard}>
-          <Text style={styles.pickerTitle}>選擇要放進這格的技能</Text>
+          <Text style={styles.pickerTitle}>選擇要放進這格的主動技能</Text>
           <Pressable
             style={styles.pickerRow}
             onPress={() => {
-              setActiveSkillLoadout(editingPosition, null);
-              setEditingPosition(null);
+              setActiveSkillLoadout(editing.position, null);
+              setEditing(null);
             }}
           >
             <Text style={styles.pickerRowText}>清空這格</Text>
           </Pressable>
-          {learnedOptions.length === 0 ? (
+          {activeOptions.length === 0 ? (
             <Text style={styles.emptyHint}>還沒有已經投資過等級的主動技能,先花技能書升級任一招式再回來配置。</Text>
           ) : (
-            learnedOptions.map((option) => {
-              // 已經借滿上限時,別的職業技能選項直接鎖住不能點——跟自己職業的技能不衝突,
-              // 那些永遠能選。避免玩家點了才被 store 的 setActiveSkillLoadout 靜默擋下、
-              // 只留一個 toast 說明,不知道剛剛點的那格為什麼沒反應。
-              const isForeign = option.archetype !== archetype;
-              const locked = isForeign && borrowCapReached;
+            activeOptions.map((option) => {
+              // 已經借滿上限時,別的來源選項直接鎖住不能點——自己職業任一階的技能不受影響,
+              // 那些永遠能選。避免玩家點了才被 store 的 setActiveSkillLoadout 靜默擋下。
+              const isForeign = option.source !== archetype;
+              const locked = isForeign && activeBorrowCapReached;
+              const ref: ActiveSkillRef = { source: option.source, tier: option.tier, sourceSlot: option.sourceSlot };
               return (
                 <Pressable
-                  key={`${option.archetype}-${option.sourceSlot}`}
+                  key={`${option.source}-${option.tier}-${option.sourceSlot}`}
                   style={[styles.pickerRow, locked && styles.pickerRowLocked]}
                   disabled={locked}
                   onPress={() => {
-                    setActiveSkillLoadout(editingPosition, { archetype: option.archetype, sourceSlot: option.sourceSlot });
-                    setEditingPosition(null);
+                    setActiveSkillLoadout(editing.position, ref);
+                    setEditing(null);
                   }}
                 >
                   <Text style={[styles.pickerRowText, locked && styles.pickerRowTextLocked]}>
-                    {displaySkillName(option.archetype, option.sourceSlot, archetype, branch, tier)} Lv.{option.level}(每{option.intervalSeconds}秒削減
-                    {option.damageCutPct}%戰鬥時間)
+                    {displaySkillName(option.source, option.sourceSlot, option.tier, archetype, branch, studentSkillTree)} Lv.{option.level}
+                    (每{option.intervalSeconds}秒削減{option.damageCutPct}%戰鬥時間)
                   </Text>
                   <Text style={styles.pickerRowSub}>
-                    {ARCHETYPE_LABELS[option.archetype]}
+                    {sourceLabel(option.source)}
+                    {option.source !== 'student' ? `${option.tier}階` : ''}
                     {locked ? `(已借滿${MAX_BORROWED_ACTIVE_SLOTS}格)` : ''}
+                  </Text>
+                </Pressable>
+              );
+            })
+          )}
+        </View>
+      )}
+
+      <Text style={styles.sectionTitle}>被動技能</Text>
+      <View style={styles.positionRow}>
+        {(PASSIVE_SLOT_IDS as PassiveSlotId[]).map((position) => {
+          const ref = passiveSkillLoadout[position];
+          const isEditing = editing?.kind === 'passive' && editing.position === position;
+          const isBorrowed = ref !== null && ref.source !== archetype;
+          const iconArchetype = ref === null ? archetype : ref.source === 'student' ? archetype : ref.source;
+          const icon = ref ? getSkillIcon(iconArchetype, ref.sourceSlot, ref.tier as JobTier) : null;
+          const level = ref ? resolveSkillLevel(ref, skillTree, studentSkillTree) : 0;
+          return (
+            <Pressable
+              key={position}
+              style={[styles.positionTile, isEditing && styles.positionTileActive]}
+              onPress={() => setEditing(isEditing ? null : { kind: 'passive', position })}
+            >
+              <View style={styles.iconWrap}>
+                {icon && <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={2} />}
+              </View>
+              {isBorrowed && ref && (
+                <View style={styles.borrowedTag}>
+                  <Text style={styles.borrowedTagText}>{sourceLabel(ref.source)}</Text>
+                </View>
+              )}
+              <Text style={styles.positionLevel}>{ref ? `Lv.${level}` : '空著'}</Text>
+              <Text style={styles.positionLabel} numberOfLines={1}>
+                {ref ? displaySkillName(ref.source, ref.sourceSlot, ref.tier as JobTier, archetype, branch, studentSkillTree) : '未配置'}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {editing?.kind === 'passive' && (
+        <View style={styles.pickerCard}>
+          <Text style={styles.pickerTitle}>選擇要放進這格的被動技能</Text>
+          <Pressable
+            style={styles.pickerRow}
+            onPress={() => {
+              setPassiveSkillLoadout(editing.position, null);
+              setEditing(null);
+            }}
+          >
+            <Text style={styles.pickerRowText}>清空這格</Text>
+          </Pressable>
+          {passiveOptions.length === 0 ? (
+            <Text style={styles.emptyHint}>還沒有已經投資過等級的被動技能,先花技能書升級任一項再回來配置。</Text>
+          ) : (
+            passiveOptions.map((option) => {
+              const isForeign = option.source !== archetype;
+              const locked = isForeign && passiveBorrowCapReached;
+              const ref: PassiveSkillRef = { source: option.source, tier: option.tier, sourceSlot: option.sourceSlot };
+              return (
+                <Pressable
+                  key={`${option.source}-${option.tier}-${option.sourceSlot}`}
+                  style={[styles.pickerRow, locked && styles.pickerRowLocked]}
+                  disabled={locked}
+                  onPress={() => {
+                    setPassiveSkillLoadout(editing.position, ref);
+                    setEditing(null);
+                  }}
+                >
+                  <Text style={[styles.pickerRowText, locked && styles.pickerRowTextLocked]}>
+                    {displaySkillName(option.source, option.sourceSlot, option.tier, archetype, branch, studentSkillTree)} Lv.{option.level}
+                    (永久+{option.bonusPct}%)
+                  </Text>
+                  <Text style={styles.pickerRowSub}>
+                    {sourceLabel(option.source)}
+                    {option.source !== 'student' ? `${option.tier}階` : ''}
+                    {locked ? `(已借滿${MAX_BORROWED_PASSIVE_SLOTS}格)` : ''}
                   </Text>
                 </Pressable>
               );
@@ -144,38 +334,6 @@ export function SkillLoadoutEditor({ archetype, branch, tier }: SkillLoadoutEdit
       )}
     </View>
   );
-}
-
-interface LearnedActiveSkillOption {
-  archetype: Archetype;
-  sourceSlot: ActiveSkillSlotId;
-  level: number;
-  intervalSeconds: number;
-  damageCutPct: number;
-}
-
-// 效益排序輔助:4個技能欄現在全部是同一種效果(造成傷害),不用再按「效果種類」分組——
-// 直接用「每秒平均削減戰鬥時間的比例」(削減比例/觸發間隔)當唯一排序依據由高到低排,
-// 玩家一眼就看得出哪個選項效益最高,不用自己心算換算。
-function collectLearnedActiveSkills(skillTree: SkillTreeLevels, tier: JobTier): LearnedActiveSkillOption[] {
-  const options: LearnedActiveSkillOption[] = [];
-  ARCHETYPES.forEach((archetype) => {
-    ACTIVE_SLOT_IDS.forEach((slot) => {
-      const level = effectiveSkillLevel(skillTree[archetype], tier, slot);
-      if (level > 0) {
-        const intervalSeconds = activeSkillTriggerIntervalSeconds(slot, level);
-        const cutRatio = activeSkillDamageCutRatio(slot, level);
-        options.push({
-          archetype,
-          sourceSlot: slot,
-          level,
-          intervalSeconds,
-          damageCutPct: Math.round(cutRatio * 1000) / 10,
-        });
-      }
-    });
-  });
-  return options.sort((a, b) => b.damageCutPct / b.intervalSeconds - a.damageCutPct / a.intervalSeconds);
 }
 
 const styles = StyleSheet.create({
@@ -188,13 +346,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
   },
+  sectionTitle: {
+    color: '#c9a94f',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+  },
   positionRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   positionTile: {
-    width: TILE_SIZE + 16,
+    width: TILE_SIZE + 14,
     alignItems: 'center',
     gap: 2,
     padding: 4,

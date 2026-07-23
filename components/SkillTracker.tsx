@@ -8,12 +8,14 @@ import {
   ActiveSkillSlotId,
   activeSkillTriggerIntervalSeconds,
   effectiveSkillLevel,
+  resolveSkillLevel,
   secondaryActiveSkillTriggerIntervalSeconds,
+  SKILL_LEVEL_CAP,
   SKILL_SLOT_NAMES,
   SkillSlotId,
 } from '../game/skillTree';
 import { getSkillIcon } from '../game/sprites/skillIcons';
-import { getStudentSkillFlavor } from '../game/studentSkillTree';
+import { getStudentSkillFlavor, STUDENT_SKILL_LEVEL_CAP } from '../game/studentSkillTree';
 import { useGameState } from '../hooks/useGameState';
 import { PixelSprite } from './PixelSprite';
 
@@ -122,16 +124,13 @@ export function SkillTracker() {
   // forceTick 重算,會把整棵JSX樹凍結在第一次渲染的結果,所以整個 component 選擇跳出編譯優化。
   'use no memo';
 
-  const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const job = useGameState((state) => state.job);
   const secondaryJob = useGameState((state) => state.secondaryJob);
   const skillTree = useGameState((state) => state.skillTree);
   const activeSkillLoadout = useGameState((state) => state.activeSkillLoadout);
   const studentSkillTree = useGameState((state) => state.studentSkillTree);
-  const level = useGameState((state) => state.level);
   const jobTier = useGameState((state) => state.jobTier);
   const activeSkillTimers = useGameState((state) => state.activeSkillTimers);
-  const studentActiveSkillTimers = useGameState((state) => state.studentActiveSkillTimers);
   const secondarySkillTimerStartedAt = useGameState((state) => state.secondarySkillTimerStartedAt);
   const lastSkillTriggerAt = useGameState((state) => state.lastSkillTriggerAt);
   const lastSecondarySkillTriggerAt = useGameState((state) => state.lastSecondarySkillTriggerAt);
@@ -153,22 +152,21 @@ export function SkillTracker() {
     <View style={styles.wrapper}>
       <View style={styles.container}>
         {ACTIVE_SLOT_IDS.map((slot: ActiveSkillSlotId) => {
-          // 學生期(!hasChosenJob)還沒有主職,job.archetype 只是佔位值不代表真的職業——
-          // 名稱/等級/倒數秒數改吃 studentSkillTree,圖示照樣借用 job.archetype 當視覺樣板即可。
-          // 畢業後這4格改吃 activeSkillLoadout(見 game/skillTree.ts):每個位置各自指到「某個
-          // 已投資過的職業技能」,不一定是目前職業自己的active1-4——空位(ref=null)一律當成
-          // Lv.0處理,跟既有的「未學會」邏輯共用同一套顯示/防呆。
-          const loadoutRef = hasChosenJob ? activeSkillLoadout[slot] : null;
-          const tileArchetype = hasChosenJob ? (loadoutRef?.archetype ?? job.archetype) : job.archetype;
-          const tileSourceSlot = hasChosenJob ? (loadoutRef?.sourceSlot ?? slot) : slot;
-          const slotLevel = hasChosenJob
-            ? loadoutRef
-              ? effectiveSkillLevel(skillTree[loadoutRef.archetype], tier, loadoutRef.sourceSlot)
-              : 0
-            : studentSkillTree[slot];
-          const label = hasChosenJob
-            ? SKILL_SLOT_NAMES[tileArchetype][tileSourceSlot]
-            : getStudentSkillFlavor(level.level, slot).name;
+          // 主動技能欄自選(見 game/skillTree.ts 的 ActiveSkillLoadout):不分畢業與否,4格
+          // 一律吃 activeSkillLoadout——每個位置各自指到「某一階職業技能,或學生技能」,不一定
+          // 是目前職業自己的active1-4。空位(ref=null)一律當成 Lv.0 處理,跟既有的「未學會」
+          // 邏輯共用同一套顯示/防呆。圖示的階級固定吃玩家目前真正的職業階級(jobTier),不吃
+          // ref 自己指到的那一階——圖示演變呼應「你現在是第幾階」,跟塞進來的是哪一階技能無關。
+          const ref = activeSkillLoadout[slot];
+          const tileArchetype = ref === null || ref.source === 'student' ? job.archetype : ref.source;
+          const tileSourceSlot = ref?.sourceSlot ?? slot;
+          const slotLevel = ref ? resolveSkillLevel(ref, skillTree, studentSkillTree) : 0;
+          const levelCap = ref?.source === 'student' ? STUDENT_SKILL_LEVEL_CAP : SKILL_LEVEL_CAP;
+          const label = ref
+            ? ref.source === 'student'
+              ? getStudentSkillFlavor(studentSkillTree[ref.sourceSlot], ref.sourceSlot).name
+              : SKILL_SLOT_NAMES[tileArchetype][tileSourceSlot]
+            : SKILL_SLOT_NAMES[job.archetype][slot];
           return (
             <SkillTile
               key={slot}
@@ -177,8 +175,8 @@ export function SkillTracker() {
               label={label}
               level={slotLevel}
               tier={tier}
-              timerStartedAt={hasChosenJob ? activeSkillTimers[slot] : studentActiveSkillTimers[slot]}
-              intervalSeconds={activeSkillTriggerIntervalSeconds(slot, slotLevel)}
+              timerStartedAt={activeSkillTimers[slot]}
+              intervalSeconds={activeSkillTriggerIntervalSeconds(slot, slotLevel, levelCap)}
               justTriggered={primaryJustTriggered}
               now={now}
             />

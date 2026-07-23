@@ -37,8 +37,12 @@ import { SkillLevels, SKILL_IDS } from '../game/skills';
 import {
   ACTIVE_SLOT_IDS,
   ActiveSkillLoadout,
+  ActiveSkillRef,
   createInitialActiveSkillLoadout,
+  createInitialPassiveSkillLoadout,
   createInitialSkillTreeLevels,
+  PASSIVE_SLOT_IDS,
+  PassiveSkillLoadout,
   SKILL_LEVEL_CAP,
   SKILL_SLOT_IDS,
   SkillSlotId,
@@ -51,7 +55,7 @@ import { createInitialTriggerState, TriggerState } from '../game/trigger';
 import { weekIndex, WeeklyStatKey } from '../game/weeklyChallenge';
 import { STORAGE_KEY } from './constants';
 
-export const SCHEMA_VERSION = 40;
+export const SCHEMA_VERSION = 41;
 
 // v39 之前(v27~v38)skillTree 是「每個職業6格欄位各一個不分階級的數字」的舊制(見
 // game/skillTree.ts 目前 SkillTreeLevels 的分階說明,那個型別現在已經改成三維)。這裡凍結一份
@@ -276,8 +280,13 @@ export interface SaveData {
   // 兩者是玩家常見的不同偏好組合(要音效不要一直循環的BGM,或反過來),分開存放。
   musicMuted: boolean;
   // 主動技能欄自選配置(見 game/skillTree.ts 的 ActiveSkillLoadout):v34 起,首頁4個主動技能欄
-  // 位不再固定綁死「目前職業自己的active1-4」,玩家可以把任何已經投資過等級的職業技能塞進來。
+  // 位不再固定綁死「目前職業自己的active1-4」;v41 起每個欄位可以指到職業任一階或學生技能
+  // (source/tier 取代原本的 archetype 欄位,不再限定「目前職業」),完全獨立、不加總。
   activeSkillLoadout: ActiveSkillLoadout;
+  // 被動技能欄自選配置(見 game/skillTree.ts 的 PassiveSkillLoadout):v41 起新增,跟
+  // activeSkillLoadout 同一套機制的被動版本(3格),讓3個被動欄位也能自選來源,不再是
+  // 「職業被動+學生被動永遠同時疊加」的舊制(見 hooks/useGameState.ts 的 computePassiveSkillBonus)。
+  passiveSkillLoadout: PassiveSkillLoadout;
   // 職業階級(見 game/combat.ts 的 JobTier):v36 起不再是「等級到門檻就自動晉升」的純粹
   // 等級推算值,改成玩家自己觸發晉升(見 hooks/useGameState.ts 的 promoteJobTier)才會真的
   // 提升——等級到門檻只代表「有資格挑戰晉升試煉」,不代表已經晉升。舊存檔遷移時用
@@ -335,6 +344,7 @@ export function createInitialSaveData(): SaveData {
     hasSeenWelcome: false,
     musicMuted: false,
     activeSkillLoadout: createInitialActiveSkillLoadout(DEFAULT_ARCHETYPE),
+    passiveSkillLoadout: createInitialPassiveSkillLoadout(DEFAULT_ARCHETYPE),
     // 全新存檔一律從階級1開始——TIER_UNLOCK_LEVELS[1]=30剛好對齊畢業門檻,階級1不用晉升
     // 試煉,自動視為「畢業就有」的起點,只有2階以後才需要玩家主動晉升。
     jobTier: 1,
@@ -2226,19 +2236,78 @@ function isSaveDataV39(value: unknown): value is SaveDataV39 {
   );
 }
 
+// v40 的主動技能欄自選 ref 形狀(見 isActiveSkillLoadout):只有 archetype/sourceSlot,沒有
+// v41 才新增的 source/tier,也沒有 passiveSkillLoadout 這個欄位。
+interface LegacyActiveSkillRef {
+  archetype: Archetype;
+  sourceSlot: SkillSlotId;
+}
+type LegacyActiveSkillLoadout = Record<SkillSlotId, LegacyActiveSkillRef | null>;
+
+function createEmptyLegacyActiveSkillLoadout(): LegacyActiveSkillLoadout {
+  const loadout = {} as LegacyActiveSkillLoadout;
+  ACTIVE_SLOT_IDS.forEach((slot) => {
+    loadout[slot] = null;
+  });
+  return loadout;
+}
+
 // v40(副本票券改版,見 game/dungeon.ts 的 DungeonState:從單一共用入場券池改成6分頁各自
 // 獨立每日次數):dungeon 從 {tickets, lastTicketRegenAt} 變成 {lastResetAt, usedToday},
-// 其餘欄位形狀不變。這是 migrate() 的第一道 passthrough 檢查——已經是新制形狀的存檔直接原樣回傳。
-function isSaveDataV40(value: unknown): value is SaveData {
+// 其餘欄位形狀不變(activeSkillLoadout 還是舊制 archetype/sourceSlot,也還沒有
+// passiveSkillLoadout)。凍結成明確獨立的 interface+literal版本號檢查,跟 isSaveDataV38/V39
+// 當初凍結的做法一樣——v41 上線後這裡不再是 migrate() 的第一道 passthrough,改由下面新的
+// isSaveDataV41 頂替。
+interface SaveDataV40 extends Omit<SaveData, 'version' | 'activeSkillLoadout' | 'passiveSkillLoadout'> {
+  version: 40;
+  activeSkillLoadout: LegacyActiveSkillLoadout;
+}
+
+function isSaveDataV40(value: unknown): value is SaveDataV40 {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
   // isSaveDataV39 要求 dungeon 是舊的單一票池形狀,這裡驗證的是已經改成每日次數的真正形狀——
   // 用空的 legacy 佔位值蓋掉這個欄位餵給 isSaveDataV39,只借用它對「其餘欄位」的檢查,新形狀
   // 本身另外用 isDungeonDailyState 獨立驗證。
   return (
-    record.version === SCHEMA_VERSION &&
+    record.version === 40 &&
     isSaveDataV39({ ...record, version: 39, dungeon: createEmptyLegacyDungeonState() }) &&
     isDungeonDailyState(record.dungeon)
+  );
+}
+
+function isNewSkillLoadoutRef(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.source === 'string' && typeof record.tier === 'number' && typeof record.sourceSlot === 'string';
+}
+
+function isNewActiveSkillLoadout(value: unknown): value is ActiveSkillLoadout {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return ACTIVE_SLOT_IDS.every((slot) => record[slot] === null || isNewSkillLoadoutRef(record[slot]));
+}
+
+function isPassiveSkillLoadout(value: unknown): value is PassiveSkillLoadout {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (PASSIVE_SLOT_IDS as SkillSlotId[]).every((slot) => record[slot] === null || isNewSkillLoadoutRef(record[slot]));
+}
+
+// v41(主動/被動技能欄自選的 ref 改成 {source, tier, sourceSlot},新增 passiveSkillLoadout,
+// 見 game/skillTree.ts 的 SkillSource/ActiveSkillRef/PassiveSkillRef):這是 migrate() 的第一道
+// passthrough 檢查——已經是新制形狀的存檔直接原樣回傳,跟 isSaveDataV40 當初凍結前的角色一樣。
+function isSaveDataV41(value: unknown): value is SaveData {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  // isSaveDataV40 要求 activeSkillLoadout 是舊的 archetype/sourceSlot 形狀,這裡驗證的是已經
+  // 改成 source/tier 的真正形狀——用全空的 legacy 佔位值蓋掉這個欄位餵給 isSaveDataV40,只借用
+  // 它對「其餘欄位」的檢查,新形狀本身另外用 isNewActiveSkillLoadout/isPassiveSkillLoadout 獨立驗證。
+  return (
+    record.version === SCHEMA_VERSION &&
+    isSaveDataV40({ ...record, version: 40, activeSkillLoadout: createEmptyLegacyActiveSkillLoadout() }) &&
+    isNewActiveSkillLoadout(record.activeSkillLoadout) &&
+    isPassiveSkillLoadout(record.passiveSkillLoadout)
   );
 }
 
@@ -2364,6 +2433,7 @@ function migrateShapeToLegacyTiers(
       jobTier: getCurrentTier(value.level.level),
       itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
       gemCounts: migrateGemCountsToTiered(value.gemCounts),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
     };
   }
   if (isSaveDataV34(value)) {
@@ -2375,6 +2445,7 @@ function migrateShapeToLegacyTiers(
       gemCounts: migrateGemCountsToTiered(value.gemCounts),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
     };
   }
   if (isSaveDataV33(value)) {
@@ -2385,6 +2456,7 @@ function migrateShapeToLegacyTiers(
       itemInstances: migrateItemInstanceSocketsToTiered(value.itemInstances),
       gemCounts: migrateGemCountsToTiered(value.gemCounts),
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
     };
@@ -2398,6 +2470,7 @@ function migrateShapeToLegacyTiers(
       gemCounts: migrateGemCountsToTiered(value.gemCounts),
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
     };
@@ -2413,6 +2486,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
     };
@@ -2428,6 +2502,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       weeklyChallengeWeekIndex: weekIndex(),
@@ -2446,6 +2521,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       ascensionPoints: 0,
@@ -2466,6 +2542,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       dailyTaskProgress: {},
@@ -2488,6 +2565,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       totalStagesCleared: 0,
@@ -2511,6 +2589,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       skillTree: withPassive3(value.skillTree),
@@ -2537,6 +2616,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillBooks: migrateFlatMaterialToTiered(value.skillBooks),
       claimedAchievementIds: [...value.unlockedAchievementIds],
@@ -2564,6 +2644,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
       studentSkillTree: withStudentPassive3(migrateStudentSkillTreeLevels(value.studentSkillTree)),
@@ -2591,6 +2672,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       dungeon: createEmptyLegacyDungeonState(),
       skillTree: withPassive3(migrateSkillTreeLevels(value.skillTree)),
@@ -2619,6 +2701,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       companionGear: createEmptyCompanionGearState(),
       dungeon: createEmptyLegacyDungeonState(),
@@ -2648,6 +2731,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       studentSkillTree: withStudentPassive3(createInitialStudentSkillTreeLevels()),
       companionGear: createEmptyCompanionGearState(),
@@ -2677,6 +2761,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       heroHp: 50 + value.level.level * 2,
       defeatRecoveryUntil: null,
@@ -2708,6 +2793,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       killCount: 0,
       heroHp: 50 + value.level.level * 2,
@@ -2740,6 +2826,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       unlockedAchievementIds: [],
       claimedAchievementIds: [],
@@ -2775,6 +2862,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       enhanceStones: migrateFlatMaterialToTiered(value.enhanceStones),
       hasChosenJob: true,
       unlockedAchievementIds: [],
@@ -2808,6 +2896,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2860,6 +2949,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2912,6 +3002,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -2964,6 +3055,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3016,6 +3108,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3068,6 +3161,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3120,6 +3214,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3172,6 +3267,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3224,6 +3320,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3276,6 +3373,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3328,6 +3426,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3380,6 +3479,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3432,6 +3532,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3484,6 +3585,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(value.job.archetype),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(value.job.archetype),
       level: value.level,
       trigger: value.trigger,
       job: value.job,
@@ -3536,6 +3638,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(DEFAULT_ARCHETYPE),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(DEFAULT_ARCHETYPE),
       level: value.level,
       trigger: value.trigger,
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
@@ -3588,6 +3691,7 @@ function migrateShapeToLegacyTiers(
       hasSeenWelcome: true,
       musicMuted: false,
       activeSkillLoadout: createInitialActiveSkillLoadout(DEFAULT_ARCHETYPE),
+      passiveSkillLoadout: createInitialPassiveSkillLoadout(DEFAULT_ARCHETYPE),
       level: value.level,
       trigger: createInitialTriggerState(),
       job: { archetype: DEFAULT_ARCHETYPE, branch: DEFAULT_BRANCH },
@@ -3701,11 +3805,44 @@ function remapLegacyEquipmentBranchIds(save: SaveData): SaveData {
   return { ...save, version: SCHEMA_VERSION, equipment, unlockedItemIds, itemInstances };
 }
 
+type SaveDataBeforeSkillLoadoutMigration = Omit<SaveData, 'activeSkillLoadout' | 'passiveSkillLoadout'> & {
+  activeSkillLoadout: ActiveSkillLoadout | LegacyActiveSkillLoadout;
+  passiveSkillLoadout?: PassiveSkillLoadout;
+};
+
+// v41 的主動技能欄自選 ref 從 {archetype, sourceSlot} 改成 {source, tier, sourceSlot}(見
+// game/skillTree.ts 的 SkillSource/ActiveSkillRef):舊 ref 一律視為「當初那個職業當下的階級」,
+// 用 jobTier 回填 tier——跟 migrateFlatSkillTreeLevelsToTiered 用同一個基準,舊技能樹本來就是
+// 攤平在同一組,回填到 jobTier 那一階最貼近原本的實際狀態。已經是新形狀的 ref(有 source 欄位)
+// 原樣通過,不重複轉換。
+function migrateLegacySkillLoadoutRef(ref: unknown, jobTier: JobTier): ActiveSkillRef | null {
+  if (ref === null || ref === undefined) return null;
+  const record = ref as Record<string, unknown>;
+  if (typeof record.source === 'string') return ref as ActiveSkillRef;
+  return { source: record.archetype as Archetype, tier: jobTier, sourceSlot: record.sourceSlot as SkillSlotId } as ActiveSkillRef;
+}
+
+// 套用到 activeSkillLoadout(轉換舊 ref 形狀)+ passiveSkillLoadout(v41 新增,舊存檔一律
+// 補「目前職業自己」的預設配置,行為跟這個機制上線前完全一致)——不管存檔原本停在 migrate()
+// 的哪一個分支,這一步統一在最後跑一次,冪等,跟 remapLegacyEquipmentBranchIds 同一套做法。
+function remapLegacySkillLoadouts(save: SaveDataBeforeSkillLoadoutMigration): SaveData {
+  const rawActiveLoadout = save.activeSkillLoadout as unknown as Record<string, unknown>;
+  const activeSkillLoadout = {} as ActiveSkillLoadout;
+  ACTIVE_SLOT_IDS.forEach((slot) => {
+    activeSkillLoadout[slot] = migrateLegacySkillLoadoutRef(rawActiveLoadout[slot], save.jobTier);
+  });
+  const passiveSkillLoadout = save.passiveSkillLoadout ?? createInitialPassiveSkillLoadout(save.job.archetype, save.jobTier);
+  return { ...save, version: SCHEMA_VERSION, activeSkillLoadout, passiveSkillLoadout };
+}
+
 // v38:裝備分支 id 轉換獨立成最後一道統一步驟(見上面兩個 helper 的說明),不用像先前每個
-// schema 版本那樣在 migrateShape 的每一條分支裡各自插入轉換呼叫。
+// schema 版本那樣在 migrateShape 的每一條分支裡各自插入轉換呼叫。v41 的技能欄自選遷移
+// (remapLegacySkillLoadouts)比照同一套模式,套用在 isSaveDataV40 這條「形狀已對、只差
+// 技能欄自選還沒轉換」的分支,以及其餘所有更舊版本共用的 migrateShape() 結果之上。
 function migrate(value: unknown): SaveData {
-  if (isSaveDataV40(value)) return value;
-  return remapLegacyEquipmentBranchIds(migrateShape(value));
+  if (isSaveDataV41(value)) return value;
+  if (isSaveDataV40(value)) return remapLegacySkillLoadouts(value);
+  return remapLegacySkillLoadouts(remapLegacyEquipmentBranchIds(migrateShape(value)));
 }
 
 export async function loadSave(): Promise<SaveData> {

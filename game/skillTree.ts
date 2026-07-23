@@ -41,8 +41,9 @@ export function createInitialSkillTreeLevels(): SkillTreeLevels {
 }
 
 // 戰鬥中主動技能的觸發間隔/削減比例、被動加成的實際效果,吃的是「累加全部已投資階級」的
-// 總和(1階練滿10級+2階練滿10級=有效20級),不是只看目前這一階自己的數字——呼應「分開
-// 計算但不作廢」的設計,每一階的投資都會永久疊加到角色的實際戰鬥力上。
+// 總和(1階練滿10級+2階練滿10級=有效20級)——目前只有「副職(雙職兼修)」還在用這個函式
+// (見 game/skillTree.ts 的 secondaryActiveSkillTriggerIntervalSeconds 呼叫端),主職技能欄
+// 已經改用下面的 resolveSkillLevel(每階/學生各自獨立、不疊加,見該函式說明)。
 export function effectiveSkillLevel(
   archetypeLevels: Record<JobTier, Record<SkillSlotId, number>>,
   currentTier: JobTier,
@@ -55,65 +56,136 @@ export function effectiveSkillLevel(
   return total;
 }
 
-// 主動技能欄選擇機制:4個欄位(以出現在首頁 SkillTracker 的固定位置為準,決定基準秒數/顯示
-// 順序)各自「指到」某個職業、某個主動格的技能(archetype+sourceSlot)——轉職是這個遊戲的
-// 既有機制,skillTree 本來就永久保留玩家投資過的每個職業的技能等級(見 SkillTreeLevels),
-// 所以玩家可以把「已經點過等級的其他職業主動技能」也放進目前的4個欄位,不限於目前職業自己
-// 的active1-4。null=這個欄位空著,行為等同該格 Lv.0(不參與倒數、不能點擊,見
-// hooks/useGameState.ts 的 applyActiveSkillTriggers)。
+// 技能欄選擇機制(3被動+4主動,共7格):每一階(1~5)、每個職業的每一格技能,都是完全獨立的
+// 技能——不會像舊制那樣把各階等級加總成一個數字。source='student' 代表學生技能樹(見
+// game/studentSkillTree.ts),那套沒有分階存檔,tier 欄位對學生技能沒有意義、固定填1。
+// null=這個欄位空著,行為等同 Lv.0(不參與倒數、不能點擊)。
+export type SkillSource = Archetype | 'student';
+export type PassiveSlotId = 'passive1' | 'passive2' | 'passive3';
+
 export interface ActiveSkillRef {
-  archetype: Archetype;
+  source: SkillSource;
+  tier: number;
   sourceSlot: ActiveSkillSlotId;
 }
+export interface PassiveSkillRef {
+  source: SkillSource;
+  tier: number;
+  sourceSlot: PassiveSlotId;
+}
 export type ActiveSkillLoadout = Record<ActiveSkillSlotId, ActiveSkillRef | null>;
+export type PassiveSkillLoadout = Record<PassiveSlotId, PassiveSkillRef | null>;
 
-// 預設配置=目前職業自己的active1-4(跟這個機制上線前的固定行為完全一致),玩家不特地去改
-// 配置的話畫面上看到的東西不會有任何變化。
-export function createInitialActiveSkillLoadout(archetype: Archetype): ActiveSkillLoadout {
+// 依 ref 直接讀「那一階/那個來源自己」的原始等級,不加總——ref 是 null 或指到 Lv.0 的格子都
+// 回傳0(呼應「空格=不參與倒數」的既有防呆)。studentSkillTree 是單一扁平7格(沒有分階),
+// 不看 ref.tier。放在這裡(不是 game/studentSkillTree.ts)是為了讓 game/skillTree.ts 保持
+// 自成一體、不用反過來 import 學生那份檔案造成循環依賴。
+export function resolveSkillLevel(
+  ref: { source: SkillSource; tier: number; sourceSlot: SkillSlotId } | null,
+  skillTree: SkillTreeLevels,
+  studentSkillTree: Record<SkillSlotId, number>
+): number {
+  if (!ref) return 0;
+  if (ref.source === 'student') return studentSkillTree[ref.sourceSlot];
+  return skillTree[ref.source][ref.tier as JobTier][ref.sourceSlot];
+}
+
+// 預設配置=目前職業指定階級自己的7格技能(這個機制上線前的固定行為，只是現在要多指定
+// tier)。玩家不特地去改配置的話畫面上看到的東西不會有任何變化。tier 預設1是為了相容
+// lib/storage.ts 一大票「舊存檔沒有這個欄位,補一份預設值」的歷史遷移呼叫,那些呼叫端
+// 沒有(也不需要)額外的 tier 資訊。
+export function createInitialActiveSkillLoadout(archetype: Archetype, tier: JobTier = 1): ActiveSkillLoadout {
   const loadout = {} as ActiveSkillLoadout;
   ACTIVE_SLOT_IDS.forEach((slot) => {
-    loadout[slot] = { archetype, sourceSlot: slot };
+    loadout[slot] = { source: archetype, tier, sourceSlot: slot };
   });
   return loadout;
 }
 
-// 職業認同上限:4格自選欄位最多只能有2格塞別的職業技能,至少保留2格是目前職業自己的技能
-// (或空著)——完全自由配置會讓技能欄跟目前職業脫鉤(例如戰士4格全塞法師技能),稀釋掉
-// 「你現在是什麼職業」的認同感。空格(null)不算借用,不佔用這個上限。
+export function createInitialPassiveSkillLoadout(archetype: Archetype, tier: JobTier = 1): PassiveSkillLoadout {
+  const loadout = {} as PassiveSkillLoadout;
+  (PASSIVE_SLOT_IDS as PassiveSlotId[]).forEach((slot) => {
+    loadout[slot] = { source: archetype, tier, sourceSlot: slot };
+  });
+  return loadout;
+}
+
+// 職業認同上限:4格主動自選欄位最多只能有2格塞「不是目前職業」的技能(別的職業任一階,或
+// 學生技能)——完全自由配置會讓技能欄跟目前職業脫鉤,稀釋掉「你現在是什麼職業」的認同感。
+// 注意:選自己職業的其他階(例如目前5階,選自己1階的版本)不算借用,只看 source 是不是
+// 目前職業,不看 tier。空格(null)不算借用,不佔用這個上限。3個被動欄位比照辦理,但因為
+// 格數更少,上限壓在1格(至少2/3是目前職業自己的技能)。
 export const MAX_BORROWED_ACTIVE_SLOTS = 2;
+export const MAX_BORROWED_PASSIVE_SLOTS = 1;
 
 export function countBorrowedActiveSlots(loadout: ActiveSkillLoadout, archetype: Archetype): number {
   return ACTIVE_SLOT_IDS.filter((slot) => {
     const ref = loadout[slot];
-    return ref !== null && ref.archetype !== archetype;
+    return ref !== null && ref.source !== archetype;
   }).length;
 }
 
-// setActiveSkillLoadout action 呼叫這個先檢查合不合法——清空或放自己職業的技能永遠合法,
-// 放別的職業技能才要看目前已經借了幾格。
+export function countBorrowedPassiveSlots(loadout: PassiveSkillLoadout, archetype: Archetype): number {
+  return (PASSIVE_SLOT_IDS as PassiveSlotId[]).filter((slot) => {
+    const ref = loadout[slot];
+    return ref !== null && ref.source !== archetype;
+  }).length;
+}
+
+// setActiveSkillLoadout/setPassiveSkillLoadout action 呼叫這兩個先檢查合不合法——清空或放
+// 自己職業的技能永遠合法,放別的來源(別的職業任一階、或學生技能)才要看目前已經借了幾格。
 export function canSetLoadoutSlot(
   loadout: ActiveSkillLoadout,
   archetype: Archetype,
   position: ActiveSkillSlotId,
   ref: ActiveSkillRef | null
 ): boolean {
-  if (ref === null || ref.archetype === archetype) return true;
+  if (ref === null || ref.source === archetype) return true;
   const currentRef = loadout[position];
-  const alreadyBorrowedHere = currentRef !== null && currentRef.archetype !== archetype;
+  const alreadyBorrowedHere = currentRef !== null && currentRef.source !== archetype;
   const borrowedCount = countBorrowedActiveSlots(loadout, archetype);
   return (alreadyBorrowedHere ? borrowedCount : borrowedCount + 1) <= MAX_BORROWED_ACTIVE_SLOTS;
 }
 
-// 轉職後職業認同基準跟著換了,原本合法的配置可能瞬間超標(例如4格都是舊職業的技能)——
-// 從後面的欄位(active4)往前依序清空超標的借用格,直到符合上限,避免轉職後直接卡在一個
-// 「不合法」的狀態。load() 讀舊存檔、setJob 換職業時都要跑一次,兩邊都可能讓既有配置瞬間超標。
+export function canSetPassiveLoadoutSlot(
+  loadout: PassiveSkillLoadout,
+  archetype: Archetype,
+  position: PassiveSlotId,
+  ref: PassiveSkillRef | null
+): boolean {
+  if (ref === null || ref.source === archetype) return true;
+  const currentRef = loadout[position];
+  const alreadyBorrowedHere = currentRef !== null && currentRef.source !== archetype;
+  const borrowedCount = countBorrowedPassiveSlots(loadout, archetype);
+  return (alreadyBorrowedHere ? borrowedCount : borrowedCount + 1) <= MAX_BORROWED_PASSIVE_SLOTS;
+}
+
+// 轉職後職業認同基準跟著換了,原本合法的配置可能瞬間超標——從後面的欄位往前依序清空超標的
+// 借用格,直到符合上限,避免轉職後直接卡在一個「不合法」的狀態,但不會動到玩家其他仍合法
+// 的自選配置(呼應「轉職後仍可保留其他階/學生技能」的需求,只清超標的部分)。load() 讀舊
+// 存檔、setJob 換職業時都要跑一次,兩邊都可能讓既有配置瞬間超標。
 export function enforceLoadoutIdentityCap(loadout: ActiveSkillLoadout, archetype: Archetype): ActiveSkillLoadout {
   const next = { ...loadout };
   let borrowedCount = countBorrowedActiveSlots(next, archetype);
   for (let i = ACTIVE_SLOT_IDS.length - 1; i >= 0 && borrowedCount > MAX_BORROWED_ACTIVE_SLOTS; i--) {
     const slot = ACTIVE_SLOT_IDS[i];
     const ref = next[slot];
-    if (ref !== null && ref.archetype !== archetype) {
+    if (ref !== null && ref.source !== archetype) {
+      next[slot] = null;
+      borrowedCount--;
+    }
+  }
+  return next;
+}
+
+export function enforcePassiveLoadoutIdentityCap(loadout: PassiveSkillLoadout, archetype: Archetype): PassiveSkillLoadout {
+  const slots = PASSIVE_SLOT_IDS as PassiveSlotId[];
+  const next = { ...loadout };
+  let borrowedCount = countBorrowedPassiveSlots(next, archetype);
+  for (let i = slots.length - 1; i >= 0 && borrowedCount > MAX_BORROWED_PASSIVE_SLOTS; i--) {
+    const slot = slots[i];
+    const ref = next[slot];
+    if (ref !== null && ref.source !== archetype) {
       next[slot] = null;
       borrowedCount--;
     }
@@ -178,10 +250,11 @@ export function skillBookDropTier(
 }
 
 // 主動技能觸發間隔:秒數倒數,固定不受戰鬥/關卡時長影響。4 個主動欄位各自有自己的基準秒數
-// (前3招一般技能 6/7/8 秒,第4招特別技能 15 秒),隨「累加全部已投資階級」的有效等級線性
-// 降到 5 階全部練滿(每階10級 x 5階=50)時觸底,下限是基準值的 2/3——6→4秒、7→4.67秒、
-// 8→5.33秒、15→10秒。呼叫端傳進來的 level 是 effectiveSkillLevel() 算出來的累加值,不是
-// 單一階級自己的0-10數字。
+// (前3招一般技能 6/7/8 秒,第4招特別技能 15 秒),隨等級線性降到觸底,下限是基準值的
+// 2/3——6→4秒、7→4.67秒、8→5.33秒、15→10秒。levelCap 決定「level 到多少算練滿」:副職
+// (雙職兼修)還在用舊制的累加值+MAX_EFFECTIVE_SKILL_LEVEL(不傳這個參數就是這個預設值);
+// 主職技能欄自選改用「單一來源自己」的封頂值(職業任一階=SKILL_LEVEL_CAP,學生=
+// STUDENT_SKILL_LEVEL_CAP),呼叫端(hooks/useGameState.ts)自己決定要傳哪個。
 const ACTIVE_SLOT_BASE_INTERVAL_SECONDS: Record<ActiveSkillSlotId, number> = {
   active1: 6,
   active2: 7,
@@ -189,12 +262,16 @@ const ACTIVE_SLOT_BASE_INTERVAL_SECONDS: Record<ActiveSkillSlotId, number> = {
   active4: 15,
 };
 const INTERVAL_FLOOR_RATIO = 2 / 3;
-// 5階全部練滿的累加封頂值(每階0-10級 x 5階),不是單一階級自己的10級封頂。
+// 5階全部練滿的累加封頂值(每階0-10級 x 5階)——只有副職(雙職兼修)還在用這個當預設封頂。
 export const MAX_EFFECTIVE_SKILL_LEVEL = SKILL_LEVEL_CAP * 5;
 
-export function activeSkillTriggerIntervalSeconds(slot: ActiveSkillSlotId, level: number): number {
+export function activeSkillTriggerIntervalSeconds(
+  slot: ActiveSkillSlotId,
+  level: number,
+  levelCap: number = MAX_EFFECTIVE_SKILL_LEVEL
+): number {
   const base = ACTIVE_SLOT_BASE_INTERVAL_SECONDS[slot];
-  const progress = Math.min(level, MAX_EFFECTIVE_SKILL_LEVEL) / MAX_EFFECTIVE_SKILL_LEVEL;
+  const progress = levelCap > 0 ? Math.min(level, levelCap) / levelCap : 0;
   const interval = base * (1 - (1 - INTERVAL_FLOOR_RATIO) * progress);
   return Math.round(interval * 100) / 100;
 }
@@ -214,11 +291,15 @@ export const ACTIVE_SLOT_DAMAGE_CUT_RATIO_RANGE: Record<ActiveSkillSlotId, { min
   active4: { min: 0.18, max: 0.4 },
 };
 
-// level 同樣吃 effectiveSkillLevel() 算出來的累加值(見 activeSkillTriggerIntervalSeconds
-// 的說明),5階全部練滿才會到 max。
-export function activeSkillDamageCutRatio(slot: ActiveSkillSlotId, level: number): number {
+// levelCap 語意同 activeSkillTriggerIntervalSeconds:不傳就是副職沿用的舊制累加封頂,
+// 主職技能欄自選改傳「單一來源自己」的封頂值。
+export function activeSkillDamageCutRatio(
+  slot: ActiveSkillSlotId,
+  level: number,
+  levelCap: number = MAX_EFFECTIVE_SKILL_LEVEL
+): number {
   const { min, max } = ACTIVE_SLOT_DAMAGE_CUT_RATIO_RANGE[slot];
-  const progress = Math.min(level, MAX_EFFECTIVE_SKILL_LEVEL) / MAX_EFFECTIVE_SKILL_LEVEL;
+  const progress = levelCap > 0 ? Math.min(level, levelCap) / levelCap : 0;
   return min + (max - min) * progress;
 }
 

@@ -543,7 +543,7 @@ export function JobSelector() {
             </Pressable>
             <Text style={styles.tierHeaderLabel}>技能選擇</Text>
           </View>
-          <SkillLoadoutEditor archetype={job.archetype} branch={job.branch} tier={currentTier} />
+          <SkillLoadoutEditor archetype={job.archetype} branch={job.branch} />
         </View>
       )}
     </View>
