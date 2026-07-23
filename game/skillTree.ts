@@ -1,4 +1,5 @@
 import { Archetype, getArchetypeComposition, JobTier, Subtype } from './combat';
+import { currentMaterialTier, MaterialTier } from './materials';
 
 // 每個職業 7 個技能欄位:3 被動(永久數值加成)+ 4 主動(各自獨立冷卻,同時運作)。
 // passive3 是吸血(lifesteal)+回血(hpRegen)雙效合一的通用被動,見 getPassiveEffectKind 的
@@ -122,12 +123,29 @@ export function upgradeSkillSlot(level: number, tier: JobTier): number {
 
 // 技能書掉落:原本比照 game/equipment.ts 的強化石/寶石掉落訂在4%,但技能書的花費曲線比
 // 強化石陡很多(見 skillSlotUpgradeBookCost 的指數成長),同樣4%換算下來後期進度慢到失衡,
-// 拉到8%單獨補償——強化石/寶石維持4%不變,兩者原本就服務不同的養成節奏。
+// 拉到8%單獨補償;後續玩家回饋覺得取得量還是太慢,再拉到15%(強化石/寶石同步從4%拉到8%,
+// 見 game/equipment.ts 的 ENHANCE_STONE_DROP_CHANCE)。
 // export 出去給 game/offlineProgress.ts 算離線期間的期望值掉落用,單一真相來源。
-export const SKILL_BOOK_DROP_CHANCE = 0.08;
+export const SKILL_BOOK_DROP_CHANCE = 0.15;
 
 export function rollSkillBookDrop(rng: () => number = Math.random): boolean {
   return rng() < SKILL_BOOK_DROP_CHANCE;
+}
+
+// 技能書掉落階級:依職業階級分配(currentMaterialTier,學生期固定初階),不再一律掉初階——
+// 高階玩家掉高階書,不用再刷一堆用不到的初階書慢慢合成。例外:目前這個職業的7個技能格
+// (3被動+4主動)全部都已經封頂(SKILL_LEVEL_CAP,不分階級一律10級,見 skillSlotLevelCap
+// 的說明),代表這個職業階級再怎麼升也沒有格子能投資了,改掉下一階的書,提前儲備升階後
+// 需要的材料,而不是繼續掉一堆現在已經用不到的目前階書。
+export function skillBookDropTier(
+  hasChosenJob: boolean,
+  jobTier: JobTier,
+  archetypeSkillLevels: Record<SkillSlotId, number>
+): MaterialTier {
+  const baseTier = currentMaterialTier(hasChosenJob, jobTier);
+  const allMaxed = SKILL_SLOT_IDS.every((slot) => archetypeSkillLevels[slot] >= SKILL_LEVEL_CAP);
+  if (!allMaxed) return baseTier;
+  return Math.min(baseTier + 1, 5) as MaterialTier;
 }
 
 // 主動技能觸發間隔:秒數倒數,固定不受戰鬥/關卡時長影響。4 個主動欄位各自有自己的基準秒數

@@ -146,6 +146,7 @@ import {
   getTierTriggerBonus,
   rollSkillBookDrop,
   secondaryActiveSkillTriggerIntervalSeconds,
+  skillBookDropTier,
   SKILL_SLOT_NAMES,
   skillSlotLevelCap,
   skillSlotUpgradeBookCost,
@@ -213,6 +214,13 @@ interface ActiveSkillTriggerResult {
 function grantBasicMaterial(counts: TieredMaterialCounts, amount: number): TieredMaterialCounts {
   if (amount === 0) return counts;
   return { ...counts, 0: counts[0] + amount };
+}
+
+// 技能書掉落依職業階級分配(見 game/skillTree.ts 的 skillBookDropTier),不是一律給初階,
+// 所以要能發到任意指定的階級,不能沿用只發初階的 grantBasicMaterial。
+function grantMaterialAtTier(counts: TieredMaterialCounts, tier: MaterialTier, amount: number): TieredMaterialCounts {
+  if (amount === 0) return counts;
+  return { ...counts, [tier]: counts[tier] + amount };
 }
 
 // 消耗指定階級的材料(升級技能/強化裝備用)——呼叫端自己先用 currentMaterialTier() 算出
@@ -869,9 +877,14 @@ export const useGameState = create<GameState>((set, get) => ({
     const coins = save.coins + offlineStageResult.coins + (dailyLoginBonus?.coins ?? 0);
 
     // 離線期間的強化石/技能書/寶石掉落(見 game/offlineProgress.ts 的期望值計算),套用方式
-    // 跟前景 tickBattle 掉落到帳的寫法(grantBasicMaterial/逐一寶石類型)完全一致。
+    // 跟前景 tickBattle 掉落到帳的寫法一致。技能書的階級用離線前的快照算一次(整段離線期間
+    // 技能等級不會變動,不用像前景那樣逐次擊殺各自判定),整批都算同一階。
     const nextEnhanceStones = grantBasicMaterial(save.enhanceStones, offlineStageResult.enhanceStonesGained);
-    const nextSkillBooks = grantBasicMaterial(save.skillBooks, offlineStageResult.skillBooksGained);
+    const nextSkillBooks = grantMaterialAtTier(
+      save.skillBooks,
+      skillBookDropTier(save.hasChosenJob, save.jobTier, save.skillTree[save.job.archetype]),
+      offlineStageResult.skillBooksGained
+    );
     const nextGemCounts: GemCounts = { ...save.gemCounts };
     for (const gemType of GEM_TYPES) {
       const amount = offlineStageResult.gemsGained[gemType];
@@ -1250,12 +1263,19 @@ export const useGameState = create<GameState>((set, get) => ({
       lastCompanionDropId = companionDrop.id;
     }
 
-    // 強化石/寶石/技能書掉落:各自獨立判定,互不干擾、跟寵物掉落同一套邏輯。掉落一律只給初階
+    // 強化石/寶石掉落:各自獨立判定,互不干擾、跟寵物掉落同一套邏輯。掉落一律只給初階
     // (見 grantBasicMaterial 的說明),更高階要靠玩家自己合成。
     const nextEnhanceStones = grantBasicMaterial(state.enhanceStones, rollEnhanceStoneDrop() ? 1 : 0);
     const gemDrop = rollGemDrop();
     const nextGemCounts = gemDrop ? grantGemDrop(state.gemCounts, gemDrop) : state.gemCounts;
-    const nextSkillBooks = grantBasicMaterial(state.skillBooks, rollSkillBookDrop() ? 1 : 0);
+    // 技能書掉落依職業階級分配(見 game/skillTree.ts 的 skillBookDropTier 說明),不是一律初階。
+    const nextSkillBooks = rollSkillBookDrop()
+      ? grantMaterialAtTier(
+          state.skillBooks,
+          skillBookDropTier(state.hasChosenJob, state.jobTier, state.skillTree[state.job.archetype]),
+          1
+        )
+      : state.skillBooks;
 
     // 裝備掉落:免費直接解鎖一件當前職業/等級穿得下的付費款,豐富擊殺獎勵種類,
     // 跟上面幾種掉落一樣各自獨立判定、互不影響。

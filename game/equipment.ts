@@ -2260,8 +2260,10 @@ export function gemValueAtTier(baseValue: number, tier: MaterialTier): number {
 }
 
 // 強化石/寶石掉落:跟寵物/坐騎掉落一樣,每次擊殺獨立判定一次,互不干擾、多數時候不會掉落。
+// 強化石從4%拉到8%(技能書同步從8%拉到15%,見 game/skillTree.ts 的 SKILL_BOOK_DROP_CHANCE)
+// 回應取得量太慢的回饋;寶石維持4%不變(取得速度另外靠新增的鑲嵌石副本補)。
 // 兩個常數 export 出去給 game/offlineProgress.ts 算離線期間的期望值掉落用,單一真相來源。
-export const ENHANCE_STONE_DROP_CHANCE = 0.04;
+export const ENHANCE_STONE_DROP_CHANCE = 0.08;
 export const GEM_DROP_CHANCE = 0.04;
 
 export function rollEnhanceStoneDrop(rng: () => number = Math.random): boolean {
