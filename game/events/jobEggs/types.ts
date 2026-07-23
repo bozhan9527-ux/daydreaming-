@@ -10,3 +10,10 @@ export interface JobGameEvent extends GameEvent {
   branch: JobBranch | null;
   tier: JobTier;
 }
+
+// 學生彩蛋:畢業前(!hasChosenJob)就會加進彩蛋反應池,不綁六大職業(見
+// game/studentSkillTree.ts 的 STUDENT_SKILL_FLAVOR),只分 tier1(Lv1,新生)/
+// tier2(Lv10,風雲人物)兩組,沒有分支概念。
+export interface StudentGameEvent extends GameEvent {
+  studentTier: 1 | 2;
+}
