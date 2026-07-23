@@ -19,8 +19,8 @@ export const MAGIC_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicRanged-1-r01', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: null, tier: 1, payload: '第一次有觀眾送禮物,我興奮地截圖留念。' },
   { id: 'job-magicRanged-1-r02', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: null, tier: 1, payload: '訂閱數終於破百,我對著鏡頭傻笑了好一陣子。' },
   { id: 'job-magicRanged-1-r03', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: null, tier: 1, payload: '意外打出一波精彩操作,彈幕瞬間刷起洗版讚美。' },
-  { id: 'job-magicRanged-1-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: null, tier: 1, payload: '熬了無數個夜晚直播之後,我才發現,自己享受的從來不是輸贏,是有人願意陪我一起熬夜的感覺。' },
-  { id: 'job-magicRanged-1-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: null, tier: 1, payload: '關掉直播的那一刻看著空蕩的房間,我才明白,螢幕另一端那些陌生的暱稱,早就成了我最熟悉的陪伴。' },
+  { id: 'job-magicRanged-1-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: null, tier: 1, payload: '熬了無數個夜晚直播之後,我才發現,自己享受的不是輸贏,是深夜還有五個人願意看我對著螢幕自言自語。' },
+  { id: 'job-magicRanged-1-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: null, tier: 1, payload: '關掉直播的那一刻看著空蕩的房間,我才明白,那些陌生的暱稱比我現實朋友還熟,但一樣不會幫我倒垃圾。' },
 
   // ── 分支A 2階:軟體工程師 ──
   { id: 'job-magicRanged-A-2-c01', rarity: 'common', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 2, payload: '程式碼一行沒寫完,魔王倒是打了好幾隻。' },
@@ -36,8 +36,8 @@ export const MAGIC_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicRanged-A-2-r01', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 2, payload: '寫的功能上線後大受好評,主管難得誇了一句。' },
   { id: 'job-magicRanged-A-2-r02', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 2, payload: '找到卡了三天的 bug,爽度堪比打倒魔王。' },
   { id: 'job-magicRanged-A-2-r03', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 2, payload: '意外拿到一筆專案獎金,終於敢買想要的裝備。' },
-  { id: 'job-magicRanged-A-2-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 2, payload: '修過無數個 bug 之後,我才發現,自己最擅長的其實是在混亂裡找到一點點秩序。' },
-  { id: 'job-magicRanged-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 2, payload: '深夜看著自己寫的程式順利運作,我才明白,這行敲出來的每一段程式碼,都是我跟世界對話的方式。' },
+  { id: 'job-magicRanged-A-2-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 2, payload: '修過無數個 bug 之後,我才發現,自己最擅長的其實是把「五分鐘搞定」的事拖成整晚。' },
+  { id: 'job-magicRanged-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 2, payload: '深夜看著自己寫的程式終於順利運作,我在上面加了行註解「先別動,能跑就好」,然後默默關機睡覺。' },
 
   // ── 分支A 3階:研究員/科學家 ──
   { id: 'job-magicRanged-A-3-c01', rarity: 'common', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 3, payload: '實驗數據跑不出來,魔王倒是好打多了。' },
@@ -53,8 +53,8 @@ export const MAGIC_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicRanged-A-3-r01', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 3, payload: '論文終於被接受刊登,興奮到睡不著。' },
   { id: 'job-magicRanged-A-3-r02', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 3, payload: '指導教授難得稱讚我的實驗設計很巧妙。' },
   { id: 'job-magicRanged-A-3-r03', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 3, payload: '意外的實驗結果,反而開啟了一個全新的研究方向。' },
-  { id: 'job-magicRanged-A-3-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 3, payload: '失敗了無數次實驗之後,我才發現,真正支撐我的,不是成果,是那份還想再試一次的好奇心。' },
-  { id: 'job-magicRanged-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 3, payload: '深夜實驗室終於跑出期待已久的數據,我才明白,科學這條路走得孤獨,卻從沒讓我後悔過。' },
+  { id: 'job-magicRanged-A-3-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 3, payload: '失敗了無數次實驗之後,我才發現,真正支撐我的不是好奇心,是研究經費已經花下去,不做完不能認賠。' },
+  { id: 'job-magicRanged-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 3, payload: '深夜實驗室終於跑出期待已久的數據,我看看時間凌晨四點,除了自己,沒人會知道這一刻有多值得慶祝。' },
 
   // ── 分支A 4階:駭客 ──
   { id: 'job-magicRanged-A-4-c01', rarity: 'common', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 4, payload: '破解防火牆比打魔王還花時間。' },
@@ -70,8 +70,8 @@ export const MAGIC_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicRanged-A-4-r01', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 4, payload: '幫一家小公司找出資安漏洞,對方感激地多付了一筆酬勞。' },
   { id: 'job-magicRanged-A-4-r02', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 4, payload: '成功攔截一次詐騙攻擊,默默保護了一群陌生人。' },
   { id: 'job-magicRanged-A-4-r03', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 4, payload: '同行在論壇上匿名稱讚我的技術,我看了會心一笑。' },
-  { id: 'job-magicRanged-A-4-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 4, payload: '在暗處守護了這麼多陌生人的資安之後,我才發現,沒有人知道我的臉,卻有很多人因為我才睡得安穩。' },
-  { id: 'job-magicRanged-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 4, payload: '成功擋下一次大規模攻擊的那個深夜,我才明白,匿名不代表不重要,我一直都在,只是沒人看見而已。' },
+  { id: 'job-magicRanged-A-4-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 4, payload: '在暗處守護了這麼多陌生人的資安之後,我才發現,沒人知道我的臉,連客戶都以為我是個團隊。' },
+  { id: 'job-magicRanged-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 4, payload: '成功擋下一次大規模攻擊的那個深夜,我發了封報告就去睡了,新聞隔天說是「原因不明的異常中止」,大概說的就是我。' },
 
   // ── 分支A 5階:AI天才工程師 ──
   { id: 'job-magicRanged-A-5-c01', rarity: 'common', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 5, payload: '模型訓練跑了一整晚,魔王倒是打得比較快。' },
@@ -87,8 +87,8 @@ export const MAGIC_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicRanged-A-5-r01', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 5, payload: '模型成功解決了一個困擾業界多年的難題,團隊一起歡呼。' },
   { id: 'job-magicRanged-A-5-r02', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 5, payload: '收到一封用戶感謝信,說我的系統真的幫到了他。' },
   { id: 'job-magicRanged-A-5-r03', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 5, payload: '年輕工程師說想成為像我一樣的人,我一時語塞。' },
-  { id: 'job-magicRanged-A-5-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 5, payload: '打造出無數個模型之後,我才發現,自己最想解決的問題,始終是那個「這一切有沒有意義」的疑問。' },
-  { id: 'job-magicRanged-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 5, payload: '看著自己打造的系統真的幫助了一個人的那一刻,我才明白,技術的意義,從來都不在於多聰明,而在於多有用。' },
+  { id: 'job-magicRanged-A-5-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 5, payload: '打造出無數個模型之後,我才發現,自己最想解決的問題,其實是為什麼咖啡杯永遠洗不完。' },
+  { id: 'job-magicRanged-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'A', tier: 5, payload: '看著自己打造的系統真的幫助了一個人,我盯著投資人畫的大餅,默默把這句感謝存進真正重要的資料夾。' },
 
   // ── 分支B 2階:資料科學家 ──
   { id: 'job-magicRanged-B-2-c01', rarity: 'common', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 2, payload: '數據清理花的時間,比打怪還久十倍。' },
@@ -104,8 +104,8 @@ export const MAGIC_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicRanged-B-2-r01', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 2, payload: '分析結果幫公司省下一大筆成本,主管難得請客。' },
   { id: 'job-magicRanged-B-2-r02', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 2, payload: '意外發現數據裡藏著的有趣規律,興奮得睡不著。' },
   { id: 'job-magicRanged-B-2-r03', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 2, payload: '報告受到高層肯定,終於有人記得我的名字。' },
-  { id: 'job-magicRanged-B-2-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 2, payload: '清理過無數筆雜亂數據之後,我才發現,自己也在學著怎麼把混亂的人生整理出一點頭緒。' },
-  { id: 'job-magicRanged-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 2, payload: '深夜看著螢幕上終於乾淨的數據集,我才明白,把混亂變得有意義,本身就是一種踏實的成就感。' },
+  { id: 'job-magicRanged-B-2-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 2, payload: '清理過無數筆雜亂數據之後,我發現自己的人生格式一樣亂七八糟,只是沒人付錢請我清理。' },
+  { id: 'job-magicRanged-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 2, payload: '深夜看著螢幕上終於乾淨的數據集,我存好檔,才想起明天主管大概又要一份新的報表。' },
 
   // ── 分支B 3階:量子物理博士生 ──
   { id: 'job-magicRanged-B-3-c01', rarity: 'common', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 3, payload: '推導公式推到一半,發現前面算錯了。' },
@@ -121,8 +121,8 @@ export const MAGIC_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicRanged-B-3-r01', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 3, payload: '意外的實驗結果讓指導教授眼睛一亮。' },
   { id: 'job-magicRanged-B-3-r02', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 3, payload: '論文終於通過口試,那一刻整個人都虛脫了。' },
   { id: 'job-magicRanged-B-3-r03', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 3, payload: '研究成果被國際期刊接受,同學紛紛前來道賀。' },
-  { id: 'job-magicRanged-B-3-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 3, payload: '推導了無數次公式之後,我才發現,自己面對的不只是量子世界的不確定,還有自己人生的不確定。' },
-  { id: 'job-magicRanged-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 3, payload: '論文口試通過走出會議室的那一刻,我才明白,原來堅持到底,本身就是這場修行最重要的答案。' },
+  { id: 'job-magicRanged-B-3-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 3, payload: '推導了無數次公式之後,我才發現,量子世界的不確定性,比不上我到底哪年才能畢業的不確定性。' },
+  { id: 'job-magicRanged-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 3, payload: '論文口試通過走出會議室的那一刻,我只想到一件事:終於可以睡覺了。' },
 
   // ── 分支B 4階:密碼學專家 ──
   { id: 'job-magicRanged-B-4-c01', rarity: 'common', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 4, payload: '破解一組加密演算法,比破解魔王弱點還費神。' },
@@ -138,8 +138,8 @@ export const MAGIC_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicRanged-B-4-r01', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 4, payload: '幫金融機構抓出一個致命漏洞,對方感激涕零。' },
   { id: 'job-magicRanged-B-4-r02', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 4, payload: '設計的加密演算法被業界採用,論文引用數也跟著上升。' },
   { id: 'job-magicRanged-B-4-r03', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 4, payload: '收到匿名感謝信,說我保護了無數用戶的隱私。' },
-  { id: 'job-magicRanged-B-4-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 4, payload: '守護過無數組密鑰之後,我才發現,自己一直在守護的,是每個人不被看穿的那份安心。' },
-  { id: 'job-magicRanged-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 4, payload: '成功擋下一次針對性攻擊之後,我才明白,沒有人會記得我的名字,但這份沉默的守護,本身就有意義。' },
+  { id: 'job-magicRanged-B-4-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 4, payload: '守護過無數組密鑰之後,我才發現,自己最擅長守住的秘密,是我到底幾天沒洗頭。' },
+  { id: 'job-magicRanged-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 4, payload: '成功擋下一次針對性攻擊之後,獎金入帳,我才明白,這份沉默的守護,終究還是要靠加班費撐著。' },
 
   // ── 分支B 5階:諾貝爾獎得主 ──
   { id: 'job-magicRanged-B-5-c01', rarity: 'common', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 5, payload: '被稱諾貝爾獎得主,水電費帳單還是要自己繳。' },
@@ -155,6 +155,6 @@ export const MAGIC_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-magicRanged-B-5-r01', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 5, payload: '當年被我指導過的學生,如今也成了獨當一面的研究者,特地回來道謝。' },
   { id: 'job-magicRanged-B-5-r02', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 5, payload: '收到一封素未謀面的年輕人來信,說我的研究改變了他的人生方向。' },
   { id: 'job-magicRanged-B-5-r03', rarity: 'rare', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 5, payload: '新一代學者眼神裡的執著,讓我想起了年輕時的自己。' },
-  { id: 'job-magicRanged-B-5-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 5, payload: '拿到這座獎項之後,我才發現,它證明的不是我有多聰明,而是那些失敗的夜晚從來沒有白費。' },
-  { id: 'job-magicRanged-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 5, payload: '站上頒獎台的那一刻,我才明白,真正偉大的從來不是這座獎盃,是那個曾經在實驗室裡不肯放棄的自己。' },
+  { id: 'job-magicRanged-B-5-e01', rarity: 'epic', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 5, payload: '拿到這座獎項之後,我才發現,它證明的不是我有多聰明,是我終於有個像樣的理由跟銀行解釋這些年到底在幹嘛。' },
+  { id: 'job-magicRanged-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'magicRanged', branch: 'B', tier: 5, payload: '站上頒獎台的那一刻,我盯著台下滿滿的閃光燈,心裡想的卻是實驗室那盞忘記關的燈。' },
 ];
