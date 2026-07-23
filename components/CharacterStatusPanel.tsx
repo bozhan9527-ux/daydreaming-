@@ -151,6 +151,18 @@ export function CharacterStatusPanel() {
 
   return (
     <View style={styles.container}>
+      {/* 紙娃娃(角色預覽+兩側插槽按鈕)取代原本的「已裝備物品」格子,從「裝備」分頁搬過來——
+          放在最上面,邊框回復成搬過來之前的樣式(單純銅色邊框),不套用「裝備」分頁曾經用過
+          的稀有度九宮格金框美術,點插槽維持原本的 toast 提示,不是完整的裝備管理介面
+          (裝備管理留在「裝備」分頁做)。 */}
+      <View style={styles.paperdollRow}>
+        <View style={styles.slotColumn}>{LEFT_COLUMN.map(renderSlotButton)}</View>
+        <View style={styles.heroWrap}>
+          <EquipmentHeroPreview />
+        </View>
+        <View style={styles.slotColumn}>{RIGHT_COLUMN.map(renderSlotButton)}</View>
+      </View>
+
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.levelText}>Lv.{level.level}</Text>
 
@@ -197,19 +209,6 @@ export function CharacterStatusPanel() {
           <StatCell label="吸血" value={substatTotals.lifesteal} />
           <StatCell label="回血" value={substatTotals.hpRegen} />
         </View>
-      </View>
-
-      <Text style={styles.sectionTitle}>已裝備物品</Text>
-      {/* 紙娃娃(角色預覽+兩側插槽按鈕)取代原本的「已裝備物品」格子,從「裝備」分頁搬過來——
-          邊框回復成搬過來之前的樣式(單純銅色邊框),不套用「裝備」分頁曾經用過的稀有度
-          九宮格金框美術,點插槽維持原本的 toast 提示,不是完整的裝備管理介面
-          (裝備管理留在「裝備」分頁做)。 */}
-      <View style={styles.paperdollRow}>
-        <View style={styles.slotColumn}>{LEFT_COLUMN.map(renderSlotButton)}</View>
-        <View style={styles.heroWrap}>
-          <EquipmentHeroPreview />
-        </View>
-        <View style={styles.slotColumn}>{RIGHT_COLUMN.map(renderSlotButton)}</View>
       </View>
 
       {/* 以下原本是「職業」分頁 JobSelector.tsx 的 HeroStatusPanel,整組搬過來這裡,
