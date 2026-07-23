@@ -14,14 +14,19 @@
 
 ## 通用風格前綴(每組生成時都要加在提示詞最前面)
 
+反推自現有角色圖 `assets/sprites/hero/jobs/physicalMelee.png`(像素風格,不是插畫風),
+務必保持像素感,不要生成成平滑插畫:
+
 ```
-Semi-realistic anime illustration, muted low-saturation Morandi color palette
-(dusty grays, soft browns, faded blues), melancholic but cute mood, slice-of-life
-comedy tone. Protagonist: young man, short dark navy hair, tired half-lidded eyes,
-wearing a worn dark jacket over a plain shirt, modern casual clothes (not fantasy
-armor) — he looks like a bored temp worker, not a hero. Portrait/scene composition,
-16:9 landscape aspect ratio, soft flat lighting, slightly desaturated, no text in
-image.
+16-bit pixel art character illustration, chibi/SD proportions, clearly visible blocky
+pixelation and hard-edged shading (no smooth gradients, no anti-aliasing blur),
+muted low-saturation Morandi color palette (dusty grays, muted olive-brown, faded
+blue-gray). Protagonist: young man, short messy dark navy-blue hair, tired
+half-lidded droopy eyes, world-weary bored expression, wearing a worn olive-gray
+work vest over a plain dark shirt, dark pants, brown work boots and gloves — looks
+like an underpaid temp worker, not a fantasy hero. Retro RPG game sprite portrait
+style, flat soft lighting, slightly desaturated, 16:9 landscape scene composition,
+no text in image.
 ```
 
 ---

@@ -5,11 +5,12 @@
 
 ## 風格參考
 
-生成前可以先把這兩張已經上線的美術設定圖丟給AI繪圖工具當風格參考(調色盤/畫風一致):
-- `assets/sprites/backgrounds/ai/physicalMelee_tier1.png`(物理近戰1階「工讀生」的既有設定圖)
+生成前把這張已經上線的角色圖丟給AI繪圖工具當風格參考(像素風格/調色盤要一致,不要生成成
+平滑插畫):
+- `assets/sprites/hero/jobs/physicalMelee.png`(物理近戰1階「工讀生」的既有角色圖,像素風格)
 
-2階還沒有既有的職業美術可以參考(tier2職業美術目前只有草稿資料夾還沒生成),所以先用1階的
-畫風當基準,搬運工的角色設定(灰藍工作服、疲憊神情)則照下面的通用風格前綴描述。
+2階還沒有既有的職業角色美術可以參考(tier2職業美術目前只有草稿資料夾還沒生成),所以先用
+1階這張的畫風當基準,搬運工的道具(手推車)跟下面提示詞描述的服裝疊上去即可。
 
 ## 圖片尺寸
 
@@ -17,14 +18,18 @@
 
 ## 通用風格前綴(加在每張提示詞最前面)
 
+反推自 `physicalMelee.png` 的像素風格描述,務必保持像素感,不要生成成平滑插畫:
+
 ```
-Semi-realistic anime illustration, muted low-saturation Morandi color palette
-(dusty grays, soft browns, faded blues), melancholic but cute mood, slice-of-life
-comedy tone. Protagonist: young man, short dark navy hair, tired half-lidded eyes,
-wearing a worn dark jacket over a plain shirt, modern casual clothes (not fantasy
-armor) — he looks like a bored temp worker, not a hero. Portrait/scene composition,
-16:9 landscape aspect ratio, soft flat lighting, slightly desaturated, no text in
-image.
+16-bit pixel art character illustration, chibi/SD proportions, clearly visible blocky
+pixelation and hard-edged shading (no smooth gradients, no anti-aliasing blur),
+muted low-saturation Morandi color palette (dusty grays, muted olive-brown, faded
+blue-gray). Protagonist: young man, short messy dark navy-blue hair, tired
+half-lidded droopy eyes, world-weary bored expression, wearing a worn olive-gray
+work vest over a plain dark shirt, dark pants, brown work boots and gloves — looks
+like an underpaid temp worker, not a fantasy hero. Retro RPG game sprite portrait
+style, flat soft lighting, slightly desaturated, 16:9 landscape scene composition,
+no text in image.
 ```
 
 ## 15張場景提示詞
