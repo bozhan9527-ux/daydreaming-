@@ -31,6 +31,24 @@ no text in image.
 
 ---
 
+## 1階:工讀生(兩分支共用)
+
+1. (job-physicalMelee-1-c01) 他盯著手機上密密麻麻的打工排班表,一臉頭痛。
+2. (job-physicalMelee-1-c02) 他數著薄薄的時薪收入,表情無奈。
+3. (job-physicalMelee-1-c03) 店長在他面前念個不停,他低頭沉默地聽著。
+4. (job-physicalMelee-1-c04) 他站在鏡子前練習自我介紹,表情僵硬又緊張。
+5. (job-physicalMelee-1-c05) 他頂著黑眼圈站在深夜的收銀台後面。
+6. (job-physicalMelee-1-c06) 同事們陸續打包離職,他一個人站在空蕩蕩的店裡。
+7. (job-physicalMelee-1-c07) 他拿著剛列印出來的打工證明,表情有點驕傲。
+8. (job-physicalMelee-1-c08) 打卡鐘顯示遲到,他一臉懊惱地看著螢幕。
+9. (job-physicalMelee-1-c09) 一個顧客對著他比手畫腳抱怨,他面無表情地應付。
+10. (job-physicalMelee-1-c10) 他被一堆雜物包圍,手忙腳亂地整理。
+11. (job-physicalMelee-1-r01) 店長難得對他點頭稱讚,他愣住不知所措。
+12. (job-physicalMelee-1-r02) 他數著存錢筒裡的硬幣,終於湊夠買新裝備。
+13. (job-physicalMelee-1-r03) 同事偷偷遞給他一杯飲料,兩人相視一笑。
+14. (job-physicalMelee-1-e01) 深夜打烊後他獨自拖地,身影被路燈拉得很長,神情卻很堅定。
+15. (job-physicalMelee-1-l01) 他捧著人生第一張薪資單,看著上面的數字,眼神百感交集。
+
 ## 分支A 2階:搬運工
 
 1. (job-physicalMelee-A-2-c01) 他扛著一大疊紙箱走到一半僵住,表情寫著「這工作到底跟打魔王有什麼差別」。

@@ -1,10 +1,27 @@
 import { JobGameEvent } from './types';
 
-// 物理遠程職業彩蛋:分支A(工讀生→外送員→計程車司機→警察→職業獵人→狙擊手,實際從2階起)+
-// 分支B(外送員→貨車司機→保鑣→特技替身演員→頂尖鏢客),稱號對照 game/combat.ts 的
-// JOB_TITLES。tier1「外送員」兩分支共用同一個稱號,不需要職業彩蛋,從tier2起才各分支獨立
-// 一組15則(10 common/3 rare/1 epic/1 legendary)。
+// 物理遠程職業彩蛋:tier1「外送員」兩分支共用一組(branch填null),分支A(計程車司機→
+// 警察→職業獵人→狙擊手)+分支B(貨車司機→保鑣→特技替身演員→頂尖鏢客)從tier2起各自獨立
+// 一組,稱號對照 game/combat.ts 的 JOB_TITLES。每組15則(10 common/3 rare/1 epic/
+// 1 legendary)。
 export const PHYSICAL_RANGED_JOB_EGGS: JobGameEvent[] = [
+  // ── 1階:外送員(兩分支共用) ──
+  { id: 'job-physicalRanged-1-c01', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '外送單接不停,打怪的手都快抽筋。' },
+  { id: 'job-physicalRanged-1-c02', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '遲到扣評分,魔王倒是從不遲到。' },
+  { id: 'job-physicalRanged-1-c03', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '電動車電量見底,勇氣倒是還有一點。' },
+  { id: 'job-physicalRanged-1-c04', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '客人備註寫「不要辣」,結果送錯了整份餐。' },
+  { id: 'job-physicalRanged-1-c05', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '爬五樓送餐,腿軟到差點認不出自己的膝蓋。' },
+  { id: 'job-physicalRanged-1-c06', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '平台演算法比魔王攻略還難懂。' },
+  { id: 'job-physicalRanged-1-c07', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '雨天送餐,全身濕透比打輸魔王還狼狽。' },
+  { id: 'job-physicalRanged-1-c08', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '準時送達,唯一的獎勵是自己心裡的踏實。' },
+  { id: 'job-physicalRanged-1-c09', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '訂單一個接一個,晚餐永遠輪不到自己。' },
+  { id: 'job-physicalRanged-1-c10', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '客人給了差評,理由是「外送太快」。' },
+  { id: 'job-physicalRanged-1-r01', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '客人多給了小費,說看我送餐送得很拚。' },
+  { id: 'job-physicalRanged-1-r02', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '半夜送到一戶亮著燈等我的人家,對方說了聲謝謝辛苦了。' },
+  { id: 'job-physicalRanged-1-r03', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '意外撿到路人掉的錢包,原封不動送回去。' },
+  { id: 'job-physicalRanged-1-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '我風雨無阻送過最遠的一單,只為了不讓訂餐的人餓肚子。' },
+  { id: 'job-physicalRanged-1-l01', rarity: 'legendary', type: 'text', archetype: 'physicalRanged', branch: null, tier: 1, payload: '那天送完最後一單看著空無一人的街道,我才想起,自己也曾經只是想被好好對待而已。' },
+
   // ── 分支A 2階:計程車司機 ──
   { id: 'job-physicalRanged-A-2-c01', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 2, payload: '導航說前方塞車,魔王倒是從不塞車。' },
   { id: 'job-physicalRanged-A-2-c02', rarity: 'common', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 2, payload: '乘客問我認不認識路,我說我連自己人生的路都不太認得。' },
@@ -19,7 +36,7 @@ export const PHYSICAL_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalRanged-A-2-r01', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 2, payload: '乘客下車忘了拿行李,追上去還多賺了一句謝謝。' },
   { id: 'job-physicalRanged-A-2-r02', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 2, payload: '半夜載到一個哭著的乘客,我什麼都沒問,只把音樂關小聲。' },
   { id: 'job-physicalRanged-A-2-r03', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 2, payload: '意外走了一條沒導航過的捷徑,比魔王攻略還難找。' },
-  { id: 'job-physicalRanged-A-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 2, payload: '傳說某個計程車司機,載過的乘客都說車上有種說不出的安心感。' },
+  { id: 'job-physicalRanged-A-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 2, payload: '載過我車的乘客都說,車上有種說不出的安心感。' },
   { id: 'job-physicalRanged-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 2, payload: '那趟深夜的最後一單,乘客下車前說了聲謝謝,我才想起自己也很久沒被感謝過。' },
 
   // ── 分支A 3階:警察 ──
@@ -36,7 +53,7 @@ export const PHYSICAL_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalRanged-A-3-r01', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 3, payload: '幫走失的小孩找到家人,他媽媽塞了一瓶飲料給我當謝禮。' },
   { id: 'job-physicalRanged-A-3-r02', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 3, payload: '深夜巡邏遇到一個徹夜未歸的少年,我只是陪他走到公車站。' },
   { id: 'job-physicalRanged-A-3-r03', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 3, payload: '長官說我表現優異,考績卻跟去年一樣。' },
-  { id: 'job-physicalRanged-A-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 3, payload: '傳說某個轄區的警察,連魔王出沒都要先跟他報備才敢出來。' },
+  { id: 'job-physicalRanged-A-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 3, payload: '聽說我這個轄區,連魔王出沒都要先跟我報備才敢出來。' },
   { id: 'job-physicalRanged-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 3, payload: '那晚送走一個哭著說找不到方向的人之後,我才明白,原來守護別人也是一種被需要的幸福。' },
 
   // ── 分支A 4階:職業獵人 ──
@@ -53,7 +70,7 @@ export const PHYSICAL_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalRanged-A-4-r01', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 4, payload: '意外救了一隻受傷的幼獸,牠舔了舔我的手才跑走。' },
   { id: 'job-physicalRanged-A-4-r02', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 4, payload: '在山裡撿到一把生鏽的舊獵刀,刀柄刻著別人的名字。' },
   { id: 'job-physicalRanged-A-4-r03', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 4, payload: '委託人多付了一筆錢,說是謝謝我沒有濫殺無辜。' },
-  { id: 'job-physicalRanged-A-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 4, payload: '傳說某個獵人在山裡待久了,連魔王看到他都會先繞道走。' },
+  { id: 'job-physicalRanged-A-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 4, payload: '在山裡待久了,連魔王看到我都會先繞道走。' },
   { id: 'job-physicalRanged-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 4, payload: '那次在山頂等到日出的瞬間,我才懂,原來獵人守的不只是獵物,還有自己心裡那份安靜。' },
 
   // ── 分支A 5階:狙擊手 ──
@@ -70,7 +87,7 @@ export const PHYSICAL_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalRanged-A-5-r01', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 5, payload: '這次任務的獎金,終於夠換一副新瞄準鏡。' },
   { id: 'job-physicalRanged-A-5-r02', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 5, payload: '趴了整晚只為了確認目標的作息,結果對方比我還早睡。' },
   { id: 'job-physicalRanged-A-5-r03', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 5, payload: '同行的新人問我怕不怕孤獨,我說習慣就好。' },
-  { id: 'job-physicalRanged-A-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 5, payload: '傳說某個狙擊手一輩子沒讓任何人看過自己的臉,只留下傳說裡的一擊必中。' },
+  { id: 'job-physicalRanged-A-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 5, payload: '我一輩子沒讓任何人看過自己的臉,只留下傳說裡的一擊必中。' },
   { id: 'job-physicalRanged-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'physicalRanged', branch: 'A', tier: 5, payload: '扣下最後一次扳機之後,我才明白,原來一直瞄準的,是想確認自己還沒被世界忘記。' },
 
   // ── 分支B 2階:貨車司機 ──
@@ -87,7 +104,7 @@ export const PHYSICAL_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalRanged-B-2-r01', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 2, payload: '幫路邊拋錨的車主接電,他塞了一瓶飲料給我。' },
   { id: 'job-physicalRanged-B-2-r02', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 2, payload: '深夜遇到同行的貨車閃燈打招呼,那一瞬間覺得沒那麼孤單。' },
   { id: 'job-physicalRanged-B-2-r03', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 2, payload: '意外走了一條風景很美的舊路,忘記自己是來送貨的。' },
-  { id: 'job-physicalRanged-B-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 2, payload: '傳說某個貨車司機,開過的路比地圖畫得還詳細。' },
+  { id: 'job-physicalRanged-B-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 2, payload: '我開過的路,大概比地圖畫得還詳細。' },
   { id: 'job-physicalRanged-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 2, payload: '那趟跑了一整夜的長途,天亮時看到日出,我才想起自己也曾經喜歡看風景。' },
 
   // ── 分支B 3階:保鑣 ──
@@ -104,7 +121,7 @@ export const PHYSICAL_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalRanged-B-3-r01', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 3, payload: '雇主難得對我說了聲辛苦了,我愣了兩秒才反應過來。' },
   { id: 'job-physicalRanged-B-3-r02', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 3, payload: '擋下一次意外的推擠,雇主事後多給了一筆獎金。' },
   { id: 'job-physicalRanged-B-3-r03', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 3, payload: '雇主的孩子畫了一張圖送我,畫的是我站在旁邊的樣子。' },
-  { id: 'job-physicalRanged-B-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 3, payload: '傳說某個保鑣一站就是一整夜,連魔王經過都不敢驚動他的雇主。' },
+  { id: 'job-physicalRanged-B-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 3, payload: '我一站就是一整夜,連魔王經過都不敢驚動我的雇主。' },
   { id: 'job-physicalRanged-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 3, payload: '那天雇主終於安全回到家,我才發現,原來守護別人的安心,也能填滿自己的心。' },
 
   // ── 分支B 4階:特技替身演員 ──
@@ -121,7 +138,7 @@ export const PHYSICAL_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalRanged-B-4-r01', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 4, payload: '這次的特效鏡頭一次過,導演終於記住了我的名字。' },
   { id: 'job-physicalRanged-B-4-r02', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 4, payload: '演員私下謝謝我幫他擋下危險動作,還請了我一頓飯。' },
   { id: 'job-physicalRanged-B-4-r03', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 4, payload: '意外接到一個特寫鏡頭,螢幕上第一次露出了我的臉。' },
-  { id: 'job-physicalRanged-B-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 4, payload: '傳說某個特技替身,身上的傷疤比演員的獎盃還多,卻從沒後悔過。' },
+  { id: 'job-physicalRanged-B-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 4, payload: '我身上的傷疤,比演員的獎盃還多,卻從沒後悔過。' },
   { id: 'job-physicalRanged-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 4, payload: '那次從高處墜落卻順利落地的瞬間,我才懂,原來替別人承受風險,也是一種被需要的方式。' },
 
   // ── 分支B 5階:頂尖鏢客 ──
@@ -138,6 +155,6 @@ export const PHYSICAL_RANGED_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalRanged-B-5-r01', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 5, payload: '這趟護送的委託人塞了一筆豐厚小費,說是謝謝我一路的沉默陪伴。' },
   { id: 'job-physicalRanged-B-5-r02', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 5, payload: '半路遇到打劫,劫匪一看到我的臉就默默讓路。' },
   { id: 'job-physicalRanged-B-5-r03', rarity: 'rare', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 5, payload: '新人鏢客問我怕不怕死,我說怕,只是還有事沒做完。' },
-  { id: 'job-physicalRanged-B-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 5, payload: '傳說某個頂尖鏢客,從沒失手過一趟委託,只有他自己知道那背後的代價。' },
+  { id: 'job-physicalRanged-B-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 5, payload: '我從沒失手過一趟委託,只有自己知道那背後的代價。' },
   { id: 'job-physicalRanged-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'physicalRanged', branch: 'B', tier: 5, payload: '送完這趟傳說級的委託之後,我才明白,原來我一直在護送的,也是自己不敢放下的責任。' },
 ];

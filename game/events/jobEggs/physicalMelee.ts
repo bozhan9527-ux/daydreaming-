@@ -1,11 +1,27 @@
 import { JobGameEvent } from './types';
 
-// 物理近戰職業彩蛋:分支A(工讀生→搬運工→工地師傅→消防員→特種部隊)+
-// 分支B(工讀生→拳擊館學員→拳擊教練→職業拳擊手→傳說拳王),稱號對照 game/combat.ts 的
-// JOB_TITLES。tier1「工讀生」兩分支共用同一個稱號,不需要職業彩蛋(見 JobGameEvent 說明),
-// 從tier2起才各分支獨立一組15則(10 common/3 rare/1 epic/1 legendary),呼應整體
-// 70/22/7/1的稀有度比例。
+// 物理近戰職業彩蛋:tier1「工讀生」兩分支共用一組(branch填null),分支A(搬運工→
+// 工地師傅→消防員→特種部隊)+分支B(拳擊館學員→拳擊教練→職業拳擊手→傳說拳王)從tier2起
+// 各自獨立一組,稱號對照 game/combat.ts 的 JOB_TITLES。每組15則(10 common/3 rare/
+// 1 epic/1 legendary),呼應整體70/22/7/1的稀有度比例。
 export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
+  // ── 1階:工讀生(兩分支共用) ──
+  { id: 'job-physicalMelee-1-c01', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '打工排班表比打怪行程還難喬。' },
+  { id: 'job-physicalMelee-1-c02', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '時薪算完,還是打怪比較划算。' },
+  { id: 'job-physicalMelee-1-c03', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '店長說我態度不夠積極,我說我把積極都留給打怪了。' },
+  { id: 'job-physicalMelee-1-c04', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '打工滿一個月,才發現自己連自我介紹都沒準備好。' },
+  { id: 'job-physicalMelee-1-c05', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '排到大夜班,順便練了一下夜視能力。' },
+  { id: 'job-physicalMelee-1-c06', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '同事離職潮又來一波,我還在苦撐。' },
+  { id: 'job-physicalMelee-1-c07', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '打工證明拿到手,才知道原來勇者也要有身分證明。' },
+  { id: 'job-physicalMelee-1-c08', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '上班打卡遲到三分鐘,扣的錢比打十隻怪還多。' },
+  { id: 'job-physicalMelee-1-c09', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '顧客抱怨東抱怨西,魔王反而沒那麼難搞。' },
+  { id: 'job-physicalMelee-1-c10', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '打工這行,永遠有做不完的雜事。' },
+  { id: 'job-physicalMelee-1-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '意外被誇讚做得不錯,尷尬到不知道怎麼接話。' },
+  { id: 'job-physicalMelee-1-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '打工存的錢,終於湊夠買一件像樣的裝備。' },
+  { id: 'job-physicalMelee-1-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '同事偷偷塞給我一杯飲料,說辛苦了。' },
+  { id: 'job-physicalMelee-1-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '打工打到最後我才發現,自己其實比誰都拚。' },
+  { id: 'job-physicalMelee-1-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '那天領到人生第一份薪水單的瞬間,我才明白,長大不過是換一種方式繼續努力而已。' },
+
   // ── 分支A 2階:搬運工 ──
   { id: 'job-physicalMelee-A-2-c01', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 2, payload: '搬到一半突然覺得,勇者這工作跟搬家工人根本沒兩樣。' },
   { id: 'job-physicalMelee-A-2-c02', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 2, payload: '客戶說「這個很輕」,結果閃到腰的是我。' },
@@ -20,7 +36,7 @@ export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalMelee-A-2-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 2, payload: '客戶家的狗一直吠我,我懷疑牠看穿我只是打工仔。' },
   { id: 'job-physicalMelee-A-2-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 2, payload: '搬完貨才發現老闆忘記付錢,勇者的尊嚴值多少錢。' },
   { id: 'job-physicalMelee-A-2-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 2, payload: '意外搬出一箱古董,賣了比打十隻魔王還賺。' },
-  { id: 'job-physicalMelee-A-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 2, payload: '傳說中搬運工界的都市傳說:搬到一口會說話的箱子,牠說牠也很想休息。' },
+  { id: 'job-physicalMelee-A-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 2, payload: '我搬到一口會說話的箱子,牠說牠也很想休息。' },
   { id: 'job-physicalMelee-A-2-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 2, payload: '那天搬到一件比自己還重的行李,才明白勇者這條路,也不過是換個方式扛東西活下去。' },
 
   // ── 分支A 3階:工地師傅 ──
@@ -37,7 +53,7 @@ export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalMelee-A-3-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 3, payload: '老闆說這層樓要提前完工,跟打魔王一樣都是天方夜譚。' },
   { id: 'job-physicalMelee-A-3-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 3, payload: '工地撿到一張圖紙,畫的居然是打怪路線圖。' },
   { id: 'job-physicalMelee-A-3-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 3, payload: '監工說我進步很多,我懷疑他在說反話。' },
-  { id: 'job-physicalMelee-A-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 3, payload: '傳說某任工地師傅蓋到最後一層樓,發現自己蓋的其實是自己的退休金。' },
+  { id: 'job-physicalMelee-A-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 3, payload: '蓋到最後一層樓,我才發現自己蓋的其實是自己的退休金。' },
   { id: 'job-physicalMelee-A-3-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 3, payload: '那棟大樓終於封頂的那天,我才想起,自己好像也很久沒有為誰蓋過什麼了。' },
 
   // ── 分支A 4階:消防員 ──
@@ -54,7 +70,7 @@ export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalMelee-A-4-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 4, payload: '火場裡撿到一枚戒指,主人已經不知道去哪了。' },
   { id: 'job-physicalMelee-A-4-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 4, payload: '隊長說我這次表現特優,獎金卻跟平常一樣少。' },
   { id: 'job-physicalMelee-A-4-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 4, payload: '意外救出一隻會道謝的怪物,牠說牠也只是想活下去。' },
-  { id: 'job-physicalMelee-A-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 4, payload: '傳說某次出勤,火場裡的每一道門後面都只有更多的門,消防員笑說這才是真正的地獄副本。' },
+  { id: 'job-physicalMelee-A-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 4, payload: '這次出勤,火場裡的每一道門後面都只有更多的門,我苦笑,這才是真正的地獄副本。' },
   { id: 'job-physicalMelee-A-4-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 4, payload: '那場大火撲滅之後,我才發現,自己好像也一直在滅著心裡那把沒人看見的火。' },
 
   // ── 分支A 5階:特種部隊 ──
@@ -71,7 +87,7 @@ export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalMelee-A-5-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 5, payload: '這次任務目標,居然只是找回長官弄丟的錢包。' },
   { id: 'job-physicalMelee-A-5-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 5, payload: '潛伏三天三夜,結果魔王根本沒出現過。' },
   { id: 'job-physicalMelee-A-5-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 5, payload: '隊上流傳一個傳說,說最強的士兵都是被生活逼出來的。' },
-  { id: 'job-physicalMelee-A-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 5, payload: '傳說中最高機密的任務內容,其實只是保護一個不知道自己很重要的普通人。' },
+  { id: 'job-physicalMelee-A-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 5, payload: '這次最高機密的任務內容,其實只是保護一個不知道自己很重要的普通人。' },
   { id: 'job-physicalMelee-A-5-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'A', tier: 5, payload: '完成這次任務後才明白,真正的敵人,從來都不是魔王,是那個總是不敢喊累的自己。' },
 
   // ── 分支B 2階:拳擊館學員 ──
@@ -88,7 +104,7 @@ export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalMelee-B-2-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 2, payload: '意外打贏了一場友誼賽,獎品是一顆過期的巧克力。' },
   { id: 'job-physicalMelee-B-2-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 2, payload: '教練說我有天分,我懷疑他對每個人都這樣說。' },
   { id: 'job-physicalMelee-B-2-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 2, payload: '拳館老闆欠薪三個月,魔王倒是每次都準時出現。' },
-  { id: 'job-physicalMelee-B-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 2, payload: '傳說某個學員每天練到深夜,只為了有一天能贏過鏡子裡的自己。' },
+  { id: 'job-physicalMelee-B-2-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 2, payload: '我每天練到深夜,只為了有一天能贏過鏡子裡的自己。' },
   { id: 'job-physicalMelee-B-2-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 2, payload: '那場友誼賽打完之後我才懂,原來我一直在打的,不是對手,是不甘心的自己。' },
 
   // ── 分支B 3階:拳擊教練 ──
@@ -105,7 +121,7 @@ export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalMelee-B-3-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 3, payload: '帶出一個冠軍學員,獎金卻只夠買一雙新拳套。' },
   { id: 'job-physicalMelee-B-3-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 3, payload: '深夜還在拳館練習,鄰居以為我在跟自己打架。' },
   { id: 'job-physicalMelee-B-3-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 3, payload: '教練生涯最驕傲的一刻,是有學員說想活得像我一樣。' },
-  { id: 'job-physicalMelee-B-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 3, payload: '傳說某位教練退役後仍每天進拳館,只為了證明自己還沒被打倒。' },
+  { id: 'job-physicalMelee-B-3-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 3, payload: '退役後我仍每天進拳館,只為了證明自己還沒被打倒。' },
   { id: 'job-physicalMelee-B-3-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 3, payload: '站上擂台邊看著學員出拳的那一刻,我才明白,原來教別人變強,也是自己變強的方式。' },
 
   // ── 分支B 4階:職業拳擊手 ──
@@ -122,7 +138,7 @@ export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalMelee-B-4-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 4, payload: '這場比賽的獎金,終於夠付上個月的房租。' },
   { id: 'job-physicalMelee-B-4-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 4, payload: '對手賽後跟我說謝謝,說是我讓他想起打拳的初衷。' },
   { id: 'job-physicalMelee-B-4-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 4, payload: '意外簽下代言,代言的居然是止痛藥。' },
-  { id: 'job-physicalMelee-B-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 4, payload: '傳說某位拳擊手每次倒地都會再站起來,他說輸贏不重要,不站起來才輸。' },
+  { id: 'job-physicalMelee-B-4-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 4, payload: '每次倒地我都會再站起來,輸贏不重要,不站起來才是真的輸。' },
   { id: 'job-physicalMelee-B-4-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 4, payload: '那場世界冠軍賽打完之後,我才發現,真正的勝利,是還能站著走出擂台。' },
 
   // ── 分支B 5階:傳說拳王 ──
@@ -139,6 +155,6 @@ export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalMelee-B-5-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '意外收到一封信,寫信的是曾經被我打敗的對手,謝謝我讓他學會站起來。' },
   { id: 'job-physicalMelee-B-5-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '傳說賽後被問退休計畫,我說計畫就是繼續打下去。' },
   { id: 'job-physicalMelee-B-5-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '有新人挑戰我,眼神跟當年的自己一模一樣。' },
-  { id: 'job-physicalMelee-B-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '傳說拳王最後一戰前夕,把腰帶摸了一整晚,說這東西比想像中還輕。' },
+  { id: 'job-physicalMelee-B-5-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '最後一戰前夕,我把腰帶摸了一整晚,發現這東西比想像中還輕。' },
   { id: 'job-physicalMelee-B-5-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '站上那個所有人都仰望的位置之後我才懂,傳說從來不是終點,只是換一種孤獨的方式活著。' },
 ];
