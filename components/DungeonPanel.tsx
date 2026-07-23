@@ -3,21 +3,25 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Archetype } from '../game/combat';
 import {
+  availableGemDungeonTypes,
   DUNGEON_ARCHETYPES,
+  DUNGEON_TAB_LABELS,
+  DUNGEON_TABS,
   DUNGEON_TICKET_CAP,
-  MATERIAL_DUNGEON_KINDS,
-  MATERIAL_DUNGEON_REWARD_AMOUNT,
-  MaterialDungeonKind,
+  DungeonTab,
+  dungeonCoinDropAmount,
+  dungeonExpDropAmount,
+  ENHANCE_STONE_DUNGEON_REWARD_AMOUNT,
+  GEM_DUNGEON_REWARD_AMOUNT,
   msUntilNextDungeonTicket,
+  SKILL_BOOK_DUNGEON_REWARD_AMOUNT,
+  unlockedSkillBookDungeonTiers,
 } from '../game/dungeon';
+import { GEM_SPECS, GemType } from '../game/equipment';
+import { MATERIAL_TIER_LABELS, MaterialTier } from '../game/materials';
 import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
 import { useGameState } from '../hooks/useGameState';
 import { useToast } from '../hooks/useToast';
-
-const MATERIAL_DUNGEON_LABELS: Record<MaterialDungeonKind, string> = {
-  enhanceStone: '強化石',
-  skillBook: '技能書',
-};
 
 const ARCHETYPE_LABELS: Record<Archetype, string> = {
   physicalMelee: '物理近戰',
@@ -37,24 +41,31 @@ function formatCountdown(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+// 六分頁副本(見 game/dungeon.ts 的 DUNGEON_TABS):職業試煉之外,技能書/強化石/鑲嵌石/經驗/
+// 金錢各自獨立一頁,全部共用同一組入場券池,只是分頁瀏覽,不是分開計票。
 export function DungeonPanel() {
   // 入場券倒數要即時讀 Date.now(),跟 HeroHealthBar.tsx/SkillTracker.tsx 同一個坑——
   // 這個 component 要跳出 React Compiler 的自動記憶化,不然倒數會凍結在第一次渲染的結果。
   'use no memo';
 
   const dungeon = useGameState((state) => state.dungeon);
+  const level = useGameState((state) => state.level);
+  const hasChosenJob = useGameState((state) => state.hasChosenJob);
+  const jobTier = useGameState((state) => state.jobTier);
   const transferFragments = useGameState((state) => state.transferFragments);
   const transferProofs = useGameState((state) => state.transferProofs);
   const challengeDungeon = useGameState((state) => state.challengeDungeon);
   const enhanceStones = useGameState((state) => state.enhanceStones);
   const skillBooks = useGameState((state) => state.skillBooks);
-  const challengeMaterialDungeon = useGameState((state) => state.challengeMaterialDungeon);
+  const gemCounts = useGameState((state) => state.gemCounts);
+  const challengeSkillBookDungeon = useGameState((state) => state.challengeSkillBookDungeon);
+  const challengeEnhanceStoneDungeon = useGameState((state) => state.challengeEnhanceStoneDungeon);
+  const challengeGemDungeon = useGameState((state) => state.challengeGemDungeon);
+  const challengeExpDungeon = useGameState((state) => state.challengeExpDungeon);
+  const challengeCoinDungeon = useGameState((state) => state.challengeCoinDungeon);
   const showToast = useToast((state) => state.show);
 
-  const MATERIAL_DUNGEON_COUNTS: Record<MaterialDungeonKind, typeof enhanceStones> = {
-    enhanceStone: enhanceStones,
-    skillBook: skillBooks,
-  };
+  const [activeTab, setActiveTab] = useState<DungeonTab>('job');
 
   const [, forceTick] = useState(0);
   useEffect(() => {
@@ -63,6 +74,7 @@ export function DungeonPanel() {
   }, []);
 
   const msUntilNext = msUntilNextDungeonTicket(dungeon);
+  const canChallenge = dungeon.tickets > 0;
 
   const handleChallenge = (archetype: Archetype) => {
     // 用「碎片+證明*10」的合計判定輸贏,不能只比碎片數本身——湊滿10片會自動兌換成1個證明、
@@ -80,20 +92,63 @@ export function DungeonPanel() {
     }
   };
 
-  const handleMaterialChallenge = (kind: MaterialDungeonKind) => {
-    // 材料副本固定只發初階(tier 0),用tier 0數量前後比較就能判斷輸贏,不用比對整個
-    // TieredMaterialCounts——跟 handleChallenge 用「碎片+證明*10」合計判定輸贏同一個道理,
-    // 只是這裡的「合計」單純就是tier 0這一格。
-    const before = MATERIAL_DUNGEON_COUNTS[kind][0];
-    challengeMaterialDungeon(kind);
-    const after = useGameState.getState();
-    const afterCount = kind === 'enhanceStone' ? after.enhanceStones[0] : after.skillBooks[0];
-    if (afterCount > before) {
-      showToast(`打贏${MATERIAL_DUNGEON_LABELS[kind]}副本!獲得 ${MATERIAL_DUNGEON_REWARD_AMOUNT} 個${MATERIAL_DUNGEON_LABELS[kind]}`);
+  const handleSkillBookChallenge = (tier: MaterialTier) => {
+    const before = skillBooks[tier];
+    challengeSkillBookDungeon(tier);
+    const after = useGameState.getState().skillBooks[tier];
+    if (after > before) {
+      showToast(`打贏${MATERIAL_TIER_LABELS[tier]}技能書副本!獲得 ${SKILL_BOOK_DUNGEON_REWARD_AMOUNT} 本${MATERIAL_TIER_LABELS[tier]}技能書`);
     } else {
       showToast('試煉失敗,勇者暫時撤退');
     }
   };
+
+  const handleEnhanceStoneChallenge = () => {
+    const before = enhanceStones[0];
+    challengeEnhanceStoneDungeon();
+    const after = useGameState.getState().enhanceStones[0];
+    if (after > before) {
+      showToast(`打贏強化石副本!獲得 ${ENHANCE_STONE_DUNGEON_REWARD_AMOUNT} 個初階強化石`);
+    } else {
+      showToast('試煉失敗,勇者暫時撤退');
+    }
+  };
+
+  const handleGemChallenge = (gemType: GemType) => {
+    const before = gemCounts[gemType][0];
+    challengeGemDungeon(gemType);
+    const after = useGameState.getState().gemCounts[gemType][0];
+    if (after > before) {
+      showToast(`打贏鑲嵌石副本!獲得 ${GEM_DUNGEON_REWARD_AMOUNT} 個${GEM_SPECS[gemType].name}`);
+    } else {
+      showToast('試煉失敗,勇者暫時撤退');
+    }
+  };
+
+  const handleExpChallenge = () => {
+    const before = level.bankedExp;
+    challengeExpDungeon();
+    const after = useGameState.getState().level.bankedExp;
+    if (after > before || useGameState.getState().level.level > level.level) {
+      showToast(`打贏經驗副本!獲得 ${dungeonExpDropAmount(level.level)} 經驗`);
+    } else {
+      showToast('試煉失敗,勇者暫時撤退');
+    }
+  };
+
+  const handleCoinChallenge = () => {
+    const before = useGameState.getState().coins;
+    challengeCoinDungeon();
+    const after = useGameState.getState().coins;
+    if (after > before) {
+      showToast(`打贏金錢副本!獲得 ${dungeonCoinDropAmount(level.level)} 金幣`);
+    } else {
+      showToast('試煉失敗,勇者暫時撤退');
+    }
+  };
+
+  const unlockedTiers = unlockedSkillBookDungeonTiers(hasChosenJob, jobTier);
+  const todayGemTypes = availableGemDungeonTypes(new Date().getDay());
 
   return (
     <View style={styles.container}>
@@ -105,48 +160,119 @@ export function DungeonPanel() {
         {msUntilNext !== null && <Text style={styles.ticketCountdown}>下一張 {formatCountdown(msUntilNext)}</Text>}
       </View>
 
-      {DUNGEON_ARCHETYPES.map((archetype) => {
-        const fragmentCount = transferFragments[archetype] ?? 0;
-        const proofCount = transferProofs[archetype] ?? 0;
-        const canChallenge = dungeon.tickets > 0;
-        return (
-          <View key={archetype} style={styles.card}>
-            <Text style={styles.cardTitle}>{ARCHETYPE_LABELS[archetype]}試煉</Text>
-            <Text style={styles.cardProgress}>
-              {TRANSFER_FRAGMENT_NAMES[archetype]} {fragmentCount}/{TRANSFER_FRAGMENTS_PER_PROOF}｜{TRANSFER_PROOF_NAMES[archetype]} x
-              {proofCount}
+      <View style={styles.tabRow}>
+        {DUNGEON_TABS.map((tab) => (
+          <Pressable
+            key={tab}
+            style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text style={styles.tabLabel} numberOfLines={1}>
+              {DUNGEON_TAB_LABELS[tab]}
             </Text>
-            <Pressable
-              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
-              onPress={() => handleChallenge(archetype)}
-              disabled={!canChallenge}
-            >
-              <Text style={styles.challengeLabel}>挑戰</Text>
-            </Pressable>
-          </View>
-        );
-      })}
+          </Pressable>
+        ))}
+      </View>
 
-      {/* 強化石/技能書副本:跟上面 6 個職業試煉共用同一組入場券池,不分職業、打贏保證掉落
-          固定數量的初階材料,呼應「技能書/強化石取得量」再多開一條主動路線。 */}
-      {MATERIAL_DUNGEON_KINDS.map((kind) => {
-        const canChallenge = dungeon.tickets > 0;
-        return (
-          <View key={kind} style={styles.card}>
-            <Text style={styles.cardTitle}>{MATERIAL_DUNGEON_LABELS[kind]}副本</Text>
+      {activeTab === 'job' &&
+        DUNGEON_ARCHETYPES.map((archetype) => {
+          const fragmentCount = transferFragments[archetype] ?? 0;
+          const proofCount = transferProofs[archetype] ?? 0;
+          return (
+            <View key={archetype} style={styles.card}>
+              <Text style={styles.cardTitle}>{ARCHETYPE_LABELS[archetype]}試煉</Text>
+              <Text style={styles.cardProgress}>
+                {TRANSFER_FRAGMENT_NAMES[archetype]} {fragmentCount}/{TRANSFER_FRAGMENTS_PER_PROOF}｜{TRANSFER_PROOF_NAMES[archetype]} x
+                {proofCount}
+              </Text>
+              <Pressable
+                style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+                onPress={() => handleChallenge(archetype)}
+                disabled={!canChallenge}
+              >
+                <Text style={styles.challengeLabel}>挑戰</Text>
+              </Pressable>
+            </View>
+          );
+        })}
+
+      {activeTab === 'skillBook' &&
+        unlockedTiers.map((tier) => (
+          <View key={tier} style={styles.card}>
+            <Text style={styles.cardTitle}>{MATERIAL_TIER_LABELS[tier]}技能書副本</Text>
             <Text style={styles.cardProgress}>
-              打贏保證掉落 {MATERIAL_DUNGEON_REWARD_AMOUNT} 個初階{MATERIAL_DUNGEON_LABELS[kind]}(持有 {MATERIAL_DUNGEON_COUNTS[kind][0]} 個)
+              打贏保證掉落 {SKILL_BOOK_DUNGEON_REWARD_AMOUNT} 本{MATERIAL_TIER_LABELS[tier]}技能書(持有 {skillBooks[tier]} 本)
             </Text>
             <Pressable
               style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
-              onPress={() => handleMaterialChallenge(kind)}
+              onPress={() => handleSkillBookChallenge(tier)}
               disabled={!canChallenge}
             >
               <Text style={styles.challengeLabel}>挑戰</Text>
             </Pressable>
           </View>
-        );
-      })}
+        ))}
+
+      {activeTab === 'enhanceStone' && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>強化石副本</Text>
+          <Text style={styles.cardProgress}>
+            打贏保證掉落 {ENHANCE_STONE_DUNGEON_REWARD_AMOUNT} 個初階強化石(持有 {enhanceStones[0]} 個)
+          </Text>
+          <Pressable
+            style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+            onPress={handleEnhanceStoneChallenge}
+            disabled={!canChallenge}
+          >
+            <Text style={styles.challengeLabel}>挑戰</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {activeTab === 'gem' &&
+        todayGemTypes.map((gemType) => (
+          <View key={gemType} style={styles.card}>
+            <Text style={styles.cardTitle}>{GEM_SPECS[gemType].name}副本</Text>
+            <Text style={styles.cardProgress}>
+              打贏保證掉落 {GEM_DUNGEON_REWARD_AMOUNT} 個初階{GEM_SPECS[gemType].name}(持有 {gemCounts[gemType][0]} 個)
+            </Text>
+            <Pressable
+              style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+              onPress={() => handleGemChallenge(gemType)}
+              disabled={!canChallenge}
+            >
+              <Text style={styles.challengeLabel}>挑戰</Text>
+            </Pressable>
+          </View>
+        ))}
+
+      {activeTab === 'exp' && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>經驗副本</Text>
+          <Text style={styles.cardProgress}>打贏保證獲得 {dungeonExpDropAmount(level.level)} 經驗</Text>
+          <Pressable
+            style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+            onPress={handleExpChallenge}
+            disabled={!canChallenge}
+          >
+            <Text style={styles.challengeLabel}>挑戰</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {activeTab === 'coin' && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>金錢副本</Text>
+          <Text style={styles.cardProgress}>打贏保證獲得 {dungeonCoinDropAmount(level.level)} 金幣</Text>
+          <Pressable
+            style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+            onPress={handleCoinChallenge}
+            disabled={!canChallenge}
+          >
+            <Text style={styles.challengeLabel}>挑戰</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -179,6 +305,28 @@ const styles = StyleSheet.create({
   },
   ticketCountdown: {
     color: '#8a8a95',
+    fontSize: 11,
+  },
+  // 固定寬度3欄網格:6個分頁不管文字長短都排成整齊的2排,呼應 EquipmentPanel.tsx
+  // 部位篩選列的同一種排版邏輯。
+  tabRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginBottom: 6,
+  },
+  tabButton: {
+    width: 88,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#1c1c24',
+    alignItems: 'center',
+  },
+  tabButtonActive: {
+    backgroundColor: '#4a4456',
+  },
+  tabLabel: {
+    color: '#f2f2f2',
     fontSize: 11,
   },
   card: {

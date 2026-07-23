@@ -84,13 +84,20 @@ import {
 import { rollCoinWindfall } from '../game/currency';
 import {
   applyDungeonTicketRegen,
+  COIN_DUNGEON_SCHOOL,
   createInitialDungeonState,
+  dungeonCoinDropAmount,
   DungeonState,
   dungeonDifficultyMultiplier,
+  dungeonExpDropAmount,
   dungeonWinCoinReward,
-  MATERIAL_DUNGEON_REWARD_AMOUNT,
-  MATERIAL_DUNGEON_SCHOOL,
-  MaterialDungeonKind,
+  ENHANCE_STONE_DUNGEON_REWARD_AMOUNT,
+  ENHANCE_STONE_DUNGEON_SCHOOL,
+  EXP_DUNGEON_SCHOOL,
+  GEM_DUNGEON_REWARD_AMOUNT,
+  GEM_DUNGEON_SCHOOL,
+  SKILL_BOOK_DUNGEON_REWARD_AMOUNT,
+  SKILL_BOOK_DUNGEON_SCHOOL,
   spendDungeonTicket,
 } from '../game/dungeon';
 import { applyTransferFragmentGain, rollTransferFragmentDrop, TRANSFER_FRAGMENTS_PER_PROOF, TRANSFER_PROOF_NAMES } from '../game/transfer';
@@ -511,7 +518,11 @@ interface GameState {
   boostCurrentFight: () => void;
   setJob: (archetype: Archetype, branch: JobBranch) => void;
   challengeDungeon: (archetype: Archetype) => void;
-  challengeMaterialDungeon: (kind: MaterialDungeonKind) => void;
+  challengeSkillBookDungeon: (tier: MaterialTier) => void;
+  challengeEnhanceStoneDungeon: () => void;
+  challengeGemDungeon: (gemType: GemType) => void;
+  challengeExpDungeon: () => void;
+  challengeCoinDungeon: () => void;
   promoteJobTier: () => void;
   setSecondaryJob: (archetype: Archetype | null) => void;
   equip: (itemId: string) => void;
@@ -1431,18 +1442,17 @@ export const useGameState = create<GameState>((set, get) => ({
     persist(get());
   },
 
-  // 強化石/技能書副本(見 game/dungeon.ts 的 MATERIAL_DUNGEON_KINDS):跟上面 6 個職業試煉
-  // 共用同一組入場券池,邏輯照抄 challengeDungeon,差別只在沒有「目標職業」可以反推怪物系別
-  // (固定用 MATERIAL_DUNGEON_SCHOOL),打贏發的是固定數量的初階材料,不是轉職碎片。
-  challengeMaterialDungeon: (kind) => {
+  // 副本六分頁裡的五種材料/資源副本(見 game/dungeon.ts):跟上面 6 個職業試煉共用同一組
+  // 入場券池,邏輯照抄 challengeDungeon,差別只在沒有「目標職業」可以反推怪物系別
+  // (各自固定用自己的 xxx_DUNGEON_SCHOOL),打贏發的是固定數量的資源,不是轉職碎片。
+  challengeEnhanceStoneDungeon: () => {
     const state = get();
     const spent = spendDungeonTicket(state.dungeon);
     if (spent === null) return;
 
     const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
-    const dungeonMonsterSchool = MATERIAL_DUNGEON_SCHOOL[kind];
     const matchingResistance =
-      dungeonMonsterSchool === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
+      ENHANCE_STONE_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
     const passive3Bonus =
       getPassiveBonusValue(state.studentSkillTree.passive3) +
       (state.hasChosenJob ? getPassiveBonusValue(state.skillTree[state.job.archetype].passive3) : 0);
@@ -1477,9 +1487,218 @@ export const useGameState = create<GameState>((set, get) => ({
       heroHp: healthResult.nextHp,
       coins: state.coins + dungeonWinCoinReward(state.level.level),
       dungeon: spent,
-      ...(kind === 'enhanceStone'
-        ? { enhanceStones: grantBasicMaterial(state.enhanceStones, MATERIAL_DUNGEON_REWARD_AMOUNT) }
-        : { skillBooks: grantBasicMaterial(state.skillBooks, MATERIAL_DUNGEON_REWARD_AMOUNT) }),
+      enhanceStones: grantBasicMaterial(state.enhanceStones, ENHANCE_STONE_DUNGEON_REWARD_AMOUNT),
+      dailyTaskProgress: nextDailyTaskProgress,
+      weeklyChallengeProgress: nextWeeklyChallengeProgress,
+    });
+    checkAndUnlockAchievements(get, set);
+    persist(get());
+  },
+
+  // 技能書副本:保底10本(見 game/dungeon.ts 的 SKILL_BOOK_DUNGEON_REWARD_AMOUNT),挑戰時
+  // 指定要打哪一階(UI 只會列出 unlockedSkillBookDungeonTiers 允許的階級,這裡不重複檢查),
+  // 打贏直接發到指定的那一階,不像怪物掉落還要另外判斷「技能是否已封頂」。
+  challengeSkillBookDungeon: (tier) => {
+    const state = get();
+    const spent = spendDungeonTicket(state.dungeon);
+    if (spent === null) return;
+
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    const matchingResistance =
+      SKILL_BOOK_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
+    const passive3Bonus =
+      getPassiveBonusValue(state.studentSkillTree.passive3) +
+      (state.hasChosenJob ? getPassiveBonusValue(state.skillTree[state.job.archetype].passive3) : 0);
+    const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
+    const healthResult = resolveFightHealth(
+      state.heroHp,
+      heroMaxHp(state.level.level),
+      state.level.level,
+      state.jobTier,
+      matchingResistance,
+      'legendary',
+      dungeonDifficultyMultiplier(state.level.level),
+      lifestealBonus
+    );
+
+    const nextDailyTaskProgress = incrementDailyTaskProgress(state.dailyTaskProgress, 'dungeon');
+    const nextWeeklyChallengeProgress = incrementWeeklyChallengeProgress(state.weeklyChallengeProgress, 'dungeon');
+
+    if (healthResult.defeated) {
+      set({
+        heroHp: healthResult.nextHp,
+        dungeon: spent,
+        defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
+        dailyTaskProgress: nextDailyTaskProgress,
+        weeklyChallengeProgress: nextWeeklyChallengeProgress,
+      });
+      persist(get());
+      return;
+    }
+
+    set({
+      heroHp: healthResult.nextHp,
+      coins: state.coins + dungeonWinCoinReward(state.level.level),
+      dungeon: spent,
+      skillBooks: grantMaterialAtTier(state.skillBooks, tier, SKILL_BOOK_DUNGEON_REWARD_AMOUNT),
+      dailyTaskProgress: nextDailyTaskProgress,
+      weeklyChallengeProgress: nextWeeklyChallengeProgress,
+    });
+    checkAndUnlockAchievements(get, set);
+    persist(get());
+  },
+
+  // 鑲嵌石副本:挑戰時指定要打哪一種寶石(UI 只會列出 availableGemDungeonTypes(today) 允許的
+  // 種類),打贏發固定數量的該種寶石,固定初階(呼應既有寶石掉落一律初階的慣例)。
+  challengeGemDungeon: (gemType) => {
+    const state = get();
+    const spent = spendDungeonTicket(state.dungeon);
+    if (spent === null) return;
+
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    const matchingResistance =
+      GEM_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
+    const passive3Bonus =
+      getPassiveBonusValue(state.studentSkillTree.passive3) +
+      (state.hasChosenJob ? getPassiveBonusValue(state.skillTree[state.job.archetype].passive3) : 0);
+    const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
+    const healthResult = resolveFightHealth(
+      state.heroHp,
+      heroMaxHp(state.level.level),
+      state.level.level,
+      state.jobTier,
+      matchingResistance,
+      'legendary',
+      dungeonDifficultyMultiplier(state.level.level),
+      lifestealBonus
+    );
+
+    const nextDailyTaskProgress = incrementDailyTaskProgress(state.dailyTaskProgress, 'dungeon');
+    const nextWeeklyChallengeProgress = incrementWeeklyChallengeProgress(state.weeklyChallengeProgress, 'dungeon');
+
+    if (healthResult.defeated) {
+      set({
+        heroHp: healthResult.nextHp,
+        dungeon: spent,
+        defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
+        dailyTaskProgress: nextDailyTaskProgress,
+        weeklyChallengeProgress: nextWeeklyChallengeProgress,
+      });
+      persist(get());
+      return;
+    }
+
+    const nextGemCounts: GemCounts = {
+      ...state.gemCounts,
+      [gemType]: { ...state.gemCounts[gemType], 0: state.gemCounts[gemType][0] + GEM_DUNGEON_REWARD_AMOUNT },
+    };
+    set({
+      heroHp: healthResult.nextHp,
+      coins: state.coins + dungeonWinCoinReward(state.level.level),
+      dungeon: spent,
+      gemCounts: nextGemCounts,
+      dailyTaskProgress: nextDailyTaskProgress,
+      weeklyChallengeProgress: nextWeeklyChallengeProgress,
+    });
+    checkAndUnlockAchievements(get, set);
+    persist(get());
+  },
+
+  // 經驗副本:打贏直接發固定經驗(隨等級成長,見 dungeonExpDropAmount),立刻套用
+  // autoLevelUp——跟成就/每日登入獎勵的經驗發放同一套模式。
+  challengeExpDungeon: () => {
+    const state = get();
+    const spent = spendDungeonTicket(state.dungeon);
+    if (spent === null) return;
+
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    const matchingResistance =
+      EXP_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
+    const passive3Bonus =
+      getPassiveBonusValue(state.studentSkillTree.passive3) +
+      (state.hasChosenJob ? getPassiveBonusValue(state.skillTree[state.job.archetype].passive3) : 0);
+    const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
+    const healthResult = resolveFightHealth(
+      state.heroHp,
+      heroMaxHp(state.level.level),
+      state.level.level,
+      state.jobTier,
+      matchingResistance,
+      'legendary',
+      dungeonDifficultyMultiplier(state.level.level),
+      lifestealBonus
+    );
+
+    const nextDailyTaskProgress = incrementDailyTaskProgress(state.dailyTaskProgress, 'dungeon');
+    const nextWeeklyChallengeProgress = incrementWeeklyChallengeProgress(state.weeklyChallengeProgress, 'dungeon');
+
+    if (healthResult.defeated) {
+      set({
+        heroHp: healthResult.nextHp,
+        dungeon: spent,
+        defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
+        dailyTaskProgress: nextDailyTaskProgress,
+        weeklyChallengeProgress: nextWeeklyChallengeProgress,
+      });
+      persist(get());
+      return;
+    }
+
+    set({
+      heroHp: healthResult.nextHp,
+      dungeon: spent,
+      level: autoLevelUp(accumulateExp(state.level, dungeonExpDropAmount(state.level.level))).state,
+      dailyTaskProgress: nextDailyTaskProgress,
+      weeklyChallengeProgress: nextWeeklyChallengeProgress,
+    });
+    checkAndUnlockAchievements(get, set);
+    persist(get());
+  },
+
+  // 金錢副本:打贏直接發固定金幣(隨等級成長,見 dungeonCoinDropAmount),取代原本
+  // 每場都有的附帶金幣獎勵(dungeonWinCoinReward),不會兩份一起疊加。
+  challengeCoinDungeon: () => {
+    const state = get();
+    const spent = spendDungeonTicket(state.dungeon);
+    if (spent === null) return;
+
+    const substatTotals = getSubstatTotals(state.equipment, state.itemInstances);
+    const matchingResistance =
+      COIN_DUNGEON_SCHOOL === 'physical' ? substatTotals.physicalResistance : substatTotals.magicResistance;
+    const passive3Bonus =
+      getPassiveBonusValue(state.studentSkillTree.passive3) +
+      (state.hasChosenJob ? getPassiveBonusValue(state.skillTree[state.job.archetype].passive3) : 0);
+    const lifestealBonus = substatTotals.lifesteal + passive3Bonus;
+    const healthResult = resolveFightHealth(
+      state.heroHp,
+      heroMaxHp(state.level.level),
+      state.level.level,
+      state.jobTier,
+      matchingResistance,
+      'legendary',
+      dungeonDifficultyMultiplier(state.level.level),
+      lifestealBonus
+    );
+
+    const nextDailyTaskProgress = incrementDailyTaskProgress(state.dailyTaskProgress, 'dungeon');
+    const nextWeeklyChallengeProgress = incrementWeeklyChallengeProgress(state.weeklyChallengeProgress, 'dungeon');
+
+    if (healthResult.defeated) {
+      set({
+        heroHp: healthResult.nextHp,
+        dungeon: spent,
+        defeatRecoveryUntil: Date.now() + RECOVERY_DELAY_MS,
+        dailyTaskProgress: nextDailyTaskProgress,
+        weeklyChallengeProgress: nextWeeklyChallengeProgress,
+      });
+      persist(get());
+      return;
+    }
+
+    set({
+      heroHp: healthResult.nextHp,
+      coins: state.coins + dungeonCoinDropAmount(state.level.level),
+      dungeon: spent,
       dailyTaskProgress: nextDailyTaskProgress,
       weeklyChallengeProgress: nextWeeklyChallengeProgress,
     });

@@ -1,4 +1,7 @@
-import { Archetype, DamageType } from './combat';
+import { Archetype, DamageType, JobTier } from './combat';
+import { GEM_SPECS, GEM_TYPES, GemType } from './equipment';
+import { expPerMin } from './leveling';
+import { MATERIAL_TIERS, MaterialTier } from './materials';
 
 // 轉職試煉副本系統:6 個職業各自獨立的副本,打贏保證掉落該職業的轉職碎片(見 game/transfer.ts),
 // 把過去唯一取得碎片的方式(打大魔王 3% 隨機機率、不分職業亂抽)補上一條主動、有目標的路線。
@@ -68,18 +71,67 @@ export const DUNGEON_ARCHETYPES: Archetype[] = [
   'magicSupport',
 ];
 
-// 強化石/技能書副本:跟6個職業轉職試煉共用同一組入場券池,打贏保證掉落對應材料——
-// 呼應「技能書/強化石取得量」再多開一條主動、不吃機率的路線(轉職試煉本身就是「打贏才有,
-// 不看機率」的設計,材料副本延續同一套精神)。掉落數固定抓「轉職碎片掉落量(每場1片)的
-// 2倍」,不是碰巧選的數字。
-export type MaterialDungeonKind = 'enhanceStone' | 'skillBook';
-export const MATERIAL_DUNGEON_KINDS: MaterialDungeonKind[] = ['enhanceStone', 'skillBook'];
-export const MATERIAL_DUNGEON_REWARD_AMOUNT = 2;
-
-// 材料副本沒有「目標職業」可以拿來反推怪物系別(不像上面的 archetype 試煉刻意選相反系別
-// 逼玩家不能只堆單一系抗性),兩個副本各自固定一種系別、一半一半,至少不會讓玩家單靠
-// 一套抗性配置就通吃全部副本。
-export const MATERIAL_DUNGEON_SCHOOL: Record<MaterialDungeonKind, DamageType> = {
-  enhanceStone: 'physical',
-  skillBook: 'magic',
+// 副本六分頁(見 components/DungeonPanel.tsx):職業試煉之外再拆五種各自獨立的材料/資源副本,
+// 全部共用同一組入場券池,不分頁另外開票。
+export type DungeonTab = 'job' | 'skillBook' | 'enhanceStone' | 'gem' | 'exp' | 'coin';
+export const DUNGEON_TABS: DungeonTab[] = ['job', 'skillBook', 'enhanceStone', 'gem', 'exp', 'coin'];
+export const DUNGEON_TAB_LABELS: Record<DungeonTab, string> = {
+  job: '職業副本',
+  skillBook: '技能書副本',
+  enhanceStone: '強化石副本',
+  gem: '鑲嵌石副本',
+  exp: '經驗副本',
+  coin: '金錢副本',
 };
+
+// 強化石副本:固定初階,打贏保證掉落固定數量,維持既有份量不變(這次改版只提高技能書副本的量)。
+export const ENHANCE_STONE_DUNGEON_REWARD_AMOUNT = 2;
+export const ENHANCE_STONE_DUNGEON_SCHOOL: DamageType = 'physical';
+
+// 技能書副本:保底10本(舊制2本的5倍),且依職業階級開放對應階的副本——玩家目前的 jobTier
+// 開到哪,0階(初階,學生期也能挑戰)到 jobTier 之間的每一階都各自是一個獨立副本卡片,
+// 一旦開放就不會因為之後繼續轉職而關閉(jobTier 只會往上升、不會倒退,所以「開過的階級
+// 永久可玩」自然成立,不需要額外的「最高曾達到階級」欄位)。
+export const SKILL_BOOK_DUNGEON_REWARD_AMOUNT = 10;
+export const SKILL_BOOK_DUNGEON_SCHOOL: DamageType = 'magic';
+
+export function unlockedSkillBookDungeonTiers(hasChosenJob: boolean, jobTier: JobTier): MaterialTier[] {
+  const maxTier = hasChosenJob ? jobTier : 0;
+  return MATERIAL_TIERS.filter((tier) => tier <= maxTier);
+}
+
+// 鑲嵌石副本:只開放10種「素質石」(kind: 'substat'),經驗/金幣/速度3種加成石不列入
+// (那3種已經有其他常態管道,不需要再開副本)。平日(週一~週五)一天只開放2種、5天剛好
+// 排完全部10種,一組固定配對呼應同一類數值(抗性/物理爆擊/魔法爆擊/攻擊/生存);
+// 週末(六日)全部10種一次開放,給錯過平日輪值的玩家補打的機會。
+const GEM_DUNGEON_SUBSTAT_TYPES: GemType[] = GEM_TYPES.filter((type) => GEM_SPECS[type].kind === 'substat');
+const WEEKDAY_GEM_DUNGEON_PAIRS: Partial<Record<number, [GemType, GemType]>> = {
+  1: ['physicalResistanceGem', 'magicResistanceGem'],
+  2: ['physicalCritRateGem', 'physicalCritDamageGem'],
+  3: ['magicCritRateGem', 'magicCritDamageGem'],
+  4: ['physicalAttackGem', 'magicAttackGem'],
+  5: ['lifestealGem', 'hpRegenGem'],
+};
+export const GEM_DUNGEON_REWARD_AMOUNT = 3;
+export const GEM_DUNGEON_SCHOOL: DamageType = 'magic';
+
+// weekday:JS Date.getDay() 的 0(日)~6(六)。
+export function availableGemDungeonTypes(weekday: number): GemType[] {
+  return WEEKDAY_GEM_DUNGEON_PAIRS[weekday] ?? GEM_DUNGEON_SUBSTAT_TYPES;
+}
+
+// 經驗/金錢副本:跟現有離線經驗公式(expPerMin)同樣邏輯隨等級成長——經驗直接借
+// expPerMin 換算成「打贏=N分鐘份離線經驗」;金錢延續 dungeonWinCoinReward 同一組線性
+// 成長參數放大,兩者都不吃隨機,打贏一次就是固定這個數。
+const DUNGEON_EXP_REWARD_MINUTES = 45;
+export function dungeonExpDropAmount(level: number): number {
+  return Math.floor(expPerMin(level) * DUNGEON_EXP_REWARD_MINUTES);
+}
+export const EXP_DUNGEON_SCHOOL: DamageType = 'physical';
+
+const DUNGEON_COIN_DROP_BASE = 300;
+const DUNGEON_COIN_DROP_LEVEL_FACTOR = 20;
+export function dungeonCoinDropAmount(level: number): number {
+  return Math.round(DUNGEON_COIN_DROP_BASE + level * DUNGEON_COIN_DROP_LEVEL_FACTOR);
+}
+export const COIN_DUNGEON_SCHOOL: DamageType = 'physical';
