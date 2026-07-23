@@ -88,41 +88,52 @@ function ArchetypeGrid({
   onSelectStudent: () => void;
 }) {
   const studentIcon = getStudentIcon();
-  return (
-    <View style={styles.archetypeGrid}>
-      <Pressable style={[styles.archetypeTile, styles.studentTile]} onPress={onSelectStudent}>
-        <View style={[styles.archetypeIconWrap, styles.studentIconWrap]}>
-          <PixelSprite frame={studentIcon.frame} palette={studentIcon.palette} pixelSize={2.5} />
+
+  function renderArchetypeTile(archetype: Archetype) {
+    const icon = getSkillIcon(archetype, 'active1', 1);
+    const isPrimary = hasChosenJob && job === archetype;
+    const isSecondary = hasChosenJob && secondaryJob === archetype;
+    return (
+      <Pressable key={archetype} style={styles.archetypeTile} onPress={() => onSelect(archetype)}>
+        <View style={[styles.archetypeIconWrap, isPrimary && styles.archetypeIconWrapPrimary]}>
+          <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={2.5} />
         </View>
         <Text style={styles.archetypeTileLabel} numberOfLines={1}>
-          學生
+          {ARCHETYPE_LABELS[archetype]}
         </Text>
+        {isPrimary && (
+          <View style={styles.archetypeTileTagWrap}>
+            <Text style={styles.archetypeTileTag}>主</Text>
+          </View>
+        )}
+        {isSecondary && (
+          <View style={styles.archetypeTileTagWrap}>
+            <Text style={styles.archetypeTileTag}>副</Text>
+          </View>
+        )}
       </Pressable>
-      {ARCHETYPES.map((archetype) => {
-        const icon = getSkillIcon(archetype, 'active1', 1);
-        const isPrimary = hasChosenJob && job === archetype;
-        const isSecondary = hasChosenJob && secondaryJob === archetype;
-        return (
-          <Pressable key={archetype} style={styles.archetypeTile} onPress={() => onSelect(archetype)}>
-            <View style={[styles.archetypeIconWrap, isPrimary && styles.archetypeIconWrapPrimary]}>
-              <PixelSprite frame={icon.frame} palette={icon.palette} pixelSize={2.5} />
-            </View>
-            <Text style={styles.archetypeTileLabel} numberOfLines={1}>
-              {ARCHETYPE_LABELS[archetype]}
-            </Text>
-            {isPrimary && (
-              <View style={styles.archetypeTileTagWrap}>
-                <Text style={styles.archetypeTileTag}>主</Text>
-              </View>
-            )}
-            {isSecondary && (
-              <View style={styles.archetypeTileTagWrap}>
-                <Text style={styles.archetypeTileTag}>副</Text>
-              </View>
-            )}
-          </Pressable>
-        );
-      })}
+    );
+  }
+
+  // 3欄x3列固定格位:第1列只放學生(置中在第2欄,兩側用等寬佔位撐開,確保跟下面兩列
+  // 對齊同一組欄位),第2列放前3個職業、第3列放後3個職業——呼應「1-2學生,2/3列各3職業」
+  // 的版面需求,不再是單純自動換行的flexWrap。
+  return (
+    <View style={styles.archetypeGridRows}>
+      <View style={styles.archetypeGridRow}>
+        <View style={styles.archetypeGridSlotPlaceholder} />
+        <Pressable style={[styles.archetypeTile, styles.studentTile]} onPress={onSelectStudent}>
+          <View style={[styles.archetypeIconWrap, styles.studentIconWrap]}>
+            <PixelSprite frame={studentIcon.frame} palette={studentIcon.palette} pixelSize={2.5} />
+          </View>
+          <Text style={styles.archetypeTileLabel} numberOfLines={1}>
+            學生
+          </Text>
+        </Pressable>
+        <View style={styles.archetypeGridSlotPlaceholder} />
+      </View>
+      <View style={styles.archetypeGridRow}>{ARCHETYPES.slice(0, 3).map(renderArchetypeTile)}</View>
+      <View style={styles.archetypeGridRow}>{ARCHETYPES.slice(3, 6).map(renderArchetypeTile)}</View>
     </View>
   );
 }
@@ -562,12 +573,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  archetypeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
+  archetypeGridRows: {
     gap: 8,
     width: '100%',
+    alignItems: 'center',
+  },
+  archetypeGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  // 第1列學生格子兩側的等寬佔位(尺寸跟 archetypeTile 一致,不可見、不可點),讓學生格子
+  // 精準對齊第2欄,跟下面兩列職業格子的欄位保持一致。
+  archetypeGridSlotPlaceholder: {
+    width: 82,
+    height: 78,
   },
   // 固定寬高:原本只有寬度固定,高度隨「主/副」標籤有沒有出現而增減一行,6張卡片參差不齊。
   // 標籤改成絕對定位疊在卡片右上角(見 archetypeTileTagWrap),不再佔用版面高度。
