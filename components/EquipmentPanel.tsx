@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
-  EquipmentBonusStat,
   EquipmentItem,
   EquipmentSlot,
   getEquippableItemsForSlot,
@@ -50,18 +49,7 @@ const SUB_VIEWS: { id: SubView; label: string }[] = [
   { id: 'shop', label: '商店' },
 ];
 
-// 篩選:生成式目錄一個部位最多50個等級檔,商店/已擁有清單常常一次塞滿一長串——
-// 篩主加成類型,排序沿用既有的依需求等級規則。
-type StatFilter = 'all' | EquipmentBonusStat;
-const STAT_FILTERS: StatFilter[] = ['all', 'exp', 'coins', 'speed'];
-const STAT_FILTER_LABELS: Record<StatFilter, string> = {
-  all: '全部',
-  exp: '經驗',
-  coins: '金幣',
-  speed: '速度',
-};
-
-// 「裝備」分頁:已擁有款式瀏覽(owned)+商店(shop)兩個子檢視,共用同一組部位/加成篩選列,
+// 「裝備」分頁:已擁有款式瀏覽(owned)+商店(shop)兩個子檢視,共用同一組部位篩選列,
 // 8欄密集網格。紙娃娃(角色預覽+穿戴總覽)搬到「狀態」分頁(CharacterStatusPanel.tsx)
 // 取代那裡原本的「已裝備物品」格子,不在這裡重複顯示;原本的「穿戴」子檢視也一併拿掉——
 // 「已擁有」清單裡點開已裝備的那件,預覽卡片一樣有卸下/鑑定/重擲功能,不需要另開一頁。
@@ -81,7 +69,6 @@ export function EquipmentPanel() {
 
   const [subView, setSubView] = useState<SubView>('owned');
   const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
-  const [statFilter, setStatFilter] = useState<StatFilter>('all');
   // 點清單裡的道具先跳出預覽卡片(見 ItemPreviewModal.tsx)顯示完整屬性,玩家自己按按鈕
   // 才會真的改動裝備狀態,不是點下去就直接買/裝上去。
   const [previewItem, setPreviewItem] = useState<EquipmentItem | null>(null);
@@ -89,7 +76,6 @@ export function EquipmentPanel() {
   const filterSlots = slotFilter === 'all' ? SLOT_Z_ORDER : [slotFilter];
   const candidateItems = filterSlots
     .flatMap((slot) => getEquippableItemsForSlot(slot, job.archetype, job.branch))
-    .filter((item) => statFilter === 'all' || item.bonus.stat === statFilter)
     .sort((a, b) => (a.requiredLevel ?? 0) - (b.requiredLevel ?? 0));
 
   const ownedItems = candidateItems.filter((item) => isItemUnlocked(unlockedItemIds, item.id));
@@ -167,25 +153,18 @@ export function EquipmentPanel() {
         ))}
       </View>
 
-      <View style={styles.slotFilterRow}>
+      {/* 部位篩選:固定寬度5欄網格,不受各部位標籤文字長短影響,10個選項(全部+9部位)
+          剛好排成整齊的2排。 */}
+      <View style={styles.slotFilterGrid}>
         {SLOT_FILTERS.map((filter) => (
           <Pressable
             key={filter}
             style={[styles.slotFilterChip, slotFilter === filter && styles.filterChipActive]}
             onPress={() => setSlotFilter(filter)}
           >
-            <Text style={styles.filterChipLabel}>{SLOT_FILTER_LABELS[filter]}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <View style={styles.filterRow}>
-        {STAT_FILTERS.map((filter) => (
-          <Pressable
-            key={filter}
-            style={[styles.filterChip, statFilter === filter && styles.filterChipActive]}
-            onPress={() => setStatFilter(filter)}
-          >
-            <Text style={styles.filterChipLabel}>{STAT_FILTER_LABELS[filter]}</Text>
+            <Text style={styles.filterChipLabel} numberOfLines={1}>
+              {SLOT_FILTER_LABELS[filter]}
+            </Text>
           </Pressable>
         ))}
       </View>
@@ -199,9 +178,7 @@ export function EquipmentPanel() {
           ))}
         {subView === 'shop' &&
           (shopItems.length === 0 ? (
-            <Text style={styles.emptyText}>
-              {slotFilter === 'all' && statFilter === 'all' ? '款式都收集齊了' : '這個篩選條件下沒有符合的款式'}
-            </Text>
+            <Text style={styles.emptyText}>{slotFilter === 'all' ? '款式都收集齊了' : '這個部位沒有符合的款式'}</Text>
           ) : (
             shopItems.map((item) =>
               renderItemTile(item, { locked: item.requiredLevel !== undefined && level.level < item.requiredLevel })
@@ -258,35 +235,22 @@ const styles = StyleSheet.create({
     color: '#f2f2f2',
     fontSize: 11,
   },
-  slotFilterRow: {
+  // 固定寬度5欄網格:10個選項(全部+9部位)不管文字長短都排成整齊的2排,
+  // 不會像 flex-wrap 那樣依文字寬度自然換行、行末參差不齊。
+  slotFilterGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
     gap: 4,
     marginBottom: 4,
   },
   slotFilterChip: {
-    paddingVertical: 3,
-    paddingHorizontal: 7,
-    borderRadius: 10,
+    width: 52,
+    paddingVertical: 4,
+    borderRadius: 8,
     backgroundColor: '#1c1c24',
     borderWidth: 1,
     borderColor: '#2a2a35',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 4,
-    marginBottom: 4,
-  },
-  filterChip: {
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: '#1c1c24',
-    borderWidth: 1,
-    borderColor: '#2a2a35',
+    alignItems: 'center',
   },
   filterChipActive: {
     backgroundColor: '#4a4456',
