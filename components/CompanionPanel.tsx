@@ -44,12 +44,14 @@ const GEAR_SLOT_LABELS: Record<CompanionGearSlot, string> = {
   weapon: '武器',
 };
 
-type SubView = 'worn' | 'bag' | 'shop' | 'gear' | 'codex';
+type SubView = 'worn' | 'bag' | 'gear' | 'codex';
 
+// 「商店」子檢視搬到頂層商店分頁的「寵物坐騎」分類(見 ShopTab.tsx +
+// CompanionShopSection.tsx)——花錢購買的區塊統一收進商店,這裡只留「管理已擁有的」
+// 幾個子檢視:裝備中/背包/裝備升級/圖鑑。
 const SUB_VIEWS: { id: SubView; label: string }[] = [
   { id: 'worn', label: '裝備中' },
   { id: 'bag', label: '背包' },
-  { id: 'shop', label: '商店' },
   { id: 'gear', label: '裝備' },
   { id: 'codex', label: '圖鑑' },
 ];
@@ -102,10 +104,6 @@ export function CompanionPanel() {
     (sum, kind) => sum + getCompanionsByKind(kind).filter((c) => isCompanionUnlocked(companions, c.id)).length,
     0
   );
-  const shopCount = KINDS.reduce(
-    (sum, kind) => sum + getCompanionsByKind(kind).filter((c) => !isCompanionUnlocked(companions, c.id)).length,
-    0
-  );
 
   const handleCodexCellPress = (companionId: string, unlocked: boolean) => {
     if (!unlocked) {
@@ -133,7 +131,7 @@ export function CompanionPanel() {
           >
             <Text style={styles.subNavLabel}>
               {view.label}
-              {view.id === 'bag' ? `(${bagCount})` : view.id === 'shop' ? `(${shopCount})` : ''}
+              {view.id === 'bag' ? `(${bagCount})` : ''}
             </Text>
           </Pressable>
         ))}
@@ -155,7 +153,7 @@ export function CompanionPanel() {
                   </Pressable>
                 </>
               ) : (
-                <Text style={styles.emptyText}>還沒裝備{KIND_LABELS[kind]},去「背包」或「商店」挑一隻</Text>
+                <Text style={styles.emptyText}>還沒裝備{KIND_LABELS[kind]},去「背包」挑一隻或到商店分頁購買</Text>
               )}
             </View>
           );
@@ -188,27 +186,7 @@ export function CompanionPanel() {
             </View>
           );
         })}
-      {subView === 'bag' && bagCount === 0 && <Text style={styles.emptyText}>背包裡沒有其他寵物/坐騎</Text>}
-
-      {subView === 'shop' &&
-        KINDS.map((kind) => {
-          const notOwned = getCompanionsByKind(kind).filter((c) => !isCompanionUnlocked(companions, c.id));
-          if (notOwned.length === 0) return null;
-          return (
-            <View key={kind} style={styles.kindSection}>
-              <Text style={styles.kindTitle}>{KIND_LABELS[kind]}</Text>
-              {notOwned.map((companion) => (
-                <Pressable key={companion.id} style={styles.row} onPress={() => purchaseCompanion(companion.id)}>
-                  <Text style={styles.label}>{companion.name}</Text>
-                  <Text style={styles.cost}>
-                    {formatBonus(companion.bonus.stat, companion.bonus.value)} ({companion.price} 金幣)
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          );
-        })}
-      {subView === 'shop' && shopCount === 0 && <Text style={styles.emptyText}>寵物坐騎都收集齊了</Text>}
+      {subView === 'bag' && bagCount === 0 && <Text style={styles.emptyText}>背包裡沒有其他寵物/坐騎,去商店分頁看看</Text>}
 
       {subView === 'gear' &&
         KINDS.map((kind) => (
