@@ -31,11 +31,15 @@ export function ToastHost() {
 }
 
 const styles = StyleSheet.create({
+  // bottom:24 原本會蓋住底下常駐的 TabBar(icon+label 那排大概佔螢幕最下方 ~90px),
+  // 每次跳toast(例如成就達成)玩家就看不到、點不到分頁列文字——改成 bottom:104,
+  // 讓toast浮在TabBar正上方而不是疊在上面(TabBar本身不是fixed,高度隨內容變動時
+  // 這個距離抓的是常見情境下的安全值,不用逐畫面精算)。
   fixedLayer: {
     position: 'fixed' as 'absolute',
     left: 20,
     right: 20,
-    bottom: 24,
+    bottom: 104,
     zIndex: 99999,
   },
   container: {
