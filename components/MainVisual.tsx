@@ -77,10 +77,12 @@ const styles = StyleSheet.create({
     top: 0,
     right: 0,
   },
+  // 關卡進度是放置遊戲最主要的成長感來源,UX覆盤覺得原本11px太不起眼,加大加粗。
   stageLabel: {
     textAlign: 'center',
     color: '#f2f2f2',
-    fontSize: 11,
+    fontSize: 13,
+    fontWeight: '700',
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
     marginBottom: 4,
   },

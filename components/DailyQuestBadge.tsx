@@ -75,11 +75,12 @@ export function DailyQuestBadge() {
   const claimableCount = allRows.filter((row) => row.canClaim).length;
   const allClaimed = claimedCount === allRows.length;
 
-  // 三段式收合:遊戲一開始預設完整展開(玩家第一眼就看到今天有哪些任務,不用自己去發現
-  // 這顆徽章),玩家自己點兩下收合成小三角形貼邊(不佔版面)。點第一下先退到只露出禮物圖示
-  // (+待領取數字角標)的中間態,點第二下才收回三角形,再點一下重新展開。收合成一個
-  // stage 狀態機而不是兩顆獨立布林,避免「icon展開了但清單也還開著」這種不一致組合。
-  const [stage, setStage] = useState<0 | 1 | 2>(2);
+  // 三段式收合:遊戲一開始預設收合成小三角形貼邊(新玩家第一眼會同時看到歡迎彈窗+每日
+  // 登入獎勵彈窗,任務清單再整個展開太吵——收合起來讓玩家自己點開,已經有待領取角標
+  // 會提醒)。點第一下先展開到只露出禮物圖示(+待領取數字角標)的中間態,點第二下才展開
+  // 完整清單,再點一下收回三角形。收合成一個 stage 狀態機而不是兩顆獨立布林,避免
+  // 「icon展開了但清單也還開著」這種不一致組合。
+  const [stage, setStage] = useState<0 | 1 | 2>(0);
 
   if (allClaimed) return null;
 
@@ -156,7 +157,9 @@ export function DailyQuestBadge() {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    top: 74,
+    // Settings(top:8)/AchievementBadge(top:41)/AscensionBadge(top:74)同一套右上角浮動圖示
+    // 依序疊下來,這個徽章排在最後面(top:107),避免跟 AscensionBadge 疊在一起。
+    top: 107,
     right: 0,
     zIndex: 20,
     alignItems: 'flex-end',

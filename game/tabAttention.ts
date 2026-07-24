@@ -33,7 +33,10 @@ export interface TabAttentionInput {
 
 export interface TabAttentionFlags {
   job: boolean;
-  equipment: boolean;
+  // 這個旗標其實是「工坊」(強化石/寶石有得用)的提醒——欄位名稱維持 workshop 對齊
+  // panelTabs.tsx 的 tab id,修正舊版命名(equipment)跟實際 tab id 對不起來、導致
+  // 工坊分頁紅點從來沒真的顯示過的問題。
+  workshop: boolean;
   inventory: boolean;
   skill: boolean;
   companion: boolean;
@@ -77,7 +80,7 @@ export function computeTabAttentionFlags(input: TabAttentionInput): TabAttention
 
   return {
     job: canGraduate || (canDualClass && hasUsableTransferProof),
-    equipment: availableEnhanceStones > 0 || Object.values(input.gemCounts).some((counts) => sumTieredMaterialCounts(counts) > 0),
+    workshop: availableEnhanceStones > 0 || Object.values(input.gemCounts).some((counts) => sumTieredMaterialCounts(counts) > 0),
     inventory: hasAnyEmptySlot(input.equipment),
     skill: hasAnySkillUpgrade(input.hasChosenJob, input.jobTier, input.activeSkillLevels, input.skillBooks),
     companion: hasAnyCompanionGearUpgrade(input.companionGear, input.level, input.coins),

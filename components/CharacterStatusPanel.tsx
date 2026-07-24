@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   },
   substatRowLabel: {
     color: '#8a8a95',
-    fontSize: 10,
+    fontSize: 11,
     width: 28,
   },
   statCell: {
@@ -309,11 +309,11 @@ const styles = StyleSheet.create({
   },
   statCellLabel: {
     color: '#8a8a95',
-    fontSize: 9,
+    fontSize: 10,
   },
   statCellValue: {
     color: '#f2f2f2',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   statCellValueZero: {

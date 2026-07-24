@@ -33,11 +33,8 @@ export function TabBar({ tabs, activeId, level, hasChosenJob, attention, onSelec
         const lockedLabel = `${tab.label}\nLv${unlockLevel}`;
         // 已解鎖才顯示提醒角標——鎖住的分頁本來就有 Lv 門檻字樣提示,不用重複疊加。
         const showDot = unlocked && (attention[tab.id as keyof TabAttentionFlags] ?? false);
-        // 轉生是Lv50後期限定內容,跟前面7個常駐分頁性質不同(破完一輪3000關才有意義),
-        // 加一條細分隔線區隔開,不用真的拆掉獨立分頁或減少分頁數。
         return (
           <Fragment key={tab.id}>
-            {tab.id === 'ascension' && <View style={styles.divider} />}
             <Pressable
               style={({ pressed }) => [
                 styles.tab,
@@ -84,11 +81,6 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 4,
     width: '100%',
-  },
-  divider: {
-    width: 1,
-    marginVertical: 6,
-    backgroundColor: '#59462b',
   },
   tab: {
     flex: 1,
