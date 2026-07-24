@@ -38,6 +38,7 @@ const ARCHETYPE_LABELS: Record<Archetype, string> = {
 export function DungeonPanel() {
   const dungeon = useGameState((state) => state.dungeon);
   const level = useGameState((state) => state.level);
+  const job = useGameState((state) => state.job);
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const jobTier = useGameState((state) => state.jobTier);
   const transferFragments = useGameState((state) => state.transferFragments);
@@ -146,26 +147,35 @@ export function DungeonPanel() {
   function renderTabContent(tab: DungeonTab) {
     switch (tab) {
       case 'job':
-        return DUNGEON_ARCHETYPES.map((archetype) => {
-          const fragmentCount = transferFragments[archetype] ?? 0;
-          const proofCount = transferProofs[archetype] ?? 0;
-          return (
-            <View key={archetype} style={styles.card}>
-              <Text style={styles.cardTitle}>{ARCHETYPE_LABELS[archetype]}試煉</Text>
-              <Text style={styles.cardProgress}>
-                {TRANSFER_FRAGMENT_NAMES[archetype]} {fragmentCount}/{TRANSFER_FRAGMENTS_PER_PROOF}｜
-                {TRANSFER_PROOF_NAMES[archetype]} x{proofCount}
-              </Text>
-              <Pressable
-                style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
-                onPress={() => handleChallenge(archetype)}
-                disabled={!canChallenge}
-              >
-                <Text style={styles.challengeLabel}>挑戰</Text>
-              </Pressable>
-            </View>
-          );
-        });
+        // 轉職碎片不看目前主職隨機掉落(見 game/transfer.ts 的 rollTransferFragmentDrop),
+        // 是刻意設計成「隨時可以為以後想轉的職業囤碎片」,所以6種試煉都要留著、不能拿掉——
+        // 但畢業後最常用到的還是「目前主職」那張卡,不該讓玩家每次都要掃過其餘5張才找到。
+        // 把目前主職的試煉排到第一張並加識別色外框,其餘職業維持原順序接在後面。
+        return [...DUNGEON_ARCHETYPES]
+          .sort((a, b) => (a === job.archetype ? -1 : b === job.archetype ? 1 : 0))
+          .map((archetype) => {
+            const fragmentCount = transferFragments[archetype] ?? 0;
+            const proofCount = transferProofs[archetype] ?? 0;
+            const isCurrentJob = hasChosenJob && archetype === job.archetype;
+            return (
+              <View key={archetype} style={[styles.card, isCurrentJob && styles.cardCurrentJob]}>
+                <Text style={styles.cardTitle}>
+                  {ARCHETYPE_LABELS[archetype]}試煉{isCurrentJob ? '(目前主職)' : ''}
+                </Text>
+                <Text style={styles.cardProgress}>
+                  {TRANSFER_FRAGMENT_NAMES[archetype]} {fragmentCount}/{TRANSFER_FRAGMENTS_PER_PROOF}｜
+                  {TRANSFER_PROOF_NAMES[archetype]} x{proofCount}
+                </Text>
+                <Pressable
+                  style={[styles.challengeButton, !canChallenge && styles.challengeButtonDisabled]}
+                  onPress={() => handleChallenge(archetype)}
+                  disabled={!canChallenge}
+                >
+                  <Text style={styles.challengeLabel}>挑戰</Text>
+                </Pressable>
+              </View>
+            );
+          });
       case 'skillBook':
         return unlockedTiers.map((tier) => (
           <View key={tier} style={styles.card}>
@@ -351,6 +361,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#1c1c24',
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  // 目前主職的試煉卡加識別色外框,排到第一張,不用掃過其餘5張職業就能找到——
+  // 其餘5張維持完整可挑戰(碎片是隨機掉落、不看主職,留著才能提前為以後想轉的職業囤碎片)。
+  cardCurrentJob: {
+    borderColor: '#e0a95c',
   },
   // 隱形量測分身容器:絕對定位疊到畫面外(left設一個超出容器寬度的值),不影響版面、
   // 不吃互動,寬度跟顯示中的內容同寬(280,呼應 container 的 maxWidth)才能量出跟實際顯示
