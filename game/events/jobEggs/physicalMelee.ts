@@ -1,8 +1,8 @@
 import { JobGameEvent } from './types';
 
 // 物理近戰職業彩蛋:tier1(!hasChosenJob前不會用到,畢業選定職業後才加進反應池)不分分支,
-// tier2-5起分支A(搬家工人→建築工人→消防員→特種部隊)/分支B(拳擊手→拳擊教練→職業拳擊手→?)
-// 各自獨立敘事線。分支B目前只到tier4(職業拳擊手),tier5素材使用者尚未提供,補件後再加。
+// tier2-5起分支A(搬家工人→建築工人→消防員→特種部隊)/分支B(拳擊手→拳擊教練→職業拳擊手
+// →傳說拳王)各自獨立敘事線,每組15則(10 common/3 rare/1 epic/1 legendary)。
 export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   // ── tier1 ──
   { id: 'job-physicalMelee-1-c01', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: null, tier: 1, payload: '打工排班表比打怪行程還雞婆,魔王還比較好約時間。' },
@@ -139,4 +139,21 @@ export const PHYSICAL_MELEE_JOB_EGGS: JobGameEvent[] = [
   { id: 'job-physicalMelee-4B-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 4, payload: '意外簽下代言,代言的居然是止痛藥。' },
   { id: 'job-physicalMelee-4B-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 4, payload: '每次倒地我都會再站起來,倒不是多堅強,是躺著的話醫藥費要自己出。' },
   { id: 'job-physicalMelee-4B-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 4, payload: '那場世界冠軍賽打完,記者問我贏的感覺如何,我說很好,終於可以躺下了。' },
+
+  // ── tier5 分支B:傳說拳王 ──
+  { id: 'job-physicalMelee-5B-c01', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '傳說歸傳說,房租一樣要繳。' },
+  { id: 'job-physicalMelee-5B-c02', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '粉絲喊我拳王,銀行卻只認得存款數字。' },
+  { id: 'job-physicalMelee-5B-c03', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '退休傳言傳了三年,拳套倒是還沒脫下來。' },
+  { id: 'job-physicalMelee-5B-c04', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '挑戰者一個接一個,獎金卻越來越薄。' },
+  { id: 'job-physicalMelee-5B-c05', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '記者問我巔峰感想,我說巔峰只是換個角度看山谷。' },
+  { id: 'job-physicalMelee-5B-c06', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '傳說級的名號,換不到傳說級的薪水。' },
+  { id: 'job-physicalMelee-5B-c07', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '訓練還是照舊,傳說也是要練出來的。' },
+  { id: 'job-physicalMelee-5B-c08', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '有人問我怕不怕輸,我說我更怕不敢打。' },
+  { id: 'job-physicalMelee-5B-c09', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '拳王腰帶重得要命,壓力比腰帶更重。' },
+  { id: 'job-physicalMelee-5B-c10', rarity: 'common', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '每次登場都被說是傳奇,自己倒是覺得只是還沒放棄而已。' },
+  { id: 'job-physicalMelee-5B-r01', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '意外收到一封信,寫信的是曾經被我打敗的對手,附言還問我要不要團購蛋白粉。' },
+  { id: 'job-physicalMelee-5B-r02', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '傳說賽後被問退休計畫,我說計畫就是繼續打下去。' },
+  { id: 'job-physicalMelee-5B-r03', rarity: 'rare', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '有新人挑戰我,眼神跟當年的自己一模一樣。' },
+  { id: 'job-physicalMelee-5B-e01', rarity: 'epic', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '最後一戰前夕,我把腰帶摸了一整晚,發現這東西沒外表看起來那麼重,倒是責任重得要命。' },
+  { id: 'job-physicalMelee-5B-l01', rarity: 'legendary', type: 'text', archetype: 'physicalMelee', branch: 'B', tier: 5, payload: '站上那個所有人都仰望的位置之後我才懂,傳說當久了,連想找人抱怨都得先簽保密協議。' },
 ];
