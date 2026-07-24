@@ -1282,7 +1282,13 @@ export const useGameState = create<GameState>((set, get) => ({
       return;
     }
 
-    const event = getRandomEvent(state.currentEncounter.rarity, { level: state.level.level });
+    const event = getRandomEvent(state.currentEncounter.rarity, {
+      level: state.level.level,
+      hasChosenJob: state.hasChosenJob,
+      archetype: state.job.archetype,
+      branch: state.job.branch,
+      jobTier: state.jobTier,
+    });
     const nextStageProgress = advanceStageProgress(state.stageProgress);
 
     let exp = reward.exp;
