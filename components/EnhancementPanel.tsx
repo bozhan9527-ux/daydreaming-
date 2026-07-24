@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   ENHANCE_MAX_LEVEL,
-  ENHANCE_STONE_PRICE,
   EquipmentSlot,
   getEnhanceCoinCost,
   getEnhanceFailChance,
@@ -41,11 +40,12 @@ export function EnhancementPanel() {
   const hasChosenJob = useGameState((state) => state.hasChosenJob);
   const jobTier = useGameState((state) => state.jobTier);
   const enhanceItem = useGameState((state) => state.enhanceItem);
-  const purchaseEnhanceStone = useGameState((state) => state.purchaseEnhanceStone);
   const showToast = useToast((state) => state.show);
 
   // 強化石分階制(見 game/materials.ts):強化裝備要用「目前職業階級」對應那一階的石頭,
-  // 這裡只看那一階夠不夠用,其餘階級的庫存要去背包的材料瀏覽頁看。
+  // 這裡只看那一階夠不夠用,其餘階級的庫存要去背包的材料瀏覽頁看。購買強化石的入口
+  // 搬到商店分頁的「強化石」分類(見 ShopTab.tsx + EnhanceStoneShopSection.tsx),
+  // 這裡只留「花石頭強化裝備」的操作。
   const materialTier = currentMaterialTier(hasChosenJob, jobTier);
   const availableStones = enhanceStones[materialTier];
   const materialTierLabel = MATERIAL_TIER_LABELS[materialTier];
@@ -56,27 +56,18 @@ export function EnhancementPanel() {
     if (outcome) showToast(outcome);
   }
 
-  function handleBuyStone() {
-    if (coins < ENHANCE_STONE_PRICE) {
-      showToast(`金幣不夠買強化石(需要 ${ENHANCE_STONE_PRICE} 金幣)`);
-      return;
-    }
-    purchaseEnhanceStone();
-    showToast('購買強化石 x1');
-  }
-
   const equippedSlots = SLOTS.filter((slot) => equipment[slot] !== undefined);
 
   return (
     <View style={styles.container}>
       <Text style={styles.hint}>裝備 +1~+5 強化失敗只浪費資源,+6~+10 失敗有機會降級或損毀,抗性素質能降低失敗率</Text>
 
-      <Pressable style={styles.stoneRow} onPress={handleBuyStone}>
+      <View style={styles.stoneRow}>
         <Text style={styles.stoneLabel}>
           {materialTierLabel}強化石:{availableStones} 顆
         </Text>
-        <Text style={styles.stoneBuy}>購買初階 +1({ENHANCE_STONE_PRICE} 金幣)</Text>
-      </Pressable>
+        <Text style={styles.stoneBuy}>不夠用去「商店」分頁買</Text>
+      </View>
 
       {equippedSlots.length === 0 && <Text style={styles.emptyHint}>還沒有裝備任何東西,先到「背包」分頁穿上再回來強化</Text>}
 

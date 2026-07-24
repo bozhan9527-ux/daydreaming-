@@ -48,9 +48,7 @@ function highestHeldTier(counts: Record<MaterialTier, number>): MaterialTier | n
 export function SocketPanel() {
   const equipment = useGameState((state) => state.equipment);
   const itemInstances = useGameState((state) => state.itemInstances);
-  const coins = useGameState((state) => state.coins);
   const gemCounts = useGameState((state) => state.gemCounts);
-  const purchaseGem = useGameState((state) => state.purchaseGem);
   const craftGemTier = useGameState((state) => state.craftGemTier);
   const socketGem = useGameState((state) => state.socketGem);
   const unsocketGem = useGameState((state) => state.unsocketGem);
@@ -60,16 +58,8 @@ export function SocketPanel() {
   const selectedCounts = gemCounts[selectedGemType];
   const selectedSpec = GEM_SPECS[selectedGemType];
 
-  function handleBuyGem() {
-    const price = selectedSpec.price;
-    if (coins < price) {
-      showToast(`金幣不夠買${selectedSpec.name}(需要 ${price} 金幣)`);
-      return;
-    }
-    purchaseGem(selectedGemType);
-    showToast(`購買初階${selectedSpec.name} x1`);
-  }
-
+  // 購買初階寶石的入口搬到商店分頁的「鑲嵌石」分類(見 ShopTab.tsx + GemShopSection.tsx),
+  // 這裡只留「合成/鑲入/拔出」的操作。
   function handleCraft(tier: MaterialTier) {
     if (tier === 0) return;
     craftGemTier(selectedGemType, tier);
@@ -79,7 +69,7 @@ export function SocketPanel() {
   function handleSocket(itemId: string, socketIndex: number) {
     const tier = highestHeldTier(selectedCounts);
     if (tier === null) {
-      showToast(`${selectedSpec.name}不夠,先去購買、合成或戰鬥掉落`);
+      showToast(`${selectedSpec.name}不夠,去「商店」分頁購買、這裡合成、或打副本掉落`);
       return;
     }
     socketGem(itemId, socketIndex, selectedGemType, tier);
@@ -97,7 +87,7 @@ export function SocketPanel() {
     <View style={styles.container}>
       <Text style={styles.hint}>
         寶石分加成類(exp/coins/speed)跟素質類(抗性/爆擊/攻擊/吸血/回血),各自初階~五階,2顆前一階
-        合成1顆下一階;拔除寶石會原樣退回對應階級的庫存,不會損毀
+        合成1顆下一階;拔除寶石會原樣退回對應階級的庫存,不會損毀。初階不夠去「商店」分頁買
       </Text>
 
       <View style={styles.gemTypeSection}>
@@ -142,9 +132,6 @@ export function SocketPanel() {
             </View>
           ))}
         </View>
-        <Pressable style={styles.buyButton} onPress={handleBuyGem}>
-          <Text style={styles.buyButtonLabel}>購買初階({selectedSpec.price} 金幣)</Text>
-        </Pressable>
       </View>
 
       {equippedSlots.length === 0 && <Text style={styles.emptyHint}>還沒有裝備任何東西,先到「背包」分頁穿上再回來鑲嵌</Text>}
@@ -272,18 +259,6 @@ const styles = StyleSheet.create({
   tierCraftButtonLabel: {
     color: '#f2f2f2',
     fontSize: 11,
-  },
-  buyButton: {
-    marginTop: 2,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#4a4456',
-    alignItems: 'center',
-  },
-  buyButtonLabel: {
-    color: '#f2f2f2',
-    fontSize: 11,
-    fontWeight: '600',
   },
   emptyHint: {
     color: '#8a8a95',
