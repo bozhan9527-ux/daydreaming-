@@ -264,9 +264,11 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 6,
   },
-  // DISABLED 態:整顆淡化,區分「還沒點過這個技能」跟「技能倒數中」。
+  // DISABLED 態:整顆淡化,區分「還沒點過這個技能」跟「技能倒數中」。UX覆盤發現新手一開局
+  // 4顆技能常常同時是這個狀態,原本0.5不夠暗,一整排看起來像「壞掉的按鈕」而不是「還沒解鎖、
+  // 可以期待」,加深到0.32讓它更明顯地退到背景,倒數中的技能才是視覺焦點。
   tileDisabled: {
-    opacity: 0.5,
+    opacity: 0.32,
   },
   iconWrap: {
     width: TILE_SIZE,

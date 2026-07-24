@@ -40,7 +40,7 @@ export function GemBrowsePanel() {
             style={[styles.subNavButton, subView === view.id && styles.subNavButtonActive]}
             onPress={() => setSubView(view.id)}
           >
-            <Text style={styles.subNavLabel}>{view.label}</Text>
+            <Text style={[styles.subNavLabel, subView === view.id && styles.subNavLabelActive]}>{view.label}</Text>
           </Pressable>
         ))}
       </View>
@@ -81,24 +81,32 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
   },
+  // 分段切換器樣式跟 InventoryTab 的方形通欄分頁拉開差異(見 EquipmentPanel.tsx 同名樣式
+  // 的說明),膠囊型、靠左、不佔滿寬度。
   subNav: {
     flexDirection: 'row',
-    gap: 6,
+    alignSelf: 'flex-start',
+    gap: 2,
+    padding: 3,
+    borderRadius: 999,
+    backgroundColor: '#14141a',
   },
   subNavButton: {
-    flex: 1,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#1c1c24',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 999,
     alignItems: 'center',
   },
   subNavButtonActive: {
-    backgroundColor: '#4a4456',
+    backgroundColor: '#2a2440',
   },
   subNavLabel: {
-    color: '#f2f2f2',
+    color: '#8a8a95',
     fontSize: 12,
-    fontWeight: '600',
+  },
+  subNavLabelActive: {
+    color: '#f2f2f2',
+    fontWeight: '700',
   },
   section: {
     gap: 4,

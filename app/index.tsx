@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AchievementBadge } from '../components/AchievementBadge';
+import { AscensionBadge } from '../components/AscensionBadge';
 import { BattleScene } from '../components/BattleScene';
 import { CareerOverviewPanel } from '../components/CareerOverviewPanel';
 import { DailyQuestBadge } from '../components/DailyQuestBadge';
@@ -168,13 +169,13 @@ export default function HomeScreen() {
     companionGear,
     dungeon,
   });
-  // 「技能」併進「職業」分頁、「裝備」併進「背包」分頁當子分頁後(見 panelTabs.tsx),
-  // TabBar 的角標只認頂層分頁 id(job/inventory),原本各自獨立的 skill/equipment 提醒條件
-  // 用 OR 併到對應的頂層分頁上,子分頁裡有事可做時外層分頁圖示照樣會亮紅點。
+  // 「技能」併進「職業」分頁當子分頁後(見 panelTabs.tsx),TabBar 的角標只認頂層分頁 id
+  // (job),原本獨立的 skill 提醒條件用 OR 併到職業分頁上,子分頁裡有事可做時外層分頁圖示
+  // 照樣會亮紅點。workshop(強化石/寶石有得用)/inventory(裝備有空槽位)兩個旗標已經各自
+  // 直接對應頂層分頁 id,不用再額外合併。
   const topLevelTabAttention = {
     ...tabAttention,
     job: tabAttention.job || tabAttention.skill,
-    inventory: tabAttention.inventory || tabAttention.equipment,
   };
 
   return (
@@ -261,6 +262,7 @@ export default function HomeScreen() {
 
       <SettingsButton />
       <AchievementBadge />
+      <AscensionBadge />
       <WelcomeModal />
 
       <Modal visible={showOfflineModal} animationType="fade" transparent onRequestClose={() => setOfflineModalDismissed(true)}>

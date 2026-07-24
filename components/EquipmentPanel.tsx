@@ -53,7 +53,9 @@ const SUB_VIEWS: { id: SubView; label: string }[] = [
 // 8欄密集網格。紙娃娃(角色預覽+穿戴總覽)搬到「狀態」分頁(CharacterStatusPanel.tsx)
 // 取代那裡原本的「已裝備物品」格子,不在這裡重複顯示;原本的「穿戴」子檢視也一併拿掉——
 // 「已擁有」清單裡點開已裝備的那件,預覽卡片一樣有卸下/鑑定/重擲功能,不需要另開一頁。
-export function EquipmentPanel() {
+// initialSubView:給獨立的「商店」頂層分頁(見 ShopTab.tsx)用,一開就直接落在商店子檢視,
+// 不用像從「背包→裝備」進來那樣還要多點一下——「已擁有」瀏覽的預設行為不變。
+export function EquipmentPanel({ initialSubView = 'owned' }: { initialSubView?: SubView } = {}) {
   const equipment = useGameState((state) => state.equipment);
   const unlockedItemIds = useGameState((state) => state.unlockedItemIds);
   const itemInstances = useGameState((state) => state.itemInstances);
@@ -67,7 +69,7 @@ export function EquipmentPanel() {
   const rerollEquipmentSubstats = useGameState((state) => state.rerollEquipmentSubstats);
   const showToast = useToast((state) => state.show);
 
-  const [subView, setSubView] = useState<SubView>('owned');
+  const [subView, setSubView] = useState<SubView>(initialSubView);
   const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
   // 點清單裡的道具先跳出預覽卡片(見 ItemPreviewModal.tsx)顯示完整屬性,玩家自己按按鈕
   // 才會真的改動裝備狀態,不是點下去就直接買/裝上去。
@@ -145,7 +147,7 @@ export function EquipmentPanel() {
             style={[styles.subNavButton, subView === view.id && styles.subNavButtonActive]}
             onPress={() => setSubView(view.id)}
           >
-            <Text style={styles.subNavLabel}>
+            <Text style={[styles.subNavLabel, subView === view.id && styles.subNavLabelActive]}>
               {view.label}
               {view.id === 'shop' ? `(${totalShopCount})` : ''}
             </Text>
@@ -216,24 +218,34 @@ const styles = StyleSheet.create({
     maxWidth: 280,
     gap: 4,
   },
+  // 「已擁有/商店」是分頁「內部」的檢視切換,不是分頁導覽本身(那個在 InventoryTab.tsx
+  // 的 hostNav,方形分頁+邊框)——特意做成緊靠左、膠囊型的小型分段切換器,跟上一層的
+  // 方形通欄分頁拉開視覺差異,避免玩家分不清「這是第幾層」。
   subNav: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 2,
+    alignSelf: 'flex-start',
+    gap: 2,
+    marginBottom: 6,
+    padding: 3,
+    borderRadius: 999,
+    backgroundColor: '#14141a',
   },
   subNavButton: {
-    flex: 1,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#1c1c24',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 999,
     alignItems: 'center',
   },
   subNavButtonActive: {
-    backgroundColor: '#4a4456',
+    backgroundColor: '#2a2440',
   },
   subNavLabel: {
-    color: '#f2f2f2',
+    color: '#8a8a95',
     fontSize: 11,
+  },
+  subNavLabelActive: {
+    color: '#f2f2f2',
+    fontWeight: '700',
   },
   // 固定寬度5欄網格:10個選項(全部+9部位)不管文字長短都排成整齊的2排,
   // 不會像 flex-wrap 那樣依文字寬度自然換行、行末參差不齊。
