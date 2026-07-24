@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
+  canCraftGemTier,
   EquipmentSlot,
   GEM_SPECS,
   GEM_TYPES,
@@ -66,6 +67,22 @@ export function SocketPanel() {
     showToast(`合成${MATERIAL_TIER_LABELS[tier]}${selectedSpec.name}`);
   }
 
+  // 連續合成:每次都重新讀取 getState() 的即時庫存判斷還能不能繼續,比照
+  // CraftingPanel.tsx 的「全部合成」同一套做法。
+  function handleCraftAll(tier: MaterialTier) {
+    if (tier === 0) return;
+    let count = 0;
+    while (canCraftGemTier(selectedGemType, tier, useGameState.getState().gemCounts) && count < 5000) {
+      craftGemTier(selectedGemType, tier);
+      count++;
+    }
+    if (count === 0) {
+      showToast(`${MATERIAL_TIER_LABELS[(tier - 1) as MaterialTier]}${selectedSpec.name}不夠,需要2顆才能合成`);
+    } else {
+      showToast(`連續合成完畢:${MATERIAL_TIER_LABELS[tier]}${selectedSpec.name} +${count}`);
+    }
+  }
+
   function handleSocket(itemId: string, socketIndex: number) {
     const tier = highestHeldTier(selectedCounts);
     if (tier === null) {
@@ -125,9 +142,14 @@ export function SocketPanel() {
               <Text style={styles.tierCellLabel}>{MATERIAL_TIER_LABELS[tier]}</Text>
               <Text style={styles.tierCellCount}>x{selectedCounts[tier]}</Text>
               {tier > 0 && (
-                <Pressable style={styles.tierCraftButton} onPress={() => handleCraft(tier)}>
-                  <Text style={styles.tierCraftButtonLabel}>合成</Text>
-                </Pressable>
+                <View style={styles.tierCraftButtonGroup}>
+                  <Pressable style={styles.tierCraftButton} onPress={() => handleCraft(tier)}>
+                    <Text style={styles.tierCraftButtonLabel}>合成</Text>
+                  </Pressable>
+                  <Pressable style={styles.tierCraftAllButton} onPress={() => handleCraftAll(tier)}>
+                    <Text style={styles.tierCraftButtonLabel}>全部合成</Text>
+                  </Pressable>
+                </View>
               )}
             </View>
           ))}
@@ -250,15 +272,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  tierCraftButtonGroup: {
+    gap: 2,
+  },
   tierCraftButton: {
     paddingVertical: 2,
     paddingHorizontal: 6,
     borderRadius: 4,
     backgroundColor: '#4a4456',
   },
+  tierCraftAllButton: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+    backgroundColor: '#2a2440',
+    borderWidth: 1,
+    borderColor: '#6ab0e0',
+  },
   tierCraftButtonLabel: {
     color: '#f2f2f2',
-    fontSize: 11,
+    fontSize: 9,
+    textAlign: 'center',
   },
   emptyHint: {
     color: '#8a8a95',

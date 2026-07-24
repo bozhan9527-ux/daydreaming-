@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useNavIntent } from '../hooks/useNavIntent';
 import { CraftingPanel } from './CraftingPanel';
 import { EnhancementPanel } from './EnhancementPanel';
 import { SocketPanel } from './SocketPanel';
@@ -18,6 +19,17 @@ const HOST_VIEWS: { id: HostView; label: string }[] = [
 // 更強」的系統,收在同一個分頁下比各自散落好找。
 export function WorkshopTab() {
   const [hostView, setHostView] = useState<HostView>('enhance');
+
+  // 材料瀏覽頁(見 MaterialBrowserPanel.tsx/GemBrowsePanel.tsx)點擊素材的跳轉按鈕
+  // 可以指定要直接落在哪個子分頁——見 hooks/useNavIntent.ts 的整體說明。
+  const requestedWorkshopView = useNavIntent((state) => state.workshopView);
+  const consumeWorkshopView = useNavIntent((state) => state.consumeWorkshopView);
+  useEffect(() => {
+    if (requestedWorkshopView) {
+      setHostView(requestedWorkshopView);
+      consumeWorkshopView();
+    }
+  }, [requestedWorkshopView, consumeWorkshopView]);
 
   return (
     <View style={styles.container}>

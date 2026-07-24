@@ -3,6 +3,7 @@ import { Image, ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'r
 
 import { MATERIAL_TIER_LABELS, MATERIAL_TIERS, MaterialTier, TieredMaterialCounts } from '../game/materials';
 import { useGameState } from '../hooks/useGameState';
+import { useNavIntent } from '../hooks/useNavIntent';
 
 // 技能書/強化石都各自有專屬的6階套色圖示(同一個造型依 MATERIAL_TIER_COLORS 套色,
 // 保留原本明暗細節,只是色調不同)——不用再靠純色塊示意。
@@ -37,11 +38,22 @@ const SUB_VIEWS: { id: SubView; label: string }[] = [
 export function MaterialBrowserPanel() {
   const skillBooks = useGameState((state) => state.skillBooks);
   const enhanceStones = useGameState((state) => state.enhanceStones);
+  const requestTab = useNavIntent((state) => state.requestTab);
 
   const [subView, setSubView] = useState<SubView>('skillbook');
 
   const counts: TieredMaterialCounts = subView === 'skillbook' ? skillBooks : enhanceStones;
   const icons = subView === 'skillbook' ? SKILLBOOK_TIER_ICONS : ENHANCE_STONE_TIER_ICONS;
+
+  // 技能書實際花在「職業」分頁的技能投資,強化石花在「工坊」分頁的強化/合成——
+  // 跳轉目的地跟著目前選的子檢視變,見 hooks/useNavIntent.ts。
+  function handleJump() {
+    if (subView === 'skillbook') {
+      requestTab('job');
+    } else {
+      requestTab('workshop', 'enhance');
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -69,6 +81,12 @@ export function MaterialBrowserPanel() {
           </View>
         ))}
       </View>
+
+      <Pressable style={styles.jumpButton} onPress={handleJump}>
+        <Text style={styles.jumpButtonLabel}>
+          {subView === 'skillbook' ? '前往「職業」分頁投資技能 →' : '前往「工坊」分頁強化裝備 →'}
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -137,6 +155,19 @@ const styles = StyleSheet.create({
   countLabel: {
     color: '#f2f2f2',
     fontSize: 10,
+    fontWeight: '600',
+  },
+  jumpButton: {
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#2a2a35',
+    borderWidth: 1,
+    borderColor: '#6ab0e0',
+    alignItems: 'center',
+  },
+  jumpButtonLabel: {
+    color: '#6ab0e0',
+    fontSize: 12,
     fontWeight: '600',
   },
 });

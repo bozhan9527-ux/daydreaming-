@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GEM_SPECS, GEM_TYPES, GemType } from '../game/equipment';
 import { MATERIAL_TIER_LABELS, MATERIAL_TIERS } from '../game/materials';
 import { useGameState } from '../hooks/useGameState';
+import { useNavIntent } from '../hooks/useNavIntent';
 
 // 加成類(exp/coins/speed)跟素質類(物理/魔法抗性、爆擊率、爆擊傷害、攻擊力、吸血、回血)
 // 分兩個分頁瀏覽——13種寶石一次全攤開會太亂,跟工坊「鑲嵌」子分頁(SocketPanel.tsx)
@@ -23,6 +24,7 @@ const SUBSTAT_GEM_TYPES = GEM_TYPES.filter((t) => GEM_SPECS[t].kind === 'substat
 // 工坊做」同一套分工原則。
 export function GemBrowsePanel() {
   const gemCounts = useGameState((state) => state.gemCounts);
+  const requestTab = useNavIntent((state) => state.requestTab);
   const [subView, setSubView] = useState<SubView>('bonus');
 
   const gemTypes = subView === 'bonus' ? BONUS_GEM_TYPES : SUBSTAT_GEM_TYPES;
@@ -48,6 +50,10 @@ export function GemBrowsePanel() {
       {gemTypes.map((gemType) => (
         <GemTypeRow key={gemType} gemType={gemType} counts={gemCounts[gemType]} />
       ))}
+
+      <Pressable style={styles.jumpButton} onPress={() => requestTab('workshop', 'socket')}>
+        <Text style={styles.jumpButtonLabel}>前往「工坊」分頁鑲入寶石 →</Text>
+      </Pressable>
     </View>
   );
 }
@@ -141,6 +147,19 @@ const styles = StyleSheet.create({
   countLabel: {
     color: '#f2f2f2',
     fontSize: 10,
+    fontWeight: '600',
+  },
+  jumpButton: {
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#2a2a35',
+    borderWidth: 1,
+    borderColor: '#6ab0e0',
+    alignItems: 'center',
+  },
+  jumpButtonLabel: {
+    color: '#6ab0e0',
+    fontSize: 12,
     fontWeight: '600',
   },
 });

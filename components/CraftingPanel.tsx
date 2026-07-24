@@ -18,9 +18,12 @@ interface MaterialCraftListProps {
   hint: string;
   counts: TieredMaterialCounts;
   onCraft: (tier: MaterialTier) => void;
+  // 連續合成要在迴圈中每次都拿到「剛剛那次合成完之後」的最新庫存來判斷還能不能繼續,
+  // 不能只看 counts 這個 prop(那是render當下的一次性快照,函式執行中途不會自己更新)。
+  getLiveCounts: () => TieredMaterialCounts;
 }
 
-function MaterialCraftList({ title, hint, counts, onCraft }: MaterialCraftListProps) {
+function MaterialCraftList({ title, hint, counts, onCraft, getLiveCounts }: MaterialCraftListProps) {
   const showToast = useToast((state) => state.show);
 
   function handleCraft(tier: MaterialTier) {
@@ -30,6 +33,19 @@ function MaterialCraftList({ title, hint, counts, onCraft }: MaterialCraftListPr
     }
     onCraft(tier);
     showToast(`合成成功:${MATERIAL_TIER_LABELS[tier]}${title} +1`);
+  }
+
+  function handleCraftAll(tier: MaterialTier) {
+    let count = 0;
+    while (canCraftMaterialTier(tier, getLiveCounts()) && count < 5000) {
+      onCraft(tier);
+      count++;
+    }
+    if (count === 0) {
+      showToast(`${MATERIAL_TIER_LABELS[(tier - 1) as MaterialTier]}不夠,需要2本才能合成`);
+    } else {
+      showToast(`連續合成完畢:${MATERIAL_TIER_LABELS[tier]}${title} +${count}`);
+    }
   }
 
   return (
@@ -50,13 +66,22 @@ function MaterialCraftList({ title, hint, counts, onCraft }: MaterialCraftListPr
                 持有 {counts[tier]} 本(消耗 2 本{MATERIAL_TIER_LABELS[prevTier]}{title},目前 {counts[prevTier]} 本)
               </Text>
             </View>
-            <Pressable
-              style={[styles.craftButton, !canCraft && styles.craftButtonDisabled]}
-              onPress={() => handleCraft(tier)}
-              disabled={!canCraft}
-            >
-              <Text style={styles.craftButtonLabel}>合成</Text>
-            </Pressable>
+            <View style={styles.craftButtonGroup}>
+              <Pressable
+                style={[styles.craftButton, !canCraft && styles.craftButtonDisabled]}
+                onPress={() => handleCraft(tier)}
+                disabled={!canCraft}
+              >
+                <Text style={styles.craftButtonLabel}>合成</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.craftAllButton, !canCraft && styles.craftButtonDisabled]}
+                onPress={() => handleCraftAll(tier)}
+                disabled={!canCraft}
+              >
+                <Text style={styles.craftButtonLabel}>全部合成</Text>
+              </Pressable>
+            </View>
           </View>
         );
       })}
@@ -75,8 +100,20 @@ export function CraftingPanel() {
       <Text style={styles.pageHint}>
         兩本前一階換一本下一階,初階沒辦法合成,只能靠擊敗怪物掉落或商店購買取得。
       </Text>
-      <MaterialCraftList title="技能書" hint="升級技能用" counts={skillBooks} onCraft={craftSkillBookTier} />
-      <MaterialCraftList title="強化石" hint="強化裝備用" counts={enhanceStones} onCraft={craftEnhanceStoneTier} />
+      <MaterialCraftList
+        title="技能書"
+        hint="升級技能用"
+        counts={skillBooks}
+        onCraft={craftSkillBookTier}
+        getLiveCounts={() => useGameState.getState().skillBooks}
+      />
+      <MaterialCraftList
+        title="強化石"
+        hint="強化裝備用"
+        counts={enhanceStones}
+        onCraft={craftEnhanceStoneTier}
+        getLiveCounts={() => useGameState.getState().enhanceStones}
+      />
     </View>
   );
 }
@@ -125,11 +162,22 @@ const styles = StyleSheet.create({
     color: '#8a8a95',
     fontSize: 11,
   },
+  craftButtonGroup: {
+    gap: 4,
+  },
   craftButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 6,
     backgroundColor: '#4a4456',
+  },
+  craftAllButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#2a2440',
+    borderWidth: 1,
+    borderColor: '#6ab0e0',
   },
   craftButtonDisabled: {
     opacity: 0.4,
@@ -137,5 +185,6 @@ const styles = StyleSheet.create({
   craftButtonLabel: {
     color: '#f2f2f2',
     fontSize: 12,
+    textAlign: 'center',
   },
 });

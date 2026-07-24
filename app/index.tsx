@@ -31,6 +31,7 @@ import { TRANSFER_FRAGMENT_NAMES, TRANSFER_FRAGMENTS_PER_PROOF } from '../game/t
 import { useBattleLoop } from '../hooks/useBattleLoop';
 import { useGameState } from '../hooks/useGameState';
 import { useMusicUnlock } from '../hooks/useMusicUnlock';
+import { useNavIntent } from '../hooks/useNavIntent';
 import { useToast } from '../hooks/useToast';
 
 export default function HomeScreen() {
@@ -69,6 +70,18 @@ export default function HomeScreen() {
 
   const [openTabId, setOpenTabId] = useState<string | null>(null);
   const openTab = PANEL_TABS.find((tab) => tab.id === openTabId) ?? null;
+
+  // 材料/鑲嵌石瀏覽頁點擊素材後的跳轉按鈕(見 MaterialBrowserPanel.tsx/GemBrowsePanel.tsx)
+  // 透過這個小型全域store request切換分頁,這裡負責真的把 openTabId 切過去——見
+  // hooks/useNavIntent.ts 的整體說明。
+  const navIntentTabId = useNavIntent((state) => state.tabId);
+  const consumeNavIntentTab = useNavIntent((state) => state.consumeTab);
+  useEffect(() => {
+    if (navIntentTabId) {
+      setOpenTabId(navIntentTabId);
+      consumeNavIntentTab();
+    }
+  }, [navIntentTabId, consumeNavIntentTab]);
   // 離線收益改成彈出視窗,關掉之後這次 session 就不再自動彈出(下次 load()重新設定 lastOfflineKills 時才會再跳)。
   const [offlineModalDismissed, setOfflineModalDismissed] = useState(false);
   const [dailyBonusModalDismissed, setDailyBonusModalDismissed] = useState(false);

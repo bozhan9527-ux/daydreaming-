@@ -56,6 +56,55 @@ export function EnhancementPanel() {
     if (outcome) showToast(outcome);
   }
 
+  // 連續強化到裝備損毀或到達上限為止,中途資源不夠也會停下——每次都重新讀取 getState()
+  // 的即時資料判斷要不要繼續,不是只呼叫 enhanceItem() N 次(N 次可能還沒到上限就已經
+  // 損毀,或資源不夠強化次數比預期少),迴圈本身就是終止條件,不用額外的次數上限,
+  // 但還是保留一個很寬鬆的安全上限避免萬一邏輯出錯造成無窮迴圈。
+  function handleAutoEnhance(itemId: string) {
+    let successCount = 0;
+    let failCount = 0;
+    let destroyed = false;
+    let stoppedForResources = false;
+
+    for (let i = 0; i < 500; i++) {
+      const state = useGameState.getState();
+      const instance = state.itemInstances[itemId];
+      if (!instance) {
+        destroyed = true;
+        break;
+      }
+      if (instance.enhanceLevel >= ENHANCE_MAX_LEVEL) break;
+
+      const item = getItemById(itemId);
+      if (!item) break;
+      const tier = currentMaterialTier(state.hasChosenJob, state.jobTier);
+      const cost = getEnhanceCoinCost(item, instance.enhanceLevel);
+      const stones = getEnhanceStoneCost(instance.enhanceLevel);
+      if (state.coins < cost || state.enhanceStones[tier] < stones) {
+        stoppedForResources = true;
+        break;
+      }
+
+      const beforeLevel = instance.enhanceLevel;
+      enhanceItem(itemId);
+      const after = useGameState.getState().itemInstances[itemId];
+      if (!after) {
+        destroyed = true;
+        break;
+      }
+      if (after.enhanceLevel > beforeLevel) successCount++;
+      else failCount++;
+    }
+
+    const item = getItemById(itemId);
+    const parts = [`連續強化:成功 ${successCount} 次`];
+    if (failCount > 0) parts.push(`失敗 ${failCount} 次`);
+    if (destroyed) parts.push(`${item?.name ?? '裝備'} 損毀了`);
+    else if (stoppedForResources) parts.push('資源不夠,停下來了');
+    else parts.push('已達上限');
+    showToast(parts.join(','));
+  }
+
   const equippedSlots = SLOTS.filter((slot) => equipment[slot] !== undefined);
 
   return (
@@ -108,13 +157,22 @@ export function EnhancementPanel() {
                   {Math.round(failChance * 100)}%
                   {instance.enhanceLevel + 1 > 5 ? '(危險區,失敗可能降級或損毀)' : ''}
                 </Text>
-                <Pressable
-                  style={[styles.enhanceButton, !canAfford && styles.enhanceButtonDisabled]}
-                  onPress={() => handleEnhance(itemId)}
-                  disabled={!canAfford}
-                >
-                  <Text style={styles.enhanceButtonLabel}>強化</Text>
-                </Pressable>
+                <View style={styles.enhanceButtonRow}>
+                  <Pressable
+                    style={[styles.enhanceButton, !canAfford && styles.enhanceButtonDisabled]}
+                    onPress={() => handleEnhance(itemId)}
+                    disabled={!canAfford}
+                  >
+                    <Text style={styles.enhanceButtonLabel}>強化</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.autoEnhanceButton, !canAfford && styles.enhanceButtonDisabled]}
+                    onPress={() => handleAutoEnhance(itemId)}
+                    disabled={!canAfford}
+                  >
+                    <Text style={styles.enhanceButtonLabel}>連續強化到毀壞/上限</Text>
+                  </Pressable>
+                </View>
               </>
             )}
           </View>
@@ -196,12 +254,25 @@ const styles = StyleSheet.create({
     color: '#c9a94f',
     fontSize: 11,
   },
+  enhanceButtonRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
   enhanceButton: {
     alignSelf: 'flex-start',
     paddingVertical: 5,
     paddingHorizontal: 14,
     borderRadius: 6,
     backgroundColor: '#4a4456',
+  },
+  autoEnhanceButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 5,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    backgroundColor: '#2a2440',
+    borderWidth: 1,
+    borderColor: '#6ab0e0',
   },
   enhanceButtonDisabled: {
     opacity: 0.4,
